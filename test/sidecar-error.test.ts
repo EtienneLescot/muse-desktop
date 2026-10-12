@@ -11,6 +11,7 @@ import {
   classifySidecarError,
   extractTriedPaths,
   isSidecarError,
+  needsWindowsSandboxSetup,
   startupRecoverySteps,
 } from "../src/lib/sidecarError.ts";
 
@@ -108,6 +109,21 @@ describe("startup recovery guidance", () => {
     const steps = startupRecoverySteps("start-failed", "handshake failed");
     assert.match(steps[0]?.detail ?? "", /Check that the sidecar/);
     assert.doesNotMatch(steps[0]?.detail ?? "", /installed|authenticated/i);
+  });
+
+  it("flags the pre-setup Windows shell failure without treating it as a startup error", () => {
+    // Verbatim shell item output from m0-04-stop-terminal.md (27/09).
+    const preSetup =
+      "sandbox enforcement unavailable: windows_elevated setup_required: sandbox users are not ready";
+    assert.equal(needsWindowsSandboxSetup(preSetup), true);
+    assert.equal(needsWindowsSandboxSetup(preSetup.replace("setup_required", "setup_stale")), true);
+    // Persists after a successful setup (m1-06): setup is not its fix.
+    assert.equal(
+      needsWindowsSandboxSetup("tool failed: environment failure: managed shell sandbox is unavailable"),
+      false,
+    );
+    // Mid-conversation shell failures must not swap in the startup panel.
+    assert.equal(classifySidecarError(`user_shell failed: ${preSetup}`), null);
   });
 
   it("gives native macOS guidance without WSL steps", () => {

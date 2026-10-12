@@ -20,7 +20,9 @@ import {
   SETTINGS_KEY,
   WEB_SEARCH_DEFAULT_NOTE,
   canSelectMode,
+  conflictRestart,
   effectiveSandboxMode,
+  hostPostureNotice,
   hostSandboxConfigForProject,
   isOutsideWorkspace,
   isRelaxedSandbox,
@@ -31,10 +33,15 @@ import {
   parseProviderId,
   parseProviderMap,
   parseSandboxSettings,
+  postureRefusal,
   providerById,
   providerForProject,
+  type HostRequest,
+  type ProjectSandboxPreferences,
+  type SandboxMode,
   type SandboxSettings,
 } from "../src/lib/settings.ts";
+import { reconnectErrorMessage } from "../src/lib/errorCopy.ts";
 
 describe("sandbox settings", () => {
   it("defaults to workspace-confined with no permissions", () => {
@@ -118,39 +125,112 @@ describe("sandbox settings", () => {
     assert.equal(isSandboxMode(null), false);
   });
 
-  it("projects global permission gates and project overrides into host flags", () => {
-    assert.deepEqual(
-      hostSandboxConfigForProject({ mode: "network", networkAllowed: true, elevatedAllowed: false }),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(DEFAULT_SANDBOX, {
-        sandbox: "read-only",
-        networkDefault: "allow",
-      }),
-      { mode: "workspace", disableWrite: true, disableShell: true },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "network", networkAllowed: true, elevatedAllowed: false },
-        { sandbox: "workspace", networkDefault: "allow" },
-      ),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "elevated", networkAllowed: true, elevatedAllowed: true },
-        { sandbox: "full", networkDefault: "deny" },
-      ),
-      { mode: "elevated", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "network", networkAllowed: true, elevatedAllowed: false },
-        { sandbox: "full", networkDefault: "allow" },
-      ),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
+  it("a project follows the Settings level unless its own preferences restrict it", () => {
+    const levels: SandboxMode[] = ["workspace", "network", "elevated"];
+    const settings = (mode: SandboxMode): SandboxSettings =>
+      ({ mode, networkAllowed: mode !== "workspace", elevatedAllowed: mode === "elevated" });
+    // The project's sparse override -> its mode at Workspace only, Workspace and network, Elevated access.
+    const table: [Partial<ProjectSandboxPreferences> | undefined, SandboxMode[]][] = [
+      [undefined, ["workspace", "network", "elevated"]],
+      [{}, ["workspace", "network", "elevated"]],
+      [{ sandbox: "full", networkDefault: "allow" }, ["workspace", "network", "elevated"]],
+      [{ networkDefault: "prompt" }, ["workspace", "network", "elevated"]],
+      [{ sandbox: "workspace" }, ["workspace", "network", "network"]],
+      [{ networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
+      [{ sandbox: "full", networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
+    ];
+    for (const [override, modes] of table) {
+      levels.forEach((level, i) => assert.deepEqual(
+        hostSandboxConfigForProject(settings(level), { settings: override }),
+        { mode: modes[i], disableWrite: false, disableShell: false },
+        `${level} ${JSON.stringify(override)}`,
+      ));
+    }
+    for (const level of levels) {
+      assert.equal(hostSandboxConfigForProject(settings(level)).mode, level, "no project");
+      assert.deepEqual(
+        hostSandboxConfigForProject(settings(level), { settings: { sandbox: "read-only", networkDefault: "allow" } }),
+        { mode: "workspace", disableWrite: true, disableShell: true },
+      );
+    }
+    // Never above the level in force, an ungranted one included.
+    for (const sandbox of [undefined, "read-only", "workspace", "full"] as const) {
+      for (const networkDefault of [undefined, "allow", "prompt", "deny"] as const) {
+        for (const level of levels) {
+          const { mode } = hostSandboxConfigForProject(settings(level), { settings: { sandbox, networkDefault } });
+          assert.ok(levels.indexOf(mode) <= levels.indexOf(level), `${level} ${sandbox} ${networkDefault}`);
+        }
+        assert.equal(hostSandboxConfigForProject(
+          { mode: "elevated", networkAllowed: false, elevatedAllowed: false },
+          { settings: { sandbox, networkDefault } },
+        ).mode, "workspace");
+      }
+    }
+  });
+
+  it("reads only the project's own override, never settings merged with defaults", () => {
+    const elevated: SandboxSettings = { mode: "elevated", networkAllowed: true, elevatedAllowed: true };
+    // Merged settings carry the default sandbox "workspace": read as an
+    // override, they would cap every project at Workspace and network.
+    const merged = { model: "default", sandbox: "workspace", networkDefault: "prompt", autoCompact: true, reasoningEffort: "high" };
+    assert.equal(hostSandboxConfigForProject(elevated, merged as never).mode, "elevated");
+    assert.equal(hostSandboxConfigForProject(elevated, { settings: { sandbox: "workspace" } }).mode, "network");
+  });
+
+  it("says what a Read only project's host refuses, and nothing otherwise", () => {
+    // M0-13: 1.4.2 still grants userShell under --disable-shell (06/10/2026).
+    const readOnly = hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "read-only", networkDefault: "prompt" } });
+    assert.equal(postureRefusal(readOnly), "This project is Read only: Muse cannot write files or run commands here.");
+    assert.equal(postureRefusal({ mode: "workspace", disableWrite: false, disableShell: true }), "This project is Read only: Muse cannot run commands here.");
+    assert.equal(postureRefusal(hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "workspace", networkDefault: "prompt" } })), null);
+    assert.equal(postureRefusal(hostSandboxConfigForProject(DEFAULT_SANDBOX)), null);
+  });
+
+  // M0-13 check, 06/10/2026: a live conversation's project switched to Read
+  // only said "Muse cannot write files" while its host, started without
+  // --disable-write, still could.
+  it("says what the running host refuses, and that a restart applies changed settings", () => {
+    const readOnly = hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "read-only", networkDefault: "prompt" } });
+    const writable = hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "workspace", networkDefault: "prompt" } });
+    const refusal = "This project is Read only: Muse cannot write files or run commands here.";
+    // Unchanged since the start, or no live host (the next start asks for the settings).
+    assert.deepEqual(hostPostureNotice(readOnly, readOnly), { note: refusal, blocked: refusal, restart: false });
+    assert.deepEqual(hostPostureNotice(undefined, readOnly), { note: refusal, blocked: refusal, restart: false });
+    assert.deepEqual(hostPostureNotice(writable, writable), { note: null, blocked: null, restart: false });
+    // Switched to Read only while live: the host still writes; Run in Muse stays on.
+    const late = hostPostureNotice(writable, readOnly);
+    assert.equal(late.restart, true);
+    assert.match(late.note ?? "", /now Read only, but this conversation's Muse host was started before: Muse can still write files and run commands here until its host restarts/);
+    assert.doesNotMatch(late.note ?? "", /cannot/);
+    assert.equal(late.blocked, null);
+    // Read only lifted while live: the host still refuses; Run in Muse stays off.
+    const lifted = hostPostureNotice(readOnly, writable);
+    assert.match(lifted.note ?? "", /host was started Read only: Muse cannot write files or run commands here until its host restarts/);
+    assert.equal(lifted.blocked, lifted.note);
+    // Another change (network): nothing refused, a restart still needed.
+    const network = hostPostureNotice(writable, { ...writable, mode: "network" });
+    assert.match(network.note ?? "", /settings changed since this conversation's Muse host started/);
+    assert.equal(network.blocked, null);
+  });
+
+  it("restarts the host a posture conflict refused, with the posture it asked for", () => {
+    // ensure_host's refusal (main.rs sandbox_policy_conflict), as start and
+    // reconnect show it: in the words of Settings, no raw posture key.
+    const refusal = "This folder's engine is running with Workspace only; restart it to apply Workspace and network.";
+    const remote: HostRequest = {
+      workspace: "ssh://ops@box:22/srv/app",
+      sandbox: { mode: "network", disableWrite: false, disableShell: false },
+    };
+    assert.deepEqual(conflictRestart(`start_session failed: ${refusal}`, remote), remote);
+    const project: HostRequest = {
+      workspace: "C:/work/other-project",
+      sandbox: { mode: "workspace", disableWrite: true, disableShell: true },
+    };
+    assert.deepEqual(conflictRestart(reconnectErrorMessage(refusal), project), project);
+    // An unknown host restarts nothing in its place; another failure offers no restart.
+    assert.equal(conflictRestart(`start_session failed: ${refusal}`, null), null);
+    assert.equal(conflictRestart("start_session failed: could not start ssh to ssh://ops@box:22/srv/app", remote), null);
+    assert.equal(conflictRestart(null, remote), null);
   });
 
   it("web-search default note says off by default", () => {

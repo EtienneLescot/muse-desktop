@@ -1,0 +1,5317 @@
+{
+  "schema": "muse-desktop.m1-13-reading.v1",
+  "ticket": "M1-13",
+  "date": "2026-10-06",
+  "commit": "6c02f29",
+  "build": {
+    "exe": "muse-desktop-6c02f29.exe",
+    "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+    "commit": "6c02f2959db04590286db875a4a3509be4ca84f0"
+  },
+  "platform": "win32 10.0.26200, debug build with the embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+  "webview2": "Edg/154.0.4258.53",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "engineSha256": "39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba",
+  "liveTurns": 2,
+  "keys": "A phase key ending in a short commit ran on that build; an unsuffixed key ran on the final build. Each phase carries the SHA-256 of the exe it drove.",
+  "criteria": {
+    "1. interleaved streaming": {
+      "phases": {
+        "stream-26d6397": {
+          "pass": true,
+          "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376"
+        },
+        "replay": {
+          "pass": true,
+          "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49"
+        }
+      },
+      "verdict": "pass"
+    },
+    "2. back to the bottom from the top": {
+      "phases": {
+        "bottom": {
+          "pass": true,
+          "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49"
+        }
+      },
+      "verdict": "pass"
+    },
+    "3. selection and copy across two entries": {
+      "phases": {
+        "copy": {
+          "pass": true,
+          "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49"
+        }
+      },
+      "verdict": "pass"
+    },
+    "4. large block": {
+      "phases": {
+        "block": {
+          "pass": true,
+          "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49"
+        }
+      },
+      "verdict": "pass"
+    },
+    "5. theme": {
+      "phases": {
+        "theme": {
+          "pass": true,
+          "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49"
+        }
+      },
+      "verdict": "pass"
+    },
+    "6. finder jump and reduced motion": {
+      "phases": {
+        "finder": {
+          "pass": true,
+          "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49"
+        }
+      },
+      "verdict": "pass"
+    }
+  },
+  "fixes": [
+    {
+      "commit": "f5fb1ec",
+      "defect": "End and Latest messages stopped 1,826 px short of the end, button gone: skipped content-visibility entries shrank to their padding (8 px) as flex items, then grew once in view",
+      "before": [
+        "load-prefix",
+        "bottom-prefix"
+      ],
+      "after": "bottom"
+    },
+    {
+      "commit": "f5fb1ec",
+      "defect": "a viewport saved at the top of the history reopened blank (window 1720, top spacer only)",
+      "before": [
+        "bottom-prefix"
+      ],
+      "after": "bottom"
+    },
+    {
+      "commit": "26d6397",
+      "defect": "the text being read moved 24 px per entry the window dropped during a live turn (48 px for two): unkeyed per-run arrays remounted all 160 entries",
+      "before": [
+        "stream-f5fb1ec"
+      ],
+      "after": "stream-26d6397"
+    },
+    {
+      "commit": "f2e2d37",
+      "defect": "End landed 4,985 px above the end when the last answer was long (16,584 characters): it grew from its placeholder height after the jump",
+      "before": [
+        "bottom-26d6397"
+      ],
+      "after": "bottom"
+    },
+    {
+      "commit": "6581e25",
+      "defect": "regression of f2e2d37, caught by its own run: the resize pin fired before the saved viewport was restored and reopened at window 1720",
+      "before": [
+        "bottom-f2e2d37"
+      ],
+      "after": "bottom"
+    },
+    {
+      "commit": "6c02f29",
+      "defect": "a selection across two entries copied the first one's timestamp, hidden until hover (opacity 0)",
+      "before": [
+        "copy-6581e25"
+      ],
+      "after": "copy"
+    }
+  ],
+  "screenReader": "Not exercised: the screen-reader half stays for a later session with the user (NVDA), as for M0-12. The roles, labels and live regions recorded here are a necessary condition, not proof of what a screen reader announces.",
+  "phases": {
+    "load-prefix": {
+      "exeSha256": "ef9ccc3f8e2b2e1b870a5e9fbd624a6d02e9aa31a8eee5f1224164f40e70127b",
+      "liveTurns": 0,
+      "original": {
+        "entries": 0
+      },
+      "written": {
+        "entries": 2000,
+        "bytes": 347575,
+        "selectionPair": [
+          1996,
+          1997
+        ]
+      },
+      "stored": {
+        "entries": 2000,
+        "appended": []
+      },
+      "view": {
+        "entryCount": 2001,
+        "windowStart": 1841,
+        "windowEnd": 2001,
+        "mountedArticles": 160,
+        "mountedNodes": 1363,
+        "scrollTop": 170376,
+        "scrollHeight": 172649,
+        "clientHeight": 447,
+        "fromBottom": 1826,
+        "firstVisibleIndex": 1969,
+        "lastVisibleIndex": 1973,
+        "lastMountedIndex": 2000,
+        "latestButton": null,
+        "announcement": "Showing messages 1842 to 2001 of 2001."
+      },
+      "probes": {
+        "anchor": {
+          "index": 1969,
+          "token": "Long transcript entry 1969 —",
+          "top": 22.7,
+          "fromBottom": 1826,
+          "clientHeight": 447
+        },
+        "sample": {
+          "count": 2001,
+          "start": 1841,
+          "scrollTop": 170376,
+          "fromBottom": 1826,
+          "anchorTop": null,
+          "liveEntries": 2,
+          "liveChars": 242,
+          "liveOpen": false,
+          "latestShown": null,
+          "running": "false"
+        }
+      },
+      "verdict": {
+        "tailWindow": true,
+        "domBound": true,
+        "probesAnswer": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "bottom-prefix": {
+      "exeSha256": "ef9ccc3f8e2b2e1b870a5e9fbd624a6d02e9aa31a8eee5f1224164f40e70127b",
+      "liveTurns": 0,
+      "runs": [
+        {
+          "how": "Latest messages button",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 1720,
+            "windowEnd": 1880,
+            "mountedArticles": 160,
+            "mountedNodes": 1368,
+            "scrollTop": 0,
+            "scrollHeight": 162785,
+            "clientHeight": 447,
+            "fromBottom": 162338,
+            "firstVisibleIndex": null,
+            "lastVisibleIndex": null,
+            "lastMountedIndex": 1879,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1721 to 1880 of 2000."
+          },
+          "action": {
+            "button": "↓ Latest messages"
+          },
+          "msToEnd": null,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 160,
+            "mountedNodes": 1363,
+            "scrollTop": 162232,
+            "scrollHeight": 164505,
+            "clientHeight": 447,
+            "fromBottom": 1826,
+            "firstVisibleIndex": 1968,
+            "lastVisibleIndex": 1972,
+            "lastMountedIndex": 1999,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": false,
+            "affordanceAtTop": true,
+            "atEnd": false,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        },
+        {
+          "how": "End key",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 1720,
+            "windowEnd": 1880,
+            "mountedArticles": 160,
+            "mountedNodes": 1368,
+            "scrollTop": 0,
+            "scrollHeight": 162785,
+            "clientHeight": 447,
+            "fromBottom": 162338,
+            "firstVisibleIndex": null,
+            "lastVisibleIndex": null,
+            "lastMountedIndex": 1879,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1721 to 1880 of 2000."
+          },
+          "action": {
+            "focused": true
+          },
+          "msToEnd": null,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 160,
+            "mountedNodes": 1363,
+            "scrollTop": 162232,
+            "scrollHeight": 164505,
+            "clientHeight": 447,
+            "fromBottom": 1826,
+            "firstVisibleIndex": 1968,
+            "lastVisibleIndex": 1972,
+            "lastMountedIndex": 1999,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": false,
+            "affordanceAtTop": true,
+            "atEnd": false,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        }
+      ],
+      "pass": false,
+      "pageErrors": []
+    },
+    "launch-f5fb1ec": {
+      "exeSha256": "4a40cf2147d7ffb194bd70d770e2cf06556d8183cf63bfb419dfc9e547ced0f2",
+      "liveTurns": 0,
+      "pidRecorded": true,
+      "webview2": "Edg/154.0.4258.53",
+      "profile": {
+        "conversations": 0,
+        "theme": "dark",
+        "visibility": "visible"
+      },
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderDataFolder": true,
+        "webview2VariablesRemoved": true,
+        "autoUpdateOff": true,
+        "cdpPort": 9333
+      },
+      "pageErrors": []
+    },
+    "setup-f5fb1ec": {
+      "exeSha256": "4a40cf2147d7ffb194bd70d770e2cf06556d8183cf63bfb419dfc9e547ced0f2",
+      "liveTurns": 0,
+      "startSession": {
+        "authorizationMode": "ask",
+        "isolation": {
+          "mode": "workspace",
+          "disableWrite": false,
+          "disableShell": false
+        },
+        "approvalMode": "promptUnmatched",
+        "durability": "durable"
+      },
+      "view": {
+        "entryCount": 0,
+        "windowStart": 0,
+        "windowEnd": 0,
+        "mountedArticles": 0,
+        "mountedNodes": 2,
+        "scrollTop": 0,
+        "scrollHeight": 447,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": null,
+        "lastVisibleIndex": null,
+        "lastMountedIndex": null,
+        "latestButton": null,
+        "announcement": null
+      },
+      "verdict": {
+        "adoptedAndOpen": true,
+        "noTurn": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "load-f5fb1ec": {
+      "exeSha256": "4a40cf2147d7ffb194bd70d770e2cf06556d8183cf63bfb419dfc9e547ced0f2",
+      "liveTurns": 0,
+      "original": {
+        "entries": 0
+      },
+      "written": {
+        "entries": 2000,
+        "bytes": 347575,
+        "selectionPair": [
+          1996,
+          1997
+        ]
+      },
+      "stored": {
+        "entries": 2000,
+        "appended": []
+      },
+      "view": {
+        "entryCount": 2001,
+        "windowStart": 1841,
+        "windowEnd": 2001,
+        "mountedArticles": 160,
+        "mountedNodes": 1363,
+        "scrollTop": 208288,
+        "scrollHeight": 208735,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": 1996,
+        "lastVisibleIndex": 2000,
+        "lastMountedIndex": 2000,
+        "latestButton": null,
+        "announcement": "Showing messages 1842 to 2001 of 2001."
+      },
+      "probes": {
+        "anchor": {
+          "index": 1998,
+          "token": "Long transcript entry 1998 —",
+          "top": 158.1,
+          "fromBottom": 0,
+          "clientHeight": 447
+        },
+        "sample": {
+          "count": 2001,
+          "start": 1841,
+          "scrollTop": 208288,
+          "fromBottom": 0,
+          "anchorTop": null,
+          "liveEntries": 2,
+          "liveChars": 242,
+          "liveOpen": false,
+          "latestShown": null,
+          "running": "false"
+        }
+      },
+      "verdict": {
+        "tailWindow": true,
+        "domBound": true,
+        "probesAnswer": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "stream-f5fb1ec": {
+      "exeSha256": "4a40cf2147d7ffb194bd70d770e2cf06556d8183cf63bfb419dfc9e547ced0f2",
+      "liveTurns": 1,
+      "prompt": "Write a numbered list from 1 to 220. Each item is one plain sentence of about twelve words about a different day in the life of a lighthouse keeper. Output only the list: no introduction, no conclusion, no headings, no code block. Do not use any tool.",
+      "sendInput": [
+        {
+          "ok": true,
+          "blocked": false
+        }
+      ],
+      "before": {
+        "entryCount": 2001,
+        "windowStart": 1841,
+        "windowEnd": 2001,
+        "mountedArticles": 160,
+        "mountedNodes": 1363,
+        "scrollTop": 208179,
+        "scrollHeight": 208649,
+        "clientHeight": 447,
+        "fromBottom": 23,
+        "firstVisibleIndex": 1996,
+        "lastVisibleIndex": 2000,
+        "lastMountedIndex": 2000,
+        "latestButton": null,
+        "announcement": "Showing messages 1842 to 2001 of 2001."
+      },
+      "anchor": {
+        "index": 1979,
+        "token": "Long transcript entry 1979 —",
+        "top": 15.7,
+        "fromBottom": 2560,
+        "clientHeight": 406
+      },
+      "button": {
+        "x": 760,
+        "y": 523,
+        "top": 506,
+        "bottom": 540,
+        "text": "↓ Latest messages"
+      },
+      "clickedAtMs": 12030,
+      "samplesUp": {
+        "fields": [
+          "ms",
+          "scrollTop",
+          "anchorTop",
+          "count",
+          "start",
+          "liveChars",
+          "fromBottom",
+          "latestShown"
+        ],
+        "rows": [
+          [
+            964,
+            205275,
+            15.7,
+            2003,
+            1843,
+            262,
+            2560,
+            true
+          ],
+          [
+            1138,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2623,
+            true
+          ],
+          [
+            1303,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            1458,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            1615,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            1770,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            1927,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            2083,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            2239,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            2394,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            2551,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            2705,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            2861,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3016,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3192,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3356,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3513,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3668,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3823,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            3981,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            4136,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            4290,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            4446,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            4602,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            4756,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            4915,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            5088,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            5255,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            5412,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            5566,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            5724,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            5879,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6036,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6199,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6364,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6518,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6675,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6832,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            6987,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            7142,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            7299,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            7455,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            7611,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            7767,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            7922,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            8080,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            8233,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            8390,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            8546,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            8700,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            8857,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9012,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9166,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9322,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9478,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9633,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9788,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            9945,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            10098,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            10254,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            10408,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            10564,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            10719,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            10876,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            11031,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            11201,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            11359,
+            205275,
+            -8.3,
+            2004,
+            1844,
+            262,
+            2536,
+            true
+          ],
+          [
+            11543,
+            205275,
+            -32.3,
+            2005,
+            1845,
+            324,
+            2886,
+            true
+          ],
+          [
+            11715,
+            205275,
+            -32.3,
+            2005,
+            1845,
+            499,
+            2672,
+            true
+          ],
+          [
+            11872,
+            205275,
+            -32.3,
+            2005,
+            1845,
+            661,
+            2672,
+            true
+          ],
+          [
+            12029,
+            205275,
+            -32.3,
+            2005,
+            1845,
+            713,
+            2672,
+            true
+          ]
+        ]
+      },
+      "samplesAfterClick": {
+        "fields": [
+          "ms",
+          "scrollTop",
+          "count",
+          "start",
+          "liveChars",
+          "fromBottom",
+          "latestShown"
+        ],
+        "rows": [
+          [
+            12066,
+            207866,
+            2005,
+            1845,
+            713,
+            23,
+            null
+          ],
+          [
+            12244,
+            207568,
+            2005,
+            1845,
+            762,
+            23,
+            null
+          ],
+          [
+            12399,
+            207593,
+            2005,
+            1845,
+            809,
+            24,
+            null
+          ],
+          [
+            12554,
+            207619,
+            2005,
+            1845,
+            886,
+            23,
+            null
+          ],
+          [
+            12708,
+            207644,
+            2005,
+            1845,
+            931,
+            23,
+            null
+          ],
+          [
+            12864,
+            207644,
+            2005,
+            1845,
+            975,
+            23,
+            null
+          ],
+          [
+            13020,
+            207670,
+            2005,
+            1845,
+            1035,
+            23,
+            null
+          ],
+          [
+            13175,
+            207695,
+            2005,
+            1845,
+            1086,
+            23,
+            null
+          ],
+          [
+            13346,
+            207720,
+            2005,
+            1845,
+            1128,
+            24,
+            null
+          ],
+          [
+            13501,
+            207746,
+            2005,
+            1845,
+            1199,
+            23,
+            null
+          ],
+          [
+            13658,
+            207746,
+            2005,
+            1845,
+            1238,
+            23,
+            null
+          ],
+          [
+            13813,
+            207771,
+            2005,
+            1845,
+            1290,
+            23,
+            null
+          ],
+          [
+            13970,
+            207797,
+            2005,
+            1845,
+            1349,
+            23,
+            null
+          ],
+          [
+            14125,
+            207797,
+            2005,
+            1845,
+            1398,
+            23,
+            null
+          ],
+          [
+            14280,
+            207822,
+            2005,
+            1845,
+            1453,
+            23,
+            null
+          ],
+          [
+            14437,
+            207847,
+            2005,
+            1845,
+            1506,
+            23,
+            null
+          ],
+          [
+            14609,
+            207873,
+            2005,
+            1845,
+            1571,
+            23,
+            null
+          ],
+          [
+            14765,
+            207873,
+            2005,
+            1845,
+            1583,
+            23,
+            null
+          ],
+          [
+            14921,
+            207898,
+            2005,
+            1845,
+            1661,
+            23,
+            null
+          ],
+          [
+            15077,
+            207924,
+            2005,
+            1845,
+            1719,
+            23,
+            null
+          ],
+          [
+            15233,
+            207949,
+            2005,
+            1845,
+            1811,
+            23,
+            null
+          ],
+          [
+            15389,
+            207974,
+            2005,
+            1845,
+            1851,
+            23,
+            null
+          ],
+          [
+            15544,
+            208000,
+            2005,
+            1845,
+            1990,
+            48,
+            null
+          ],
+          [
+            15747,
+            208025,
+            2005,
+            1845,
+            1990,
+            23,
+            null
+          ],
+          [
+            15904,
+            208051,
+            2005,
+            1845,
+            2078,
+            23,
+            null
+          ],
+          [
+            16074,
+            208076,
+            2005,
+            1845,
+            2144,
+            23,
+            null
+          ],
+          [
+            16230,
+            208101,
+            2005,
+            1845,
+            2191,
+            23,
+            null
+          ],
+          [
+            16384,
+            208127,
+            2005,
+            1845,
+            2257,
+            23,
+            null
+          ],
+          [
+            16539,
+            208127,
+            2005,
+            1845,
+            2319,
+            23,
+            null
+          ],
+          [
+            16694,
+            208152,
+            2005,
+            1845,
+            2359,
+            23,
+            null
+          ],
+          [
+            16850,
+            208152,
+            2005,
+            1845,
+            2403,
+            23,
+            null
+          ],
+          [
+            17005,
+            208177,
+            2005,
+            1845,
+            2460,
+            24,
+            null
+          ],
+          [
+            17160,
+            208203,
+            2005,
+            1845,
+            2517,
+            23,
+            null
+          ],
+          [
+            17316,
+            208228,
+            2005,
+            1845,
+            2567,
+            23,
+            null
+          ],
+          [
+            17472,
+            208254,
+            2005,
+            1845,
+            2645,
+            23,
+            null
+          ],
+          [
+            17645,
+            208279,
+            2005,
+            1845,
+            2701,
+            23,
+            null
+          ],
+          [
+            17816,
+            208279,
+            2005,
+            1845,
+            2746,
+            23,
+            null
+          ],
+          [
+            17972,
+            208304,
+            2005,
+            1845,
+            2787,
+            24,
+            null
+          ],
+          [
+            18127,
+            208330,
+            2005,
+            1845,
+            2854,
+            23,
+            null
+          ],
+          [
+            18282,
+            208355,
+            2005,
+            1845,
+            2924,
+            23,
+            null
+          ],
+          [
+            18439,
+            208355,
+            2005,
+            1845,
+            2959,
+            23,
+            null
+          ],
+          [
+            18595,
+            208381,
+            2005,
+            1845,
+            3025,
+            23,
+            null
+          ],
+          [
+            18767,
+            208431,
+            2005,
+            1845,
+            3120,
+            23,
+            null
+          ],
+          [
+            18923,
+            208431,
+            2005,
+            1845,
+            3166,
+            23,
+            null
+          ],
+          [
+            19079,
+            208457,
+            2005,
+            1845,
+            3231,
+            23,
+            null
+          ],
+          [
+            19234,
+            208482,
+            2005,
+            1845,
+            3273,
+            23,
+            null
+          ],
+          [
+            19390,
+            208482,
+            2005,
+            1845,
+            3309,
+            23,
+            null
+          ],
+          [
+            19546,
+            208508,
+            2005,
+            1845,
+            3377,
+            23,
+            null
+          ],
+          [
+            19702,
+            208533,
+            2005,
+            1845,
+            3416,
+            23,
+            null
+          ],
+          [
+            19856,
+            208558,
+            2005,
+            1845,
+            3489,
+            23,
+            null
+          ],
+          [
+            20011,
+            208584,
+            2005,
+            1845,
+            3555,
+            23,
+            null
+          ]
+        ]
+      },
+      "end": {
+        "entryCount": 2007,
+        "windowStart": 1847,
+        "windowEnd": 2007,
+        "mountedArticles": 156,
+        "mountedNodes": 1552,
+        "scrollTop": 214502,
+        "scrollHeight": 214908,
+        "clientHeight": 406,
+        "fromBottom": 0,
+        "firstVisibleIndex": 2004,
+        "lastVisibleIndex": 2004,
+        "lastMountedIndex": 2004,
+        "latestButton": null,
+        "announcement": "Showing messages 1848 to 2007 of 2007."
+      },
+      "turn": [
+        {
+          "role": "user",
+          "chars": 251,
+          "head": "Write a numbered list from 1 to 220. Each item is one plain sentence of about twelve words"
+        },
+        {
+          "role": "assistant",
+          "chars": 0,
+          "head": ""
+        },
+        {
+          "role": "subagent",
+          "chars": 22,
+          "head": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "chars": 16510,
+          "head": "1. I polished the brass lamp reflectors while gulls cried outside loudly today. 2. I swept"
+        },
+        {
+          "role": "subagent",
+          "chars": 22,
+          "head": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "chars": 22,
+          "head": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "scrolledUpPx": 2560,
+        "readingPositionHeld": false,
+        "maxAnchorDriftPx": 48,
+        "whileUp": {
+          "liveCharsAdded": 451,
+          "entriesAddedSinceSend": 4,
+          "entriesAddedWhileSampled": 2,
+          "windowStartMoved": 2,
+          "scrollTopRange": [
+            205275,
+            205275
+          ]
+        },
+        "affordanceShownWhileUp": true,
+        "affordanceClicked": true,
+        "returnedToEnd": true,
+        "streamContinuedAtEnd": true,
+        "affordanceGoneAtEnd": true,
+        "turnCompleted": true
+      },
+      "pass": false,
+      "pageErrors": []
+    },
+    "stop-f5fb1ec": {
+      "exeSha256": "4a40cf2147d7ffb194bd70d770e2cf06556d8183cf63bfb419dfc9e547ced0f2",
+      "liveTurns": 0,
+      "graceful": true,
+      "exited": true,
+      "children": 3,
+      "childrenAliveAfter": 0,
+      "pageErrors": []
+    },
+    "launch-26d6397": {
+      "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376",
+      "liveTurns": 0,
+      "pidRecorded": true,
+      "webview2": "Edg/154.0.4258.53",
+      "profile": {
+        "conversations": 0,
+        "theme": "dark",
+        "visibility": "visible"
+      },
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderDataFolder": true,
+        "webview2VariablesRemoved": true,
+        "autoUpdateOff": true,
+        "cdpPort": 9333
+      },
+      "pageErrors": []
+    },
+    "setup-26d6397": {
+      "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376",
+      "liveTurns": 0,
+      "startSession": {
+        "authorizationMode": "ask",
+        "isolation": {
+          "mode": "workspace",
+          "disableWrite": false,
+          "disableShell": false
+        },
+        "approvalMode": "promptUnmatched",
+        "durability": "durable"
+      },
+      "view": {
+        "entryCount": 0,
+        "windowStart": 0,
+        "windowEnd": 0,
+        "mountedArticles": 0,
+        "mountedNodes": 2,
+        "scrollTop": 0,
+        "scrollHeight": 447,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": null,
+        "lastVisibleIndex": null,
+        "lastMountedIndex": null,
+        "latestButton": null,
+        "announcement": null
+      },
+      "verdict": {
+        "adoptedAndOpen": true,
+        "noTurn": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "load-26d6397": {
+      "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376",
+      "liveTurns": 0,
+      "original": {
+        "entries": 0
+      },
+      "written": {
+        "entries": 2000,
+        "bytes": 347575,
+        "selectionPair": [
+          1996,
+          1997
+        ]
+      },
+      "stored": {
+        "entries": 2000,
+        "appended": []
+      },
+      "view": {
+        "entryCount": 2001,
+        "windowStart": 1841,
+        "windowEnd": 2001,
+        "mountedArticles": 160,
+        "mountedNodes": 1363,
+        "scrollTop": 208288,
+        "scrollHeight": 208735,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": 1996,
+        "lastVisibleIndex": 2000,
+        "lastMountedIndex": 2000,
+        "latestButton": null,
+        "announcement": "Showing messages 1842 to 2001 of 2001."
+      },
+      "probes": {
+        "anchor": {
+          "index": 1998,
+          "token": "Long transcript entry 1998 —",
+          "top": 158.1,
+          "fromBottom": 0,
+          "clientHeight": 447
+        },
+        "sample": {
+          "count": 2001,
+          "start": 1841,
+          "scrollTop": 208288,
+          "fromBottom": 0,
+          "anchorTop": null,
+          "liveEntries": 2,
+          "liveChars": 242,
+          "liveOpen": false,
+          "latestShown": null,
+          "running": "false"
+        }
+      },
+      "verdict": {
+        "tailWindow": true,
+        "domBound": true,
+        "probesAnswer": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "stream-26d6397": {
+      "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376",
+      "liveTurns": 1,
+      "prompt": "Write a numbered list from 1 to 220. Each item is one plain sentence of about twelve words about a different day in the life of a lighthouse keeper. Output only the list: no introduction, no conclusion, no headings, no code block. Do not use any tool.",
+      "sendInput": [
+        {
+          "ok": true,
+          "blocked": false
+        }
+      ],
+      "before": {
+        "entryCount": 2001,
+        "windowStart": 1841,
+        "windowEnd": 2001,
+        "mountedArticles": 160,
+        "mountedNodes": 1363,
+        "scrollTop": 208179,
+        "scrollHeight": 208649,
+        "clientHeight": 447,
+        "fromBottom": 23,
+        "firstVisibleIndex": 1996,
+        "lastVisibleIndex": 2000,
+        "lastMountedIndex": 2000,
+        "latestButton": null,
+        "announcement": "Showing messages 1842 to 2001 of 2001."
+      },
+      "anchor": {
+        "index": 1976,
+        "token": "Long transcript entry 1976 —",
+        "top": 28.7,
+        "fromBottom": 2476,
+        "clientHeight": 406
+      },
+      "button": {
+        "x": 760,
+        "y": 523,
+        "top": 506,
+        "bottom": 540,
+        "text": "↓ Latest messages"
+      },
+      "clickedAtMs": 9106,
+      "samplesUp": {
+        "fields": [
+          "ms",
+          "scrollTop",
+          "anchorTop",
+          "count",
+          "start",
+          "liveChars",
+          "fromBottom",
+          "latestShown"
+        ],
+        "rows": [
+          [
+            963,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            1118,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            1275,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            1431,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            1588,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            1743,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            1899,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2055,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2211,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2367,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2524,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2678,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2835,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            2989,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            3153,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            3318,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            3475,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            3630,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            3786,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            3941,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            4098,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            4254,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            4410,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            4565,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            4720,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            4876,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5032,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5187,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5344,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5501,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5655,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5810,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            5967,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            6122,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            6278,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            6435,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            6591,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            6747,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            6905,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            7061,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            7217,
+            204734,
+            28.7,
+            2004,
+            1844,
+            262,
+            2476,
+            true
+          ],
+          [
+            7382,
+            204710,
+            28.7,
+            2005,
+            1845,
+            326,
+            2636,
+            true
+          ],
+          [
+            7546,
+            204710,
+            28.7,
+            2005,
+            1845,
+            389,
+            2636,
+            true
+          ],
+          [
+            7700,
+            204710,
+            28.7,
+            2005,
+            1845,
+            429,
+            2636,
+            true
+          ],
+          [
+            7856,
+            204710,
+            28.7,
+            2005,
+            1845,
+            481,
+            2636,
+            true
+          ],
+          [
+            8011,
+            204710,
+            28.7,
+            2005,
+            1845,
+            539,
+            2636,
+            true
+          ],
+          [
+            8169,
+            204710,
+            28.7,
+            2005,
+            1845,
+            595,
+            2636,
+            true
+          ],
+          [
+            8325,
+            204710,
+            28.7,
+            2005,
+            1845,
+            642,
+            2636,
+            true
+          ],
+          [
+            8481,
+            204710,
+            28.7,
+            2005,
+            1845,
+            679,
+            2636,
+            true
+          ],
+          [
+            8637,
+            204710,
+            28.7,
+            2005,
+            1845,
+            726,
+            2636,
+            true
+          ],
+          [
+            8793,
+            204710,
+            28.7,
+            2005,
+            1845,
+            756,
+            2636,
+            true
+          ],
+          [
+            8949,
+            204710,
+            28.7,
+            2005,
+            1845,
+            833,
+            2636,
+            true
+          ],
+          [
+            9104,
+            204710,
+            28.7,
+            2005,
+            1845,
+            873,
+            2636,
+            true
+          ]
+        ]
+      },
+      "samplesAfterClick": {
+        "fields": [
+          "ms",
+          "scrollTop",
+          "count",
+          "start",
+          "liveChars",
+          "fromBottom",
+          "latestShown"
+        ],
+        "rows": [
+          [
+            9143,
+            207405,
+            2005,
+            1845,
+            873,
+            23,
+            null
+          ],
+          [
+            9350,
+            207430,
+            2005,
+            1845,
+            913,
+            24,
+            null
+          ],
+          [
+            9505,
+            207430,
+            2005,
+            1845,
+            957,
+            24,
+            null
+          ],
+          [
+            9661,
+            207456,
+            2005,
+            1845,
+            1019,
+            23,
+            null
+          ],
+          [
+            9816,
+            207456,
+            2005,
+            1845,
+            1049,
+            23,
+            null
+          ],
+          [
+            9970,
+            207481,
+            2005,
+            1845,
+            1099,
+            23,
+            null
+          ],
+          [
+            10141,
+            207507,
+            2005,
+            1845,
+            1133,
+            23,
+            null
+          ],
+          [
+            10313,
+            207507,
+            2005,
+            1845,
+            1169,
+            23,
+            null
+          ],
+          [
+            10469,
+            207532,
+            2005,
+            1845,
+            1212,
+            23,
+            null
+          ],
+          [
+            10624,
+            207532,
+            2005,
+            1845,
+            1262,
+            23,
+            null
+          ],
+          [
+            10779,
+            207557,
+            2005,
+            1845,
+            1328,
+            23,
+            null
+          ],
+          [
+            10935,
+            207583,
+            2005,
+            1845,
+            1379,
+            23,
+            null
+          ],
+          [
+            11091,
+            207608,
+            2005,
+            1845,
+            1485,
+            49,
+            null
+          ],
+          [
+            11308,
+            207634,
+            2005,
+            1845,
+            1519,
+            23,
+            null
+          ],
+          [
+            11462,
+            207659,
+            2005,
+            1845,
+            1565,
+            23,
+            null
+          ],
+          [
+            11649,
+            207659,
+            2005,
+            1845,
+            1607,
+            23,
+            null
+          ],
+          [
+            11803,
+            207710,
+            2005,
+            1845,
+            1694,
+            23,
+            null
+          ],
+          [
+            11957,
+            207735,
+            2005,
+            1845,
+            1737,
+            23,
+            null
+          ],
+          [
+            12113,
+            207735,
+            2005,
+            1845,
+            1786,
+            23,
+            null
+          ],
+          [
+            12269,
+            207761,
+            2005,
+            1845,
+            1816,
+            23,
+            null
+          ],
+          [
+            12426,
+            207761,
+            2005,
+            1845,
+            1853,
+            23,
+            null
+          ],
+          [
+            12582,
+            207786,
+            2005,
+            1845,
+            1904,
+            23,
+            null
+          ],
+          [
+            12737,
+            207811,
+            2005,
+            1845,
+            1957,
+            23,
+            null
+          ],
+          [
+            12893,
+            207837,
+            2005,
+            1845,
+            2006,
+            23,
+            null
+          ],
+          [
+            13049,
+            207837,
+            2005,
+            1845,
+            2029,
+            23,
+            null
+          ],
+          [
+            13206,
+            207837,
+            2005,
+            1845,
+            2062,
+            23,
+            null
+          ],
+          [
+            13361,
+            207862,
+            2005,
+            1845,
+            2130,
+            23,
+            null
+          ],
+          [
+            13517,
+            207887,
+            2005,
+            1845,
+            2205,
+            24,
+            null
+          ],
+          [
+            13671,
+            207913,
+            2005,
+            1845,
+            2250,
+            23,
+            null
+          ],
+          [
+            13828,
+            207938,
+            2005,
+            1845,
+            2295,
+            23,
+            null
+          ],
+          [
+            14000,
+            207938,
+            2005,
+            1845,
+            2349,
+            23,
+            null
+          ],
+          [
+            14155,
+            207964,
+            2005,
+            1845,
+            2402,
+            23,
+            null
+          ],
+          [
+            14327,
+            207989,
+            2005,
+            1845,
+            2476,
+            23,
+            null
+          ],
+          [
+            14483,
+            208014,
+            2005,
+            1845,
+            2533,
+            24,
+            null
+          ],
+          [
+            14640,
+            208040,
+            2005,
+            1845,
+            2595,
+            23,
+            null
+          ],
+          [
+            14795,
+            208065,
+            2005,
+            1845,
+            2681,
+            23,
+            null
+          ],
+          [
+            14952,
+            208091,
+            2005,
+            1845,
+            2740,
+            23,
+            null
+          ],
+          [
+            15109,
+            208091,
+            2005,
+            1845,
+            2780,
+            23,
+            null
+          ],
+          [
+            15265,
+            208141,
+            2005,
+            1845,
+            2860,
+            23,
+            null
+          ],
+          [
+            15422,
+            208141,
+            2005,
+            1845,
+            2905,
+            23,
+            null
+          ],
+          [
+            15577,
+            208167,
+            2005,
+            1845,
+            2959,
+            23,
+            null
+          ],
+          [
+            15732,
+            208192,
+            2005,
+            1845,
+            3013,
+            23,
+            null
+          ],
+          [
+            15887,
+            208192,
+            2005,
+            1845,
+            3153,
+            74,
+            null
+          ],
+          [
+            16104,
+            208243,
+            2005,
+            1845,
+            3186,
+            23,
+            null
+          ],
+          [
+            16260,
+            208268,
+            2005,
+            1845,
+            3230,
+            23,
+            null
+          ],
+          [
+            16432,
+            208294,
+            2005,
+            1845,
+            3293,
+            23,
+            null
+          ],
+          [
+            16603,
+            208294,
+            2005,
+            1845,
+            3340,
+            23,
+            null
+          ],
+          [
+            16759,
+            208344,
+            2005,
+            1845,
+            3435,
+            24,
+            null
+          ],
+          [
+            16930,
+            208370,
+            2005,
+            1845,
+            3490,
+            23,
+            null
+          ],
+          [
+            17102,
+            208370,
+            2005,
+            1845,
+            3550,
+            23,
+            null
+          ]
+        ]
+      },
+      "end": {
+        "entryCount": 2007,
+        "windowStart": 1847,
+        "windowEnd": 2007,
+        "mountedArticles": 156,
+        "mountedNodes": 1552,
+        "scrollTop": 212611,
+        "scrollHeight": 213041,
+        "clientHeight": 406,
+        "fromBottom": 24,
+        "firstVisibleIndex": 2004,
+        "lastVisibleIndex": 2004,
+        "lastMountedIndex": 2004,
+        "latestButton": null,
+        "announcement": "Showing messages 1848 to 2007 of 2007."
+      },
+      "turn": [
+        {
+          "role": "user",
+          "chars": 251,
+          "head": "Write a numbered list from 1 to 220. Each item is one plain sentence of about twelve words"
+        },
+        {
+          "role": "assistant",
+          "chars": 0,
+          "head": ""
+        },
+        {
+          "role": "subagent",
+          "chars": 22,
+          "head": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "chars": 16584,
+          "head": "1. He woke before dawn to polish the great brass lamp housing carefully. 2. She climbed th"
+        },
+        {
+          "role": "subagent",
+          "chars": 22,
+          "head": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "chars": 22,
+          "head": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "scrolledUpPx": 2476,
+        "readingPositionHeld": true,
+        "maxAnchorDriftPx": 0,
+        "whileUp": {
+          "liveCharsAdded": 611,
+          "entriesAddedSinceSend": 4,
+          "entriesAddedWhileSampled": 1,
+          "windowStartMoved": 1,
+          "scrollTopRange": [
+            204710,
+            204734
+          ]
+        },
+        "affordanceShownWhileUp": true,
+        "affordanceClicked": true,
+        "returnedToEnd": true,
+        "streamContinuedAtEnd": true,
+        "affordanceGoneAtEnd": true,
+        "turnCompleted": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "bottom-26d6397": {
+      "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376",
+      "liveTurns": 0,
+      "runs": [
+        {
+          "how": "Latest messages button",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 0,
+            "windowEnd": 160,
+            "mountedArticles": 160,
+            "mountedNodes": 1364,
+            "scrollTop": 0,
+            "scrollHeight": 202304,
+            "clientHeight": 447,
+            "fromBottom": 201857,
+            "firstVisibleIndex": 0,
+            "lastVisibleIndex": 4,
+            "lastMountedIndex": 159,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1 to 160 of 2000."
+          },
+          "action": {
+            "button": "↓ Latest messages"
+          },
+          "msToEnd": null,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 156,
+            "mountedNodes": 1552,
+            "scrollTop": 208528,
+            "scrollHeight": 213960,
+            "clientHeight": 447,
+            "fromBottom": 4985,
+            "firstVisibleIndex": 1997,
+            "lastVisibleIndex": 1997,
+            "lastMountedIndex": 1997,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": true,
+            "affordanceAtTop": true,
+            "atEnd": false,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        },
+        {
+          "how": "End key",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 0,
+            "windowEnd": 160,
+            "mountedArticles": 160,
+            "mountedNodes": 1364,
+            "scrollTop": 0,
+            "scrollHeight": 202304,
+            "clientHeight": 447,
+            "fromBottom": 201857,
+            "firstVisibleIndex": 0,
+            "lastVisibleIndex": 4,
+            "lastMountedIndex": 159,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1 to 160 of 2000."
+          },
+          "action": {
+            "focused": true
+          },
+          "msToEnd": null,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 156,
+            "mountedNodes": 1552,
+            "scrollTop": 208528,
+            "scrollHeight": 213960,
+            "clientHeight": 447,
+            "fromBottom": 4985,
+            "firstVisibleIndex": 1997,
+            "lastVisibleIndex": 1997,
+            "lastMountedIndex": 1997,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": true,
+            "affordanceAtTop": true,
+            "atEnd": false,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        }
+      ],
+      "pass": false,
+      "pageErrors": []
+    },
+    "stop-26d6397": {
+      "exeSha256": "afd84845075815123905665e7ce8b8d014189303d9eacd4986bdec9a96e6b376",
+      "liveTurns": 0,
+      "graceful": true,
+      "exited": true,
+      "children": 3,
+      "childrenAliveAfter": 0,
+      "pageErrors": []
+    },
+    "bottom-f2e2d37": {
+      "exeSha256": "0bc45544c1bf784a0326907b7b2a9dfdb60db6c8eea50674e2c1d59737873d6e",
+      "liveTurns": 0,
+      "runs": [
+        {
+          "how": "Latest messages button",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 1720,
+            "windowEnd": 1880,
+            "mountedArticles": 160,
+            "mountedNodes": 1368,
+            "scrollTop": 8400,
+            "scrollHeight": 215648,
+            "clientHeight": 447,
+            "fromBottom": 206801,
+            "firstVisibleIndex": null,
+            "lastVisibleIndex": null,
+            "lastMountedIndex": 1879,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1721 to 1880 of 2000."
+          },
+          "action": {
+            "button": "↓ Latest messages"
+          },
+          "msToEnd": 110,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 160,
+            "mountedNodes": 1583,
+            "scrollTop": 220034,
+            "scrollHeight": 220481,
+            "clientHeight": 447,
+            "fromBottom": 0,
+            "firstVisibleIndex": 1998,
+            "lastVisibleIndex": 1999,
+            "lastMountedIndex": 1999,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": false,
+            "affordanceAtTop": true,
+            "atEnd": true,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        },
+        {
+          "how": "End key",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 1720,
+            "windowEnd": 1880,
+            "mountedArticles": 160,
+            "mountedNodes": 1368,
+            "scrollTop": 8400,
+            "scrollHeight": 215648,
+            "clientHeight": 447,
+            "fromBottom": 206801,
+            "firstVisibleIndex": null,
+            "lastVisibleIndex": null,
+            "lastMountedIndex": 1879,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1721 to 1880 of 2000."
+          },
+          "action": {
+            "focused": true
+          },
+          "msToEnd": 92,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 160,
+            "mountedNodes": 1583,
+            "scrollTop": 220034,
+            "scrollHeight": 220481,
+            "clientHeight": 447,
+            "fromBottom": 0,
+            "firstVisibleIndex": 1998,
+            "lastVisibleIndex": 1999,
+            "lastMountedIndex": 1999,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": false,
+            "affordanceAtTop": true,
+            "atEnd": true,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        }
+      ],
+      "pass": false,
+      "pageErrors": []
+    },
+    "copy-6581e25": {
+      "exeSha256": "299d96eb8c1fdb37b13a5a1265491143531ef56f15496588d3b76163c26c7480",
+      "liveTurns": 0,
+      "pair": {
+        "a": 1995,
+        "b": 1996,
+        "from": {
+          "x": 1115.25,
+          "y": 375.859375
+        },
+        "to": {
+          "x": 441.359375,
+          "y": 489.25
+        }
+      },
+      "copyPath": "Ctrl+C",
+      "selection": {
+        "text": "bravo charlie delta\n14:55:44\n\nMuse\nSELECT-B echo foxtrot golf",
+        "anchorEntry": 1995,
+        "focusEntry": 1996,
+        "visibleText": "bravo charlie delta Muse SELECT-B echo foxtrot golf",
+        "hiddenStrings": [
+          "Conversation messages",
+          "You, message 1996 of 2000",
+          "14:55:44",
+          "Copy this message",
+          "Muse, message 1997 of 2000"
+        ]
+      },
+      "clipboardOverCdp": {
+        "granted": "page session",
+        "read": true,
+        "text": "bravo charlie delta\n14:55:44\n\nMuse\nSELECT-B echo foxtrot golf",
+        "chars": 65,
+        "equalsSelection": true,
+        "hiddenStringsFound": [
+          "14:55:44"
+        ]
+      },
+      "osClipboard": {
+        "read": true,
+        "text": "bravo charlie delta\n14:55:44\n\nMuse\nSELECT-B echo foxtrot golf",
+        "chars": 65,
+        "equalsSelection": true,
+        "hiddenStringsFound": [
+          "14:55:44"
+        ]
+      },
+      "verdict": {
+        "spansTwoEntries": true,
+        "selectionFromBravoToGolf": true,
+        "copyEventFired": true,
+        "copyEventSawTheSelection": true,
+        "clipboardOverCdpEqualsSelection": true,
+        "osClipboardEqualsSelection": true,
+        "noHiddenStringCopied": false,
+        "selectionIsItsVisibleText": false
+      },
+      "pass": false,
+      "pageErrors": []
+    },
+    "launch": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "pidRecorded": true,
+      "webview2": "Edg/154.0.4258.53",
+      "profile": {
+        "conversations": 0,
+        "theme": "dark",
+        "visibility": "visible"
+      },
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderDataFolder": true,
+        "webview2VariablesRemoved": true,
+        "autoUpdateOff": true,
+        "cdpPort": 9333
+      },
+      "pageErrors": []
+    },
+    "setup": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "startSession": {
+        "authorizationMode": "ask",
+        "isolation": {
+          "mode": "workspace",
+          "disableWrite": false,
+          "disableShell": false
+        },
+        "approvalMode": "promptUnmatched",
+        "durability": "durable"
+      },
+      "view": {
+        "entryCount": 0,
+        "windowStart": 0,
+        "windowEnd": 0,
+        "mountedArticles": 0,
+        "mountedNodes": 2,
+        "scrollTop": 0,
+        "scrollHeight": 447,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": null,
+        "lastVisibleIndex": null,
+        "lastMountedIndex": null,
+        "latestButton": null,
+        "announcement": null
+      },
+      "verdict": {
+        "adoptedAndOpen": true,
+        "noTurn": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "load": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "original": {
+        "entries": 0
+      },
+      "written": {
+        "entries": 2000,
+        "bytes": 363556,
+        "selectionPair": [
+          1996,
+          1997
+        ]
+      },
+      "stored": {
+        "entries": 2000,
+        "appended": []
+      },
+      "view": {
+        "entryCount": 2001,
+        "windowStart": 1841,
+        "windowEnd": 2001,
+        "mountedArticles": 160,
+        "mountedNodes": 1583,
+        "scrollTop": 214226,
+        "scrollHeight": 214673,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": 1999,
+        "lastVisibleIndex": 2000,
+        "lastMountedIndex": 2000,
+        "latestButton": null,
+        "announcement": "Showing messages 1842 to 2001 of 2001."
+      },
+      "probes": {
+        "anchor": null,
+        "sample": {
+          "count": 2001,
+          "start": 1841,
+          "scrollTop": 214226,
+          "fromBottom": 0,
+          "anchorTop": null,
+          "liveEntries": 2,
+          "liveChars": 15014,
+          "liveOpen": false,
+          "latestShown": null,
+          "running": "false"
+        }
+      },
+      "verdict": {
+        "tailWindow": true,
+        "domBound": true,
+        "probesAnswer": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "bottom": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "runs": [
+        {
+          "how": "Latest messages button",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 0,
+            "windowEnd": 160,
+            "mountedArticles": 160,
+            "mountedNodes": 1364,
+            "scrollTop": 0,
+            "scrollHeight": 202304,
+            "clientHeight": 447,
+            "fromBottom": 201857,
+            "firstVisibleIndex": 0,
+            "lastVisibleIndex": 4,
+            "lastMountedIndex": 159,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1 to 160 of 2000."
+          },
+          "action": {
+            "button": "↓ Latest messages"
+          },
+          "msToEnd": 106,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 160,
+            "mountedNodes": 1583,
+            "scrollTop": 214130,
+            "scrollHeight": 214577,
+            "clientHeight": 447,
+            "fromBottom": 0,
+            "firstVisibleIndex": 1998,
+            "lastVisibleIndex": 1999,
+            "lastMountedIndex": 1999,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": true,
+            "affordanceAtTop": true,
+            "atEnd": true,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        },
+        {
+          "how": "End key",
+          "opened": {
+            "entryCount": 2000,
+            "windowStart": 0,
+            "windowEnd": 160,
+            "mountedArticles": 160,
+            "mountedNodes": 1364,
+            "scrollTop": 0,
+            "scrollHeight": 202304,
+            "clientHeight": 447,
+            "fromBottom": 201857,
+            "firstVisibleIndex": 0,
+            "lastVisibleIndex": 4,
+            "lastMountedIndex": 159,
+            "latestButton": {
+              "text": "↓ Latest messages",
+              "shown": true
+            },
+            "announcement": "Showing messages 1 to 160 of 2000."
+          },
+          "action": {
+            "focused": true
+          },
+          "msToEnd": 96,
+          "after": {
+            "entryCount": 2000,
+            "windowStart": 1840,
+            "windowEnd": 2000,
+            "mountedArticles": 160,
+            "mountedNodes": 1583,
+            "scrollTop": 214130,
+            "scrollHeight": 214577,
+            "clientHeight": 447,
+            "fromBottom": 0,
+            "firstVisibleIndex": 1998,
+            "lastVisibleIndex": 1999,
+            "lastMountedIndex": 1999,
+            "latestButton": null,
+            "announcement": "Showing messages 1841 to 2000 of 2000."
+          },
+          "verdict": {
+            "openedAtTop": true,
+            "affordanceAtTop": true,
+            "atEnd": true,
+            "domBound": true,
+            "affordanceGone": true
+          }
+        }
+      ],
+      "pass": true,
+      "pageErrors": []
+    },
+    "replay": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "source": "forged output events through poll_events, no model",
+      "prompt": null,
+      "sendInput": null,
+      "before": {
+        "entryCount": 2000,
+        "windowStart": 1840,
+        "windowEnd": 2000,
+        "mountedArticles": 160,
+        "mountedNodes": 1583,
+        "scrollTop": 214107,
+        "scrollHeight": 214577,
+        "clientHeight": 447,
+        "fromBottom": 23,
+        "firstVisibleIndex": 1998,
+        "lastVisibleIndex": 1999,
+        "lastMountedIndex": 1999,
+        "latestButton": null,
+        "announcement": "Showing messages 1841 to 2000 of 2000."
+      },
+      "anchor": {
+        "index": 1997,
+        "token": "Long transcript entry 1998 —",
+        "top": 224.5,
+        "fromBottom": 5964,
+        "clientHeight": 406
+      },
+      "button": {
+        "x": 760,
+        "y": 523,
+        "top": 506,
+        "bottom": 540,
+        "text": "↓ Latest messages"
+      },
+      "clickedAtMs": 10571,
+      "samplesUp": {
+        "fields": [
+          "ms",
+          "scrollTop",
+          "anchorTop",
+          "count",
+          "start",
+          "liveChars",
+          "fromBottom",
+          "latestShown"
+        ],
+        "rows": [
+          [
+            2451,
+            208015,
+            224.5,
+            2001,
+            1841,
+            737,
+            5964,
+            true
+          ],
+          [
+            2605,
+            208015,
+            224.5,
+            2001,
+            1841,
+            803,
+            5964,
+            true
+          ],
+          [
+            2759,
+            208015,
+            224.5,
+            2001,
+            1841,
+            869,
+            5964,
+            true
+          ],
+          [
+            2916,
+            208015,
+            224.5,
+            2001,
+            1841,
+            869,
+            5964,
+            true
+          ],
+          [
+            3072,
+            208015,
+            224.5,
+            2001,
+            1841,
+            935,
+            5964,
+            true
+          ],
+          [
+            3228,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1012,
+            6124,
+            true
+          ],
+          [
+            3385,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1078,
+            6124,
+            true
+          ],
+          [
+            3540,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1078,
+            6124,
+            true
+          ],
+          [
+            3696,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1144,
+            6124,
+            true
+          ],
+          [
+            3851,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1210,
+            6124,
+            true
+          ],
+          [
+            4007,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1276,
+            6124,
+            true
+          ],
+          [
+            4162,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1342,
+            6124,
+            true
+          ],
+          [
+            4319,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1342,
+            6124,
+            true
+          ],
+          [
+            4474,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1408,
+            6124,
+            true
+          ],
+          [
+            4629,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1474,
+            6124,
+            true
+          ],
+          [
+            4785,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1540,
+            6124,
+            true
+          ],
+          [
+            4941,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1540,
+            6124,
+            true
+          ],
+          [
+            5096,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1606,
+            6124,
+            true
+          ],
+          [
+            5252,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1672,
+            6124,
+            true
+          ],
+          [
+            5409,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1738,
+            6124,
+            true
+          ],
+          [
+            5564,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1804,
+            6124,
+            true
+          ],
+          [
+            5721,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1804,
+            6124,
+            true
+          ],
+          [
+            5877,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1870,
+            6124,
+            true
+          ],
+          [
+            6032,
+            207991,
+            224.5,
+            2002,
+            1842,
+            1936,
+            6124,
+            true
+          ],
+          [
+            6188,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2013,
+            6284,
+            true
+          ],
+          [
+            6378,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2079,
+            6284,
+            true
+          ],
+          [
+            6545,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2145,
+            6284,
+            true
+          ],
+          [
+            6712,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2211,
+            6284,
+            true
+          ],
+          [
+            6896,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2277,
+            6284,
+            true
+          ],
+          [
+            7048,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2277,
+            6284,
+            true
+          ],
+          [
+            7212,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2343,
+            6284,
+            true
+          ],
+          [
+            7394,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2409,
+            6284,
+            true
+          ],
+          [
+            7547,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2475,
+            6284,
+            true
+          ],
+          [
+            7703,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2541,
+            6284,
+            true
+          ],
+          [
+            7858,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2541,
+            6284,
+            true
+          ],
+          [
+            8014,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2607,
+            6284,
+            true
+          ],
+          [
+            8170,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2673,
+            6284,
+            true
+          ],
+          [
+            8327,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2739,
+            6284,
+            true
+          ],
+          [
+            8481,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2739,
+            6284,
+            true
+          ],
+          [
+            8638,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2805,
+            6284,
+            true
+          ],
+          [
+            8793,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2871,
+            6284,
+            true
+          ],
+          [
+            8950,
+            207967,
+            224.5,
+            2003,
+            1843,
+            2937,
+            6284,
+            true
+          ],
+          [
+            9117,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3014,
+            6444,
+            true
+          ],
+          [
+            9277,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3014,
+            6444,
+            true
+          ],
+          [
+            9433,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3080,
+            6444,
+            true
+          ],
+          [
+            9589,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3146,
+            6444,
+            true
+          ],
+          [
+            9745,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3212,
+            6444,
+            true
+          ],
+          [
+            9900,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3278,
+            6444,
+            true
+          ],
+          [
+            10056,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3278,
+            6444,
+            true
+          ],
+          [
+            10213,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3344,
+            6444,
+            true
+          ],
+          [
+            10405,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3410,
+            6444,
+            true
+          ],
+          [
+            10570,
+            207943,
+            224.5,
+            2004,
+            1844,
+            3476,
+            6444,
+            true
+          ]
+        ]
+      },
+      "samplesAfterClick": {
+        "fields": [
+          "ms",
+          "scrollTop",
+          "count",
+          "start",
+          "liveChars",
+          "fromBottom",
+          "latestShown"
+        ],
+        "rows": [
+          [
+            10618,
+            214719,
+            2004,
+            1844,
+            3476,
+            0,
+            null
+          ],
+          [
+            10803,
+            214719,
+            2004,
+            1844,
+            3476,
+            0,
+            null
+          ],
+          [
+            10959,
+            214719,
+            2004,
+            1844,
+            3608,
+            23,
+            null
+          ],
+          [
+            11115,
+            214719,
+            2004,
+            1844,
+            3608,
+            23,
+            null
+          ],
+          [
+            11270,
+            214719,
+            2004,
+            1844,
+            3674,
+            23,
+            null
+          ],
+          [
+            11426,
+            214719,
+            2004,
+            1844,
+            3740,
+            23,
+            null
+          ],
+          [
+            11582,
+            214765,
+            2004,
+            1844,
+            3806,
+            0,
+            null
+          ],
+          [
+            11737,
+            214765,
+            2004,
+            1844,
+            3806,
+            0,
+            null
+          ],
+          [
+            11893,
+            214742,
+            2004,
+            1844,
+            3872,
+            23,
+            null
+          ],
+          [
+            12048,
+            214789,
+            2004,
+            1844,
+            3938,
+            0,
+            null
+          ],
+          [
+            12203,
+            214882,
+            2005,
+            1845,
+            4015,
+            23,
+            null
+          ],
+          [
+            12375,
+            214882,
+            2005,
+            1845,
+            4081,
+            23,
+            null
+          ],
+          [
+            12546,
+            214882,
+            2005,
+            1845,
+            4081,
+            23,
+            null
+          ],
+          [
+            12701,
+            214905,
+            2005,
+            1845,
+            4147,
+            24,
+            null
+          ],
+          [
+            12856,
+            214905,
+            2005,
+            1845,
+            4279,
+            47,
+            null
+          ],
+          [
+            13073,
+            214929,
+            2005,
+            1845,
+            4345,
+            23,
+            null
+          ],
+          [
+            13230,
+            214929,
+            2005,
+            1845,
+            4345,
+            23,
+            null
+          ],
+          [
+            13386,
+            214929,
+            2005,
+            1845,
+            4411,
+            23,
+            null
+          ],
+          [
+            13557,
+            214952,
+            2005,
+            1845,
+            4477,
+            23,
+            null
+          ],
+          [
+            13728,
+            214952,
+            2005,
+            1845,
+            4543,
+            23,
+            null
+          ],
+          [
+            13884,
+            214952,
+            2005,
+            1845,
+            4543,
+            23,
+            null
+          ],
+          [
+            14039,
+            214999,
+            2005,
+            1845,
+            4609,
+            0,
+            null
+          ],
+          [
+            14195,
+            214976,
+            2005,
+            1845,
+            4675,
+            23,
+            null
+          ],
+          [
+            14351,
+            214976,
+            2005,
+            1845,
+            4741,
+            23,
+            null
+          ],
+          [
+            14507,
+            214976,
+            2005,
+            1845,
+            4741,
+            23,
+            null
+          ],
+          [
+            14663,
+            214999,
+            2005,
+            1845,
+            4807,
+            23,
+            null
+          ],
+          [
+            14835,
+            214999,
+            2005,
+            1845,
+            4873,
+            23,
+            null
+          ],
+          [
+            14991,
+            215045,
+            2005,
+            1845,
+            4939,
+            0,
+            null
+          ],
+          [
+            15146,
+            215139,
+            2006,
+            1846,
+            5016,
+            23,
+            null
+          ],
+          [
+            15318,
+            215139,
+            2006,
+            1846,
+            5016,
+            23,
+            null
+          ],
+          [
+            15473,
+            215139,
+            2006,
+            1846,
+            5082,
+            23,
+            null
+          ],
+          [
+            15629,
+            215185,
+            2006,
+            1846,
+            5148,
+            0,
+            null
+          ],
+          [
+            15785,
+            215162,
+            2006,
+            1846,
+            5214,
+            23,
+            null
+          ],
+          [
+            15941,
+            215162,
+            2006,
+            1846,
+            5214,
+            23,
+            null
+          ],
+          [
+            16097,
+            215186,
+            2006,
+            1846,
+            5280,
+            23,
+            null
+          ],
+          [
+            16253,
+            215186,
+            2006,
+            1846,
+            5412,
+            23,
+            null
+          ],
+          [
+            16456,
+            215232,
+            2006,
+            1846,
+            5478,
+            0,
+            null
+          ],
+          [
+            16658,
+            215232,
+            2006,
+            1846,
+            5478,
+            0,
+            null
+          ],
+          [
+            16813,
+            215209,
+            2006,
+            1846,
+            5544,
+            23,
+            null
+          ],
+          [
+            16970,
+            215255,
+            2006,
+            1846,
+            5610,
+            0,
+            null
+          ],
+          [
+            17126,
+            215232,
+            2006,
+            1846,
+            5676,
+            23,
+            null
+          ],
+          [
+            17281,
+            215232,
+            2006,
+            1846,
+            5676,
+            23,
+            null
+          ],
+          [
+            17437,
+            215232,
+            2006,
+            1846,
+            5742,
+            23,
+            null
+          ],
+          [
+            17593,
+            215279,
+            2006,
+            1846,
+            5808,
+            0,
+            null
+          ],
+          [
+            17750,
+            215256,
+            2006,
+            1846,
+            5874,
+            23,
+            null
+          ],
+          [
+            17906,
+            215256,
+            2006,
+            1846,
+            5874,
+            23,
+            null
+          ],
+          [
+            18062,
+            215302,
+            2006,
+            1846,
+            5940,
+            0,
+            null
+          ],
+          [
+            18217,
+            215395,
+            2007,
+            1847,
+            6017,
+            24,
+            null
+          ],
+          [
+            18372,
+            215395,
+            2007,
+            1847,
+            6083,
+            24,
+            null
+          ],
+          [
+            18545,
+            215442,
+            2007,
+            1847,
+            6149,
+            0,
+            null
+          ]
+        ]
+      },
+      "end": {
+        "entryCount": 2007,
+        "windowStart": 1847,
+        "windowEnd": 2007,
+        "mountedArticles": 160,
+        "mountedNodes": 1598,
+        "scrollTop": 215442,
+        "scrollHeight": 215848,
+        "clientHeight": 406,
+        "fromBottom": 0,
+        "firstVisibleIndex": 2005,
+        "lastVisibleIndex": 2006,
+        "lastMountedIndex": 2006,
+        "latestButton": null,
+        "announcement": "Showing messages 1848 to 2007 of 2007."
+      },
+      "turn": [
+        {
+          "role": "assistant",
+          "chars": 924,
+          "head": "Forged delta of replay-0, streamed while the reader is elsewhere. Forged delta of replay-0"
+        },
+        {
+          "role": "assistant",
+          "chars": 990,
+          "head": "Forged delta of replay-1, streamed while the reader is elsewhere. Forged delta of replay-1"
+        },
+        {
+          "role": "assistant",
+          "chars": 990,
+          "head": "Forged delta of replay-2, streamed while the reader is elsewhere. Forged delta of replay-2"
+        },
+        {
+          "role": "assistant",
+          "chars": 990,
+          "head": "Forged delta of replay-3, streamed while the reader is elsewhere. Forged delta of replay-3"
+        },
+        {
+          "role": "assistant",
+          "chars": 990,
+          "head": "Forged delta of replay-4, streamed while the reader is elsewhere. Forged delta of replay-4"
+        },
+        {
+          "role": "assistant",
+          "chars": 990,
+          "head": "Forged delta of replay-5, streamed while the reader is elsewhere. Forged delta of replay-5"
+        },
+        {
+          "role": "assistant",
+          "chars": 198,
+          "head": "Forged delta of replay-6, streamed while the reader is elsewhere. Forged delta of replay-6"
+        }
+      ],
+      "verdict": {
+        "scrolledUpPx": 5964,
+        "readingPositionHeld": true,
+        "maxAnchorDriftPx": 0,
+        "whileUp": {
+          "liveCharsAdded": 2739,
+          "entriesAddedSinceSend": 4,
+          "entriesAddedWhileSampled": 3,
+          "windowStartMoved": 3,
+          "scrollTopRange": [
+            207943,
+            208015
+          ]
+        },
+        "affordanceShownWhileUp": true,
+        "affordanceClicked": true,
+        "returnedToEnd": true,
+        "streamContinuedAtEnd": true,
+        "affordanceGoneAtEnd": true,
+        "turnCompleted": null
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "copy": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "pair": {
+        "a": 1995,
+        "b": 1996,
+        "from": {
+          "x": 1115.25,
+          "y": 375.859375
+        },
+        "to": {
+          "x": 441.359375,
+          "y": 489.25
+        }
+      },
+      "copyPath": "Ctrl+C",
+      "selection": {
+        "text": "bravo charlie delta\nMuse\nSELECT-B echo foxtrot golf",
+        "anchorEntry": 1995,
+        "focusEntry": 1996,
+        "visibleText": "bravo charlie delta Muse SELECT-B echo foxtrot golf",
+        "hiddenStrings": [
+          "Conversation messages",
+          "You, message 1996 of 2000",
+          "15:03:09",
+          "Copy this message",
+          "Muse, message 1997 of 2000"
+        ]
+      },
+      "clipboardOverCdp": {
+        "granted": "page session",
+        "read": true,
+        "text": "bravo charlie delta\nMuse\nSELECT-B echo foxtrot golf",
+        "chars": 53,
+        "equalsSelection": true,
+        "hiddenStringsFound": []
+      },
+      "osClipboard": {
+        "read": true,
+        "text": "bravo charlie delta\nMuse\nSELECT-B echo foxtrot golf",
+        "chars": 53,
+        "equalsSelection": true,
+        "hiddenStringsFound": []
+      },
+      "verdict": {
+        "spansTwoEntries": true,
+        "selectionFromBravoToGolf": true,
+        "copyEventFired": true,
+        "copyEventSawTheSelection": true,
+        "clipboardOverCdpEqualsSelection": true,
+        "osClipboardEqualsSelection": true,
+        "noHiddenStringCopied": true,
+        "selectionIsItsVisibleText": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "block": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "insertedAt": 1000,
+      "blockChars": 397833,
+      "start": {
+        "entryCount": 2000,
+        "windowStart": 1840,
+        "windowEnd": 2000,
+        "mountedArticles": 160,
+        "mountedNodes": 1583,
+        "scrollTop": 207199,
+        "scrollHeight": 207646,
+        "clientHeight": 447,
+        "fromBottom": 0,
+        "firstVisibleIndex": 1998,
+        "lastVisibleIndex": 1999,
+        "lastMountedIndex": 1999,
+        "latestButton": null,
+        "announcement": "Showing messages 1841 to 2000 of 2000."
+      },
+      "baseline": {
+        "needle": "Long transcript entry 300 —",
+        "hits": 1,
+        "status": "1 match · user, message 299 of 2000",
+        "msToMounted": 40,
+        "cost": {
+          "layoutMs": 12,
+          "recalcStyleMs": 12.5,
+          "scriptMs": 678.8,
+          "taskMs": 974.8,
+          "layouts": 28,
+          "styleRecalcs": 115,
+          "nodesBefore": 4768,
+          "nodesAfter": 6625,
+          "heapUsedKiBAfter": 52032
+        },
+        "longTasks": {
+          "count": 0,
+          "maxMs": 0,
+          "totalMs": 0
+        }
+      },
+      "block": {
+        "needle": "BIGBLOCK-LINE-02500",
+        "hits": 1,
+        "status": "1 match · assistant, message 1000 of 2000",
+        "msToMounted": 201,
+        "cost": {
+          "layoutMs": 43.8,
+          "recalcStyleMs": 4.2,
+          "scriptMs": 381,
+          "taskMs": 879.1,
+          "layouts": 9,
+          "styleRecalcs": 34,
+          "nodesBefore": 8026,
+          "nodesAfter": 2352,
+          "heapUsedKiBAfter": 12426
+        },
+        "longTasks": {
+          "count": 5,
+          "maxMs": 76,
+          "totalMs": 335
+        }
+      },
+      "dom": {
+        "entryIndex": 999,
+        "entryElements": 14,
+        "codeTextNodes": 1,
+        "codeLines": 5000,
+        "codeHeightPx": 107961,
+        "entryHeightPx": 108167,
+        "documentElements": 1675,
+        "window": {
+          "entryCount": 2000,
+          "windowStart": 987,
+          "windowEnd": 1147,
+          "mountedArticles": 160,
+          "mountedNodes": 1375,
+          "scrollTop": 161430,
+          "scrollHeight": 333921,
+          "clientHeight": 447,
+          "fromBottom": 172044,
+          "firstVisibleIndex": 999,
+          "lastVisibleIndex": 999,
+          "lastMountedIndex": 1146,
+          "latestButton": {
+            "text": "↓ Latest messages",
+            "shown": true
+          },
+          "announcement": "Showing messages 988 to 1147 of 2000."
+        }
+      },
+      "steps": [
+        {
+          "step": "landed",
+          "scrollTop": 161430,
+          "line": 2534,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 162030,
+          "line": 2562,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 162630,
+          "line": 2589,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 163230,
+          "line": 2617,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 163830,
+          "line": 2645,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 164430,
+          "line": 2673,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 165030,
+          "line": 2701,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "PageDown",
+          "scrollTop": 165410,
+          "line": 2718,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "PageDown",
+          "scrollTop": 165790,
+          "line": 2736,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "near the end",
+          "scrollTop": 214450,
+          "line": 4989,
+          "entryIndex": 999,
+          "text": null
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 215050,
+          "line": null,
+          "entryIndex": 1002,
+          "text": "MuseLong transcript entry 1003 — filler line to gi"
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 215650,
+          "line": null,
+          "entryIndex": 1008,
+          "text": "MuseLong transcript entry 1009 — filler line to gi"
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 216250,
+          "line": null,
+          "entryIndex": 1014,
+          "text": "MuseLong transcript entry 1015 — filler line to gi"
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 216850,
+          "line": null,
+          "entryIndex": 1020,
+          "text": "MuseLong transcript entry 1021 — filler line to gi"
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 217450,
+          "line": null,
+          "entryIndex": 1026,
+          "text": "MuseLong transcript entry 1027 — filler line to gi"
+        },
+        {
+          "step": "wheel +600",
+          "scrollTop": 218050,
+          "line": null,
+          "entryIndex": 1032,
+          "text": "MuseLong transcript entry 1033 — filler line to gi"
+        },
+        {
+          "step": "wheel -600",
+          "scrollTop": 217450,
+          "line": null,
+          "entryIndex": 1026,
+          "text": "MuseLong transcript entry 1027 — filler line to gi"
+        },
+        {
+          "step": "wheel -600",
+          "scrollTop": 216850,
+          "line": null,
+          "entryIndex": 1020,
+          "text": "MuseLong transcript entry 1021 — filler line to gi"
+        },
+        {
+          "step": "wheel -600",
+          "scrollTop": 216250,
+          "line": null,
+          "entryIndex": 1014,
+          "text": "MuseLong transcript entry 1015 — filler line to gi"
+        },
+        {
+          "step": "wheel -600",
+          "scrollTop": 215650,
+          "line": null,
+          "entryIndex": 1008,
+          "text": "MuseLong transcript entry 1009 — filler line to gi"
+        },
+        {
+          "step": "wheel -600",
+          "scrollTop": 215050,
+          "line": null,
+          "entryIndex": 1002,
+          "text": "MuseLong transcript entry 1003 — filler line to gi"
+        },
+        {
+          "step": "wheel -600",
+          "scrollTop": 214450,
+          "line": 4989,
+          "entryIndex": 999,
+          "text": null
+        }
+      ],
+      "verdict": {
+        "boundedDom": true,
+        "allLinesRendered": true,
+        "blockLayoutMs": 43.8,
+        "baselineLayoutMs": 12,
+        "longestTaskMs": 76,
+        "scrollsForwardThroughTheBlock": true,
+        "leavesTheBlockPastItsEnd": true,
+        "inOrderPastTheEnd": true,
+        "comesBackIntoTheBlock": true
+      },
+      "pass": true,
+      "logPutBackIdentical": true,
+      "pageErrors": []
+    },
+    "theme": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "storedBefore": "dark",
+      "runs": [
+        {
+          "scheme": "light",
+          "matchesDark": false,
+          "bodyDark": false,
+          "storedTheme": "light",
+          "tokens": {
+            "--bg": "#fff",
+            "--surface": "#f8f9fb",
+            "--text": "#182329",
+            "--muted": "#6a7279"
+          },
+          "rendered": {
+            "mountedArticles": 160,
+            "firstVisibleIndex": 1998,
+            "lastVisibleIndex": 1999
+          },
+          "samples": [
+            {
+              "name": "user message text",
+              "text": "Long transcript entry 1998 — filler line to give t",
+              "fg": "#182329",
+              "bg": "#eaf2ff",
+              "opacity": 1,
+              "fontSizePx": 13,
+              "fontWeight": 400,
+              "ratio": 14.22,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "user role label",
+              "text": "You",
+              "fg": "#182329",
+              "bg": "#eaf2ff",
+              "opacity": 1,
+              "fontSizePx": 12,
+              "fontWeight": 700,
+              "ratio": 14.22,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "assistant message text",
+              "text": "Line 220 of the long last answer, a sentence of ab",
+              "fg": "#182329",
+              "bg": "#ffffff",
+              "opacity": 1,
+              "fontSizePx": 13,
+              "fontWeight": 400,
+              "ratio": 16.02,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "assistant role label",
+              "text": "Muse",
+              "fg": "#182329",
+              "bg": "#ffffff",
+              "opacity": 1,
+              "fontSizePx": 12,
+              "fontWeight": 700,
+              "ratio": 16.02,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "assistant timestamp",
+              "text": "15:03:12",
+              "fg": "#6a7279",
+              "bg": "#ffffff",
+              "opacity": 1,
+              "fontSizePx": 10,
+              "fontWeight": 400,
+              "ratio": 4.89,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "earlier assistant entry",
+              "text": "SELECT-B echo foxtrot golf hotel",
+              "fg": "#182329",
+              "bg": "#ffffff",
+              "opacity": 1,
+              "fontSizePx": 13,
+              "fontWeight": 400,
+              "ratio": 16.02,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "window notice",
+              "text": "Showing messages 1841–2000 of 2000. Scroll to the ",
+              "fg": "#6a7279",
+              "bg": "#ffffff",
+              "opacity": 1,
+              "fontSizePx": 12,
+              "fontWeight": 400,
+              "ratio": 4.89,
+              "required": 4.5,
+              "pass": true
+            }
+          ],
+          "shot": "m1-13-theme-light.png (local, not committed)",
+          "pass": true
+        },
+        {
+          "scheme": "dark",
+          "matchesDark": true,
+          "bodyDark": true,
+          "storedTheme": "dark",
+          "tokens": {
+            "--bg": "#172329",
+            "--surface": "#1d2c34",
+            "--text": "#e9eff3",
+            "--muted": "#92a2ad"
+          },
+          "rendered": {
+            "mountedArticles": 160,
+            "firstVisibleIndex": 1998,
+            "lastVisibleIndex": 1999
+          },
+          "samples": [
+            {
+              "name": "user message text",
+              "text": "Long transcript entry 1998 — filler line to give t",
+              "fg": "#e9eff3",
+              "bg": "#193c60",
+              "opacity": 1,
+              "fontSizePx": 13,
+              "fontWeight": 400,
+              "ratio": 9.75,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "user role label",
+              "text": "You",
+              "fg": "#e9eff3",
+              "bg": "#193c60",
+              "opacity": 1,
+              "fontSizePx": 12,
+              "fontWeight": 700,
+              "ratio": 9.75,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "assistant message text",
+              "text": "Line 220 of the long last answer, a sentence of ab",
+              "fg": "#e9eff3",
+              "bg": "#172329",
+              "opacity": 1,
+              "fontSizePx": 13,
+              "fontWeight": 400,
+              "ratio": 13.83,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "assistant role label",
+              "text": "Muse",
+              "fg": "#e9eff3",
+              "bg": "#172329",
+              "opacity": 1,
+              "fontSizePx": 12,
+              "fontWeight": 700,
+              "ratio": 13.83,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "assistant timestamp",
+              "text": "15:03:12",
+              "fg": "#92a2ad",
+              "bg": "#172329",
+              "opacity": 1,
+              "fontSizePx": 10,
+              "fontWeight": 400,
+              "ratio": 6.11,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "earlier assistant entry",
+              "text": "SELECT-B echo foxtrot golf hotel",
+              "fg": "#e9eff3",
+              "bg": "#172329",
+              "opacity": 1,
+              "fontSizePx": 13,
+              "fontWeight": 400,
+              "ratio": 13.83,
+              "required": 4.5,
+              "pass": true
+            },
+            {
+              "name": "window notice",
+              "text": "Showing messages 1841–2000 of 2000. Scroll to the ",
+              "fg": "#92a2ad",
+              "bg": "#172329",
+              "opacity": 1,
+              "fontSizePx": 12,
+              "fontWeight": 400,
+              "ratio": 6.11,
+              "required": 4.5,
+              "pass": true
+            }
+          ],
+          "shot": "m1-13-theme-dark.png (local, not committed)",
+          "pass": true
+        }
+      ],
+      "storedAgainstOs": {
+        "osPrefersDark": true,
+        "storedTheme": "light",
+        "bodyDark": false
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "finder": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "harness": "node scripts/cdp-finder-jump.mjs --out <proof>\\finder-jump.json",
+      "childFailure": null,
+      "report": {
+        "schema": "muse-desktop.cdp-finder-jump.v2",
+        "needleIndex": 137,
+        "entries": 2000,
+        "runs": [
+          {
+            "motion": "no-preference",
+            "matchMedia": false,
+            "before": {
+              "entryCount": 2000,
+              "windowStart": 1840,
+              "windowEnd": 2000,
+              "mountedArticles": 160,
+              "mountedNodes": 1366,
+              "firstPosinset": 1841,
+              "needleInWindow": false,
+              "searchFieldPresent": false,
+              "searchFieldValue": null,
+              "findStatus": null,
+              "findStatusRole": null,
+              "bodyHasNeedleText": false
+            },
+            "typed": {
+              "typed": true
+            },
+            "hits": [
+              "ASSISTANT FINDER-NEEDLE-137 unique marker placed outside the"
+            ],
+            "selected": "conversation-search-hit-0",
+            "after": {
+              "entryCount": 2000,
+              "windowStart": 125,
+              "windowEnd": 285,
+              "mountedArticles": 160,
+              "mountedNodes": 1377,
+              "firstPosinset": 126,
+              "needleInWindow": true,
+              "searchFieldPresent": true,
+              "searchFieldValue": "FINDER-NEEDLE-137",
+              "findStatus": "1 match · assistant, message 138 of 2000",
+              "findStatusRole": "status",
+              "bodyHasNeedleText": true
+            },
+            "scroll": {
+              "requestedBehavior": [
+                "smooth"
+              ],
+              "targetEntryIndex": [
+                "137"
+              ],
+              "framesSampled": 521,
+              "distinctScrollPositions": 148,
+              "intermediatePositions": 146,
+              "hitLandedAtPx": 360,
+              "hitMovesAfterLanding": 61
+            }
+          },
+          {
+            "motion": "reduce",
+            "matchMedia": true,
+            "before": {
+              "entryCount": 2000,
+              "windowStart": 1840,
+              "windowEnd": 2000,
+              "mountedArticles": 160,
+              "mountedNodes": 1366,
+              "firstPosinset": 1841,
+              "needleInWindow": false,
+              "searchFieldPresent": false,
+              "searchFieldValue": null,
+              "findStatus": null,
+              "findStatusRole": null,
+              "bodyHasNeedleText": false
+            },
+            "typed": {
+              "typed": true
+            },
+            "hits": [
+              "ASSISTANT FINDER-NEEDLE-137 unique marker placed outside the"
+            ],
+            "selected": "conversation-search-hit-0",
+            "after": {
+              "entryCount": 2000,
+              "windowStart": 125,
+              "windowEnd": 285,
+              "mountedArticles": 160,
+              "mountedNodes": 1377,
+              "firstPosinset": 126,
+              "needleInWindow": true,
+              "searchFieldPresent": true,
+              "searchFieldValue": "FINDER-NEEDLE-137",
+              "findStatus": "1 match · assistant, message 138 of 2000",
+              "findStatusRole": "status",
+              "bodyHasNeedleText": true
+            },
+            "scroll": {
+              "requestedBehavior": [
+                "auto"
+              ],
+              "targetEntryIndex": [
+                "137"
+              ],
+              "framesSampled": 698,
+              "distinctScrollPositions": 3,
+              "intermediatePositions": 1,
+              "hitLandedAtPx": 176,
+              "hitMovesAfterLanding": 0
+            }
+          }
+        ],
+        "target": {
+          "originalBytes": 363615
+        },
+        "initial": {
+          "entryCount": 2000,
+          "windowStart": 1840,
+          "windowEnd": 2000,
+          "mountedArticles": 160,
+          "mountedNodes": 1366,
+          "firstPosinset": 1841,
+          "needleInWindow": false,
+          "searchFieldPresent": false,
+          "searchFieldValue": null,
+          "findStatus": null,
+          "findStatusRole": null,
+          "bodyHasNeedleText": false
+        },
+        "verdict": {
+          "jumpedOutsideWindow": true,
+          "statusAnnounced": true,
+          "smoothWithoutPreference": true,
+          "instantWhenReduced": false,
+          "hitStillOnceLandedWhenReduced": true,
+          "domBound": 160
+        },
+        "restored": {
+          "bytes": 363615,
+          "identical": true,
+          "hasNeedle": false
+        }
+      },
+      "view": {
+        "entryCount": 2000,
+        "windowStart": 125,
+        "windowEnd": 285,
+        "mountedArticles": 160,
+        "mountedNodes": 1368,
+        "scrollTop": 13175,
+        "scrollHeight": 201688,
+        "clientHeight": 447,
+        "fromBottom": 188066,
+        "firstVisibleIndex": 135,
+        "lastVisibleIndex": 139,
+        "lastMountedIndex": 284,
+        "latestButton": {
+          "text": "↓ Latest messages",
+          "shown": true
+        },
+        "announcement": "Showing messages 126 to 285 of 2000."
+      },
+      "verdict": {
+        "jumpedOutsideWindow": true,
+        "statusAnnounced": true,
+        "smoothWithoutPreference": true,
+        "instantWhenReduced": false,
+        "hitStillOnceLandedWhenReduced": true,
+        "domBound": 160,
+        "restoredIdentical": true,
+        "backOnTheTestConversation": true
+      },
+      "pass": true,
+      "pageErrors": []
+    },
+    "stop": {
+      "exeSha256": "9bdcf080df0a5e3300d05bb5e800f874af1f5d086a5b7783ecd5e8a6e60ebb49",
+      "liveTurns": 0,
+      "graceful": true,
+      "exited": true,
+      "children": 3,
+      "childrenAliveAfter": 0,
+      "pageErrors": []
+    }
+  }
+}

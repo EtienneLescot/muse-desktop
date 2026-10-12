@@ -178,3 +178,25 @@ describe("msp-probe argument helpers", () => {
     assert.equal(value("--binary"), undefined);
   });
 });
+
+describe("msp-probe compound approval stages", () => {
+  type Entry = { method: string; params?: Record<string, unknown> };
+  const { nextApprovalStage } = loadDeclarations<{
+    nextApprovalStage: (entries: Entry[], approvalId: string, decided: Set<string>) => Entry | undefined;
+  }>("msp-probe.mjs", ["nextApprovalStage"]);
+
+  it("returns the re-issued stage with a token that was not decided yet", () => {
+    const first = { approvalId: "approval-1", sourceIndex: 0 };
+    const second = { approvalId: "approval-1", sourceIndex: 1 };
+    const entries: Entry[] = [
+      { method: "approval/requested", params: { approvalId: "approval-1", currentRequirementId: first } },
+      { method: "approval/updated", params: { approvalId: "approval-1" } },
+      { method: "approval/updated", params: { approvalId: "approval-2", currentRequirementId: second } },
+      { method: "approval/updated", params: { approvalId: "approval-1", currentRequirementId: second } },
+    ];
+    const decided = new Set([JSON.stringify(first)]);
+    assert.equal(nextApprovalStage(entries, "approval-1", decided), entries[3]);
+    decided.add(JSON.stringify(second));
+    assert.equal(nextApprovalStage(entries, "approval-1", decided), undefined);
+  });
+});

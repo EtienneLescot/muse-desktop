@@ -1,0 +1,563 @@
+{
+  "schema": "muse-desktop.m0-13-click-effect.v1",
+  "ticket": "M0-13",
+  "date": "2026-10-05",
+  "commit": "52f50cd",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "modelTurns": 0,
+  "restored": {
+    "connectorsRestored": true,
+    "indexRestored": true,
+    "importRestored": true,
+    "endpointRestored": true,
+    "browserTabsRestored": true
+  },
+  "audit": [
+    {
+      "surface": "connectors",
+      "action": "capability badge",
+      "outcome": "observed",
+      "measured": {
+        "label": "Local",
+        "accessibleName": "Local: The curated catalog is local; explicit local MCP probes use the real stdio handshake. Next: Run or refresh it locally when needed."
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Probe (quoted command path)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "notice": null,
+          "sectionStatus": [],
+          "alertsOnPage": [
+            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          ]
+        },
+        "ipc": {
+          "ok": false,
+          "error": "\"local MCP server closed stdout before a response\""
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Probe (real local stdio MCP)",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 48 ms",
+          "alerts": [
+            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          ]
+        },
+        "ipc": {
+          "ok": true,
+          "serverName": "msp-fixture",
+          "tools": [
+            "fixture.echo"
+          ]
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Call tool",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "label": "Call tool",
+          "approvalShown": false,
+          "output": "{ \"content\": [ { \"text\": \"m0-13 echo\", \"type\": \"text\" } ] }"
+        },
+        "ipcOk": true
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Save connector",
+      "outcome": "effect",
+      "measured": {
+        "rowShown": true,
+        "stored": {
+          "status": "installed",
+          "tools": [
+            "fixture.echo"
+          ],
+          "hasCommand": true
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Start server / Stop server",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "started": "Persistent server running · 1 tools",
+          "stopped": "Persistent server stopped."
+        },
+        "ipc": [
+          {
+            "cmd": "mcp_local_start",
+            "ok": true
+          },
+          {
+            "cmd": "mcp_local_stop",
+            "ok": true
+          }
+        ]
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Remove",
+      "outcome": "effect",
+      "measured": {
+        "rowGone": true
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Probe (nonexistent command)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "notice": null,
+          "sectionStatus": [],
+          "alertsOnPage": [
+            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          ],
+          "errorBannerAnywhere": "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+        },
+        "ipc": {
+          "ok": false,
+          "error": "\"local MCP server closed stdout before a response\""
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Add (curated catalog entry)",
+      "outcome": "refusal",
+      "measured": {
+        "catalogFlag": "added",
+        "configuredHeading": "Configured — 4 tool(s)",
+        "configuredRow": {
+          "text": "SQLite Not connected Catalog entry only: no server command is set, so Muse cannot call these tools. sqlite.query · sqlite.schema Remove",
+          "badge": "Not connected",
+          "actions": [
+            "Remove"
+          ],
+          "toggles": 1
+        },
+        "stored": {
+          "status": "installed",
+          "hasCommand": false,
+          "useInMuse": false
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Install an MCP Bundle (not a bundle)",
+      "outcome": "refusal",
+      "measured": {
+        "filesDelivered": 1,
+        "ui": {
+          "sectionText": "Install an MCP Bundle Choose a .mcpb package. Muse validates its manifest, installs an immutable revision, and probes the server before adding it to the registry. Choose .mcpb package Package code runs only after an explicit start or session opt-in.",
+          "sectionStatus": [],
+          "alertsOnPage": [
+            "MCP bundle installation failed: MCP bundle is not a valid zip archive"
+          ],
+          "errorBannerAnywhere": "MCP bundle installation failed: MCP bundle is not a valid zip archive"
+        },
+        "ipc": [],
+        "rowAdded": false
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Connect and list tools (loopback URL)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "result": null,
+          "notices": [
+            "Only 1 remote connector is allowed on this plan: remove the existing remote connector before adding another. Remote MCP also requires a public-internet HTTPS endpoint with allowlisted IPs."
+          ],
+          "alertsOnPage": [
+            "MCP bundle installation failed: MCP bundle is not a valid zip archive"
+          ]
+        },
+        "ipc": []
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Reconnect with current connectors",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "shown": true,
+          "after": "Reconnect with current connectors"
+        },
+        "ipc": [
+          {
+            "cmd": "resume_session",
+            "ok": true
+          }
+        ]
+      }
+    },
+    {
+      "surface": "library",
+      "action": "capability badges",
+      "outcome": "observed",
+      "measured": [
+        {
+          "label": "Local",
+          "accessibleName": "Local: The index is opt-in and reads selected workspace files locally. Next: Run or refresh it locally when needed."
+        },
+        {
+          "label": "Manual",
+          "accessibleName": "Manual: Import parses content you choose; it never overwrites live conversations or runs a config. Next: Choose the input or run the prepared step yourself."
+        }
+      ]
+    },
+    {
+      "surface": "library",
+      "action": "Index On",
+      "outcome": "effect",
+      "measured": {
+        "status": "Empty — pick a folder to build.",
+        "stored": "1"
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Choose folder (2 files) + search",
+      "outcome": "effect",
+      "measured": {
+        "filesDelivered": 2,
+        "status": [
+          "2 file(s), 6 line(s) · built 05/10/2026 14:52:35",
+          "Built 2 file(s), 6 line(s) from 2 picked."
+        ],
+        "hits": [
+          "alpha.md:2 baselineneedle lives here"
+        ]
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Rescan / Pause / Resume",
+      "outcome": "effect",
+      "measured": {
+        "before": "Built 2 file(s), 6 line(s) from 2 picked.",
+        "after": "Rescan: 0 added, 0 updated, 0 removed, 2 unchanged.",
+        "paused": {
+          "status": "2 file(s), 6 line(s) · built 05/10/2026 14:52:36 · paused",
+          "rescanDisabled": true
+        },
+        "resumed": "2 file(s), 6 line(s) · built 05/10/2026 14:52:36"
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Delete Index / Off",
+      "outcome": "effect",
+      "measured": {
+        "status": "Empty — pick a folder to build.",
+        "data": null,
+        "enabled": null
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Import text (unparseable)",
+      "outcome": "refusal",
+      "measured": {
+        "notes": [
+          "no importable sessions found in ~/.muse/config.json",
+          "Imported from CLI config ~/.muse/config.json Remove",
+          "Second CLI session ~/.muse/config.json Remove"
+        ]
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Import text (one session) / Remove",
+      "outcome": "effect",
+      "measured": {
+        "rows": [
+          "baseline import probe ~/.muse/config.json Remove"
+        ],
+        "notes": [
+          "no importable sessions found in ~/.muse/config.json",
+          "1 session(s) found in ~/.muse/config.json",
+          "Imported from CLI config ~/.muse/config.json Remove",
+          "Second CLI session ~/.muse/config.json Remove"
+        ],
+        "removed": true
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "state shown vs computer_status",
+      "outcome": "effect",
+      "measured": {
+        "shown": {
+          "state": "Granted",
+          "summary": "Muse can use this computer, only through the granted tools, until you turn it off.",
+          "levels": [
+            {
+              "value": "observe",
+              "checked": false
+            },
+            {
+              "value": "act",
+              "checked": true
+            }
+          ],
+          "attachChecked": true,
+          "actions": [
+            "Turn off and revoke",
+            "Refresh"
+          ]
+        },
+        "native": {
+          "available": true,
+          "grantState": "active",
+          "attach": true
+        }
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Refresh",
+      "outcome": "effect",
+      "measured": {
+        "statusCalls": 1,
+        "stateAfter": "Granted"
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "levels / attach / Turn off and revoke",
+      "outcome": "not-exercised",
+      "measured": {
+        "reason": "each would change the user's standing desktop-control grant"
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Snapshot (Markdown)",
+      "outcome": "effect",
+      "measured": {
+        "before": 3,
+        "after": 4,
+        "newest": "Reply with just the word BASELINE and noth… 05/10/2026 14:52:46 · markdown"
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Save service (invalid URL)",
+      "outcome": "refusal",
+      "measured": {
+        "configured": null,
+        "error": "An http(s) base URL without credentials, query or fragment; the token is optional."
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Publish (service unreachable)",
+      "outcome": "refusal",
+      "measured": {
+        "configured": "Configured: http://127.0.0.1:57840 (token set)",
+        "error": [
+          "the share service did not answer: TypeError: Failed to fetch"
+        ],
+        "published": false
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Publish (local reference server)",
+      "outcome": "effect",
+      "measured": {
+        "urlShape": "<server>/muse-share/share-zyhysms1",
+        "secondClient": {
+          "status": 200,
+          "hasTitle": true
+        },
+        "alerts": []
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Revoke",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "text": "Revoked — the link returns 404 for every client."
+        },
+        "secondClientStatus": 404
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Forget",
+      "outcome": "effect",
+      "measured": {
+        "configured": null,
+        "stored": "null"
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Go (invalid address)",
+      "outcome": "refusal",
+      "measured": {
+        "notice": "Enter an http or https address, or a local server such as localhost:5173.",
+        "iframe": null,
+        "address": "not a url ::",
+        "iframeUnchanged": true
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Go (local page)",
+      "outcome": "effect",
+      "measured": {
+        "iframe": "<server>/page-1",
+        "serverHits": [
+          "/page-1"
+        ]
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Back / Forward / Reload",
+      "outcome": "effect",
+      "measured": {
+        "back": "<server>/page-1",
+        "forward": "<server>/page-2",
+        "serverHits": [
+          "/page-1",
+          "/page-2",
+          "/page-2"
+        ]
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Add this page to the prompt",
+      "outcome": "effect",
+      "measured": {
+        "inserted": "[Browser context]\nURL: <server>/page-2",
+        "composerRestored": true
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Open in a browser window",
+      "outcome": "effect",
+      "measured": {
+        "ipcOk": true,
+        "ipcResult": "\"opened\"",
+        "newCdpTarget": "<server>/page-2",
+        "serverHits": [
+          "/page-2",
+          "/favicon.ico"
+        ]
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "close the browser window (app command)",
+      "outcome": "effect",
+      "measured": {
+        "closed": true
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "New tab / close tab",
+      "outcome": "effect",
+      "measured": {
+        "n0": 1,
+        "n1": 2,
+        "n2": 1
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Anchor / remove annotation",
+      "outcome": "effect",
+      "measured": {
+        "n0": 1,
+        "n1": 2,
+        "n2": 1,
+        "listed": [
+          "baseline annotation"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "observed": 2,
+    "refusal": 9,
+    "effect": 24,
+    "not-exercised": 1
+  },
+  "consoleErrors": [],
+  "beforeFix": {
+    "build": "same commit without the fixes below, measured earlier the same day with this harness",
+    "connectors · Probe (nonexistent command)": {
+      "outcome": "silent",
+      "measured": "mcp_local_probe failed (local MCP server closed stdout before a response); nothing in the section, no alert on the page: the global error banner rendered only beside the conversation"
+    },
+    "connectors · Probe (quoted command path)": {
+      "outcome": "silent",
+      "measured": "same failure, same invisibility"
+    },
+    "connectors · Install an MCP Bundle (not a bundle)": {
+      "outcome": "silent",
+      "measured": "the archive was refused in the renderer (not a valid zip) but the error was set out of view"
+    },
+    "connectors · Add (curated catalog entry)": {
+      "outcome": "fake",
+      "measured": "catalog flag 'configured', heading 'Configured — 6 tool(s)' counting the 2 SQLite catalog tools, no badge; stored entry has no command and never reaches the host (buildHostMcpServers)"
+    }
+  },
+  "defects": [
+    {
+      "id": "M0-13-a",
+      "status": "fixed in this commit",
+      "what": "Errors from actions on Settings and on destination pages (Extensions, Library, Projects, Automations, Archives) were invisible: the error banner was rendered only in the conversation view.",
+      "fix": "src/App.tsx renders the same banner on Settings and destination pages; guard test/visibleFailures.test.ts",
+      "reproof": "connectors probe (nonexistent and quoted) and MCP Bundle now 'refusal' with the message on the page"
+    },
+    {
+      "id": "M0-13-b",
+      "status": "fixed in this commit",
+      "what": "Adding a curated catalog connector claimed 'configured' and counted its tools while nothing serves them.",
+      "fix": "connectorReachable() in src/lib/connectors.ts; catalog flag 'added'; 'Not connected' CapabilityBadge with its reason on a command-less entry; the Configured tool count only counts reachable connectors; tests in test/connectors.test.ts",
+      "reproof": "'Add (curated catalog entry)' now shows Not connected and 'Configured — 4 tool(s)'"
+    },
+    {
+      "id": "M3-01-quoting",
+      "status": "recorded, not fixed",
+      "what": "On Windows a local MCP command whose path is quoted (needed for a path with spaces) always fails: mcp.rs spawns cmd /D /S /C with the command as one Rust-quoted argument, so the inner quotes reach cmd escaped and the server never starts ('local MCP server closed stdout before a response'). The same spawn serves the persistent start.",
+      "where": "src-tauri/src/mcp.rs spawn()",
+      "next": "on Windows pass the command with CommandExt::raw_arg inside one pair of quotes, then re-run this audit's quoted probe"
+    }
+  ],
+  "notExercised": [
+    "Settings > Computer use levels, 'Attach the user's browser' and 'Turn off and revoke': the profile holds an active grant (act level, attach on) and each control would change it.",
+    "Remote connector 'Reconnect' / 'Forget token' on the user's existing remote entry: it would touch a stored credential. The new-remote form was exercised instead (refused by the single-remote guard).",
+    "Share 'Copy link' (clipboard only) and Library 'Choose a file…' for import (same parser as the pasted text)."
+  ],
+  "method": "Effects are measured outside the click: IPC results traced on window.fetch, localStorage, a harness HTTP server's own request log, the reference share server read by a second client (node fetch), CDP targets. Folder pickers are fed with DOM.setFileInputFiles; no model turn."
+}

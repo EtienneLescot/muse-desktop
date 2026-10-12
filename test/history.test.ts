@@ -76,6 +76,22 @@ describe("session history hydration", () => {
     ]);
   });
 
+  it("keeps a refused tool call or command marked as failed", () => {
+    // M0-13, as 1.4.2 reports them: --disable-shell, and a write outside the root.
+    const entries = historyItemsToLogEntries([
+      { itemId: "s1", kind: "userShell", commandText: "echo m0-13", visibleOutput: "tool failed: tool policy denied shell execution", status: "failed" },
+      { itemId: "t1", kind: "toolCall", tool: "write_file", visibleOutput: "tool failed: absolute path is outside the workspace", status: "failed" },
+      { itemId: "t2", kind: "toolCall", tool: "read_file", visibleOutput: "ok", status: "completed" },
+      { itemId: "a1", kind: "agentMessage", text: "Stopped", status: "failed" },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.failed]), [
+      ["s1", true],
+      ["t1", true],
+      ["t2", undefined],
+      ["a1", undefined],
+    ]);
+  });
+
   it("preserves a lazy output reference for large tool items", () => {
     const entries = historyItemsToLogEntries([
       {

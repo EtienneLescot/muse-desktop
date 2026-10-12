@@ -7,7 +7,7 @@
  * stable `{ kind, message, retryable }` error object.
  */
 
-import { redactDiagnostic } from "./diagnostics.ts";
+import { redactDiagnostic, safeSlice } from "./diagnostics.ts";
 
 export interface EngineErrorDetails {
   kind: string;
@@ -74,7 +74,7 @@ function resultText(value: unknown, depth = 0): string | null {
 function boundedResult(value: unknown): string | undefined {
   const text = resultText(value);
   if (text === null) return undefined;
-  return text.length > 320 ? `${text.slice(0, 319)}…` : text;
+  return text.length > 320 ? `${safeSlice(text, 319)}…` : text;
 }
 
 function boundedListItem(value: unknown, maxChars: number): string | null {
@@ -82,7 +82,7 @@ function boundedListItem(value: unknown, maxChars: number): string | null {
   if (text === null) return null;
   const redacted = (redactDiagnostic(text) ?? text).replace(/\s+/g, " ").trim();
   if (redacted.length === 0) return null;
-  return redacted.length > maxChars ? `${redacted.slice(0, maxChars - 1)}…` : redacted;
+  return redacted.length > maxChars ? `${safeSlice(redacted, maxChars - 1)}…` : redacted;
 }
 
 function collectListValue(value: unknown, maxItems: number, maxChars: number): string[] {

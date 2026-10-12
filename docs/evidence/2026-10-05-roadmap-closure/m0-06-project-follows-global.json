@@ -1,0 +1,704 @@
+{
+  "schema": "muse-desktop.m0-06-project-follows-global.v1",
+  "tickets": [
+    "M0-06"
+  ],
+  "decision": "06/10/2026: a project follows the global Isolation level unless its own preferences restrict it",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+  "liveTurns": 0,
+  "builds": {
+    "before": {
+      "commit": "a9ffff2",
+      "exeSha256": "00d8440747ceeb817c32ecf69a88deeca1adaed875d6e0acf8534d9101b8f9d2",
+      "date": "2026-10-06",
+      "profileUnderTestData": true,
+      "steps": [
+        {
+          "step": "no override",
+          "isolation": "Workspace and network",
+          "override": {},
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "<engine> serve --sandbox-network restricted --trust-workspace"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --trust-workspace"
+          ]
+        },
+        {
+          "step": "no override",
+          "isolation": "Elevated access",
+          "override": {},
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --trust-workspace"
+          ]
+        },
+        {
+          "step": "Isolation: no Elevated access",
+          "isolation": "Elevated access",
+          "override": {},
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --trust-workspace"
+          ]
+        },
+        {
+          "step": "Network: no network",
+          "isolation": "Elevated access",
+          "override": {
+            "networkDefault": "deny"
+          },
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --trust-workspace"
+          ]
+        },
+        {
+          "step": "Isolation: read only",
+          "isolation": "Elevated access",
+          "override": {
+            "sandbox": "read-only"
+          },
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": true,
+              "disableShell": true
+            },
+            "ok": false,
+            "error": "workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with workspace (read-only writes, shell disabled)",
+            "engine": "reused the running engine"
+          },
+          "restart": {
+            "offered": true,
+            "confirmed": 1,
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": true,
+              "disableShell": true
+            },
+            "ok": true,
+            "engine": "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          },
+          "startAfterRestart": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": true,
+              "disableShell": true
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          ]
+        }
+      ],
+      "grantNetwork": {
+        "clicked": true,
+        "stored": {
+          "mode": "network",
+          "networkAllowed": true,
+          "elevatedAllowed": false
+        },
+        "note": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. Under Workspace only, names still resolve. Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works. Elevated access reaches HTTPS.",
+        "levels": [
+          "Workspace only Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "Workspace and network Also lets commands connect out.",
+          "Elevated access Adds files and commands outside the folder. Grant it to a workspace you trust."
+        ],
+        "current": "Current isolation: network"
+      },
+      "projectCreated": true,
+      "preferencesShown": {
+        "rows": [
+          {
+            "label": "model g:default",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "sandbox g:workspace",
+            "selected": "Project",
+            "choices": [
+              "Read only",
+              "Project",
+              "Full access"
+            ]
+          },
+          {
+            "label": "networkDefault g:prompt",
+            "selected": "Ask",
+            "choices": [
+              "Allow",
+              "Ask",
+              "Deny"
+            ]
+          },
+          {
+            "label": "autoCompact g:on",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "reasoningEffort g:High",
+            "selected": "High",
+            "choices": [
+              "Minimal",
+              "Low",
+              "Medium",
+              "High",
+              "Xhigh",
+              "Max",
+              "Ultra"
+            ]
+          }
+        ],
+        "note": null
+      },
+      "grantElevated": {
+        "clicked": true,
+        "stored": {
+          "mode": "elevated",
+          "networkAllowed": true,
+          "elevatedAllowed": true
+        },
+        "note": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. Under Workspace only, names still resolve. Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works. Elevated access reaches HTTPS.",
+        "levels": [
+          "Workspace only Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "Workspace and network Also lets commands connect out.",
+          "Elevated access Adds files and commands outside the folder. Grant it to a workspace you trust."
+        ],
+        "current": "Current isolation: elevated"
+      },
+      "setNoElevated": {
+        "select": true,
+        "value": "workspace",
+        "override": {}
+      },
+      "clearIsolation": {
+        "select": true,
+        "value": "workspace",
+        "override": {}
+      },
+      "setNoNetwork": {
+        "select": true,
+        "value": "deny",
+        "override": {
+          "networkDefault": "deny"
+        }
+      },
+      "clearNetwork": {
+        "select": true,
+        "value": "prompt",
+        "override": {}
+      },
+      "setReadOnly": {
+        "select": true,
+        "value": "read-only",
+        "override": {
+          "sandbox": "read-only"
+        }
+      },
+      "preferencesShownAtEnd": {
+        "rows": [
+          {
+            "label": "model g:default",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "sandbox g:workspace",
+            "selected": "Read only",
+            "choices": [
+              "Read only",
+              "Project",
+              "Full access"
+            ]
+          },
+          {
+            "label": "networkDefault g:prompt",
+            "selected": "Ask",
+            "choices": [
+              "Allow",
+              "Ask",
+              "Deny"
+            ]
+          },
+          {
+            "label": "autoCompact g:on",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "reasoningEffort g:High",
+            "selected": "High",
+            "choices": [
+              "Minimal",
+              "Low",
+              "Medium",
+              "High",
+              "Xhigh",
+              "Max",
+              "Ultra"
+            ]
+          }
+        ],
+        "note": null
+      },
+      "settingsRestart": {
+        "picked": true,
+        "clicked": true,
+        "requested": {
+          "sandboxMode": "elevated",
+          "disableWrite": false,
+          "disableShell": false
+        },
+        "ok": true,
+        "engine": "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+        "running": [
+          "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+        ]
+      },
+      "errors": [],
+      "verdict": {
+        "restrictedAtEveryLevel": true,
+        "settingsRestartLiftsReadOnly": true
+      }
+    },
+    "after": {
+      "commit": "3805d1f",
+      "exeSha256": "5335dfb677cf34439ebde23dfe36c966a5ebd3272162508c0a01e1677783d1ca",
+      "date": "2026-10-06",
+      "profileUnderTestData": true,
+      "steps": [
+        {
+          "step": "no override",
+          "isolation": "Workspace and network",
+          "override": {},
+          "start": {
+            "requested": {
+              "sandboxMode": "network",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "<engine> serve --sandbox-network enabled --trust-workspace"
+          },
+          "running": [
+            "<engine> serve --sandbox-network enabled --trust-workspace"
+          ]
+        },
+        {
+          "step": "no override",
+          "isolation": "Elevated access",
+          "override": {},
+          "start": {
+            "requested": {
+              "sandboxMode": "elevated",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": false,
+            "error": "This folder's engine is running with Workspace and network; restart it to apply Elevated access.",
+            "engine": "reused the running engine"
+          },
+          "restart": {
+            "offered": true,
+            "confirmed": 1,
+            "requested": {
+              "sandboxMode": "elevated",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          },
+          "startAfterRestart": {
+            "requested": {
+              "sandboxMode": "elevated",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          ]
+        },
+        {
+          "step": "Isolation: no Elevated access",
+          "isolation": "Elevated access",
+          "override": {
+            "sandbox": "workspace"
+          },
+          "start": {
+            "requested": {
+              "sandboxMode": "network",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": false,
+            "error": "This folder's engine is running with Elevated access; restart it to apply Workspace and network.",
+            "engine": "reused the running engine"
+          },
+          "restart": {
+            "offered": true,
+            "confirmed": 2,
+            "requested": {
+              "sandboxMode": "network",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "<engine> serve --sandbox-network enabled --trust-workspace"
+          },
+          "startAfterRestart": {
+            "requested": {
+              "sandboxMode": "network",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network enabled --trust-workspace"
+          ]
+        },
+        {
+          "step": "Network: no network",
+          "isolation": "Elevated access",
+          "override": {
+            "networkDefault": "deny"
+          },
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": false,
+            "error": "This folder's engine is running with Workspace and network; restart it to apply Workspace only.",
+            "engine": "reused the running engine"
+          },
+          "restart": {
+            "offered": true,
+            "confirmed": 3,
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "<engine> serve --sandbox-network restricted --trust-workspace"
+          },
+          "startAfterRestart": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --trust-workspace"
+          ]
+        },
+        {
+          "step": "Isolation: read only",
+          "isolation": "Elevated access",
+          "override": {
+            "sandbox": "read-only"
+          },
+          "start": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": true,
+              "disableShell": true
+            },
+            "ok": false,
+            "error": "This folder's engine is running with Workspace only; restart it to apply Workspace only, no writes, no commands.",
+            "engine": "reused the running engine"
+          },
+          "restart": {
+            "offered": true,
+            "confirmed": 4,
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": true,
+              "disableShell": true
+            },
+            "ok": true,
+            "engine": "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          },
+          "startAfterRestart": {
+            "requested": {
+              "sandboxMode": "workspace",
+              "disableWrite": true,
+              "disableShell": true
+            },
+            "ok": true,
+            "engine": "reused the running engine"
+          },
+          "running": [
+            "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          ]
+        }
+      ],
+      "grantNetwork": {
+        "clicked": true,
+        "stored": {
+          "mode": "network",
+          "networkAllowed": true,
+          "elevatedAllowed": false
+        },
+        "note": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. A project follows this level unless its own preferences restrict it. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. Under Workspace only, names still resolve. Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works. Elevated access reaches HTTPS.",
+        "levels": [
+          "Workspace only Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "Workspace and network Also lets commands connect out.",
+          "Elevated access Adds files and commands outside the folder. It reaches every project that does not restrict it."
+        ],
+        "current": "Current isolation: Workspace and network"
+      },
+      "projectCreated": true,
+      "preferencesShown": {
+        "rows": [
+          {
+            "label": "Model Default: default",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "Isolation",
+            "selected": "Follow Settings (Workspace and network)",
+            "choices": [
+              "Follow Settings (Workspace and network)",
+              "No Elevated access",
+              "Read only, no commands"
+            ]
+          },
+          {
+            "label": "Network",
+            "selected": "Follow Settings (Workspace and network)",
+            "choices": [
+              "Follow Settings (Workspace and network)",
+              "No network"
+            ]
+          },
+          {
+            "label": "Auto-compact Default: on",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "Reasoning effort Default: High",
+            "selected": "High",
+            "choices": [
+              "Minimal",
+              "Low",
+              "Medium",
+              "High",
+              "Xhigh",
+              "Max",
+              "Ultra"
+            ]
+          }
+        ],
+        "note": "Isolation applies when the project's engine starts: a running engine keeps its posture until it restarts."
+      },
+      "grantElevated": {
+        "clicked": true,
+        "stored": {
+          "mode": "elevated",
+          "networkAllowed": true,
+          "elevatedAllowed": true
+        },
+        "note": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. A project follows this level unless its own preferences restrict it. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. Under Workspace only, names still resolve. Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works. Elevated access reaches HTTPS.",
+        "levels": [
+          "Workspace only Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "Workspace and network Also lets commands connect out.",
+          "Elevated access Adds files and commands outside the folder. It reaches every project that does not restrict it."
+        ],
+        "current": "Current isolation: Elevated access"
+      },
+      "setNoElevated": {
+        "select": true,
+        "value": "workspace",
+        "override": {
+          "sandbox": "workspace"
+        }
+      },
+      "clearIsolation": {
+        "select": true,
+        "value": "",
+        "override": {}
+      },
+      "setNoNetwork": {
+        "select": true,
+        "value": "deny",
+        "override": {
+          "networkDefault": "deny"
+        }
+      },
+      "clearNetwork": {
+        "select": true,
+        "value": "",
+        "override": {}
+      },
+      "setReadOnly": {
+        "select": true,
+        "value": "read-only",
+        "override": {
+          "sandbox": "read-only"
+        }
+      },
+      "preferencesShownAtEnd": {
+        "rows": [
+          {
+            "label": "Model Default: default",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "Isolation",
+            "selected": "Read only, no commands",
+            "choices": [
+              "Follow Settings (Workspace only)",
+              "No Elevated access",
+              "Read only, no commands"
+            ]
+          },
+          {
+            "label": "Network",
+            "selected": "Follow Settings (Workspace only)",
+            "choices": [
+              "Follow Settings (Workspace only)",
+              "No network"
+            ]
+          },
+          {
+            "label": "Auto-compact Default: on",
+            "selected": null,
+            "choices": null
+          },
+          {
+            "label": "Reasoning effort Default: High",
+            "selected": "High",
+            "choices": [
+              "Minimal",
+              "Low",
+              "Medium",
+              "High",
+              "Xhigh",
+              "Max",
+              "Ultra"
+            ]
+          }
+        ],
+        "note": "Isolation applies when the project's engine starts: a running engine keeps its posture until it restarts."
+      },
+      "settingsRestart": {
+        "picked": true,
+        "clicked": true,
+        "requested": {
+          "sandboxMode": "workspace",
+          "disableWrite": true,
+          "disableShell": true
+        },
+        "ok": true,
+        "engine": "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+        "running": [
+          "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+        ]
+      },
+      "errors": [],
+      "verdict": {
+        "followsWorkspaceAndNetwork": true,
+        "followsElevated": true,
+        "noElevatedRestricts": true,
+        "noNetworkRestricts": true,
+        "readOnlyRestricts": true,
+        "restartedThroughTheBanner": true,
+        "conflictInWords": true,
+        "followLabelIsTheLevelRun": true,
+        "runningEngineNoteShown": true,
+        "noGHint": true,
+        "elevatedSaysGlobal": true,
+        "currentIsolationInWords": true,
+        "settingsRestartKeepsTheProjectPosture": true
+      }
+    }
+  },
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "table": [
+    {
+      "isolation": "Workspace and network",
+      "project": "no override",
+      "before": "<engine> serve --sandbox-network restricted --trust-workspace",
+      "after": "<engine> serve --sandbox-network enabled --trust-workspace"
+    },
+    {
+      "isolation": "Elevated access",
+      "project": "no override",
+      "before": "<engine> serve --sandbox-network restricted --trust-workspace",
+      "after": "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+    },
+    {
+      "isolation": "Elevated access",
+      "project": "Isolation: no Elevated access",
+      "before": "<engine> serve --sandbox-network restricted --trust-workspace",
+      "after": "<engine> serve --sandbox-network enabled --trust-workspace"
+    },
+    {
+      "isolation": "Elevated access",
+      "project": "Network: no network",
+      "before": "<engine> serve --sandbox-network restricted --trust-workspace",
+      "after": "<engine> serve --sandbox-network restricted --trust-workspace"
+    },
+    {
+      "isolation": "Elevated access",
+      "project": "Isolation: read only",
+      "before": "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+      "after": "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+    },
+    {
+      "isolation": "Elevated access",
+      "project": "Isolation: read only, its folder restarted from Settings",
+      "before": "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+      "after": "<engine> serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+    }
+  ]
+}

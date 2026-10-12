@@ -24,6 +24,20 @@ export function isSidecarError(message: string | null | undefined): boolean {
 }
 
 /**
+ * M0-10: the native Windows engine refuses every shell until an elevated
+ * `muse sandbox windows setup` has run. The failure is not a startup error:
+ * it lands in the shell item's output as `sandbox enforcement unavailable:
+ * windows_elevated setup_required: sandbox users are not ready` (or
+ * `setup_stale`); `sandbox_users_missing` is the matching `check` diagnostic.
+ * `managed shell sandbox is unavailable` is left out on purpose: it persists
+ * after a successful setup (m1-06), so setup is not its fix.
+ */
+export function needsWindowsSandboxSetup(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /windows_elevated setup_(?:required|stale)|sandbox_users_missing/i.test(message);
+}
+
+/**
  * Classify a sidecar startup failure: `missing` (binary absent — expected
  * triple-suffixed paths are listed) vs `start-failed` (binary present but
  * spawn/handshake died). Returns null for unrelated errors.

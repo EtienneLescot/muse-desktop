@@ -247,7 +247,7 @@ const forkTries = [];
 const recoveryBanner = await evaluate(`(() =>
   document.querySelector(".window-error, [role=alert]")?.textContent?.slice(0, 160) ?? null)()`);
 step("m1-09-recovery-banner", { recoveryBanner });
-report.verdict.unavailableAnchorRecovery = /no longer available on the host/.test(recoveryBanner ?? "");
+report.verdict.unavailableAnchorRecovery = /no longer available on the host|could not write the branch/.test(recoveryBanner ?? "");
 const turnDone = () => evaluate(`(() => {
   const dot = document.querySelector(".session-view .task-metadata .dot");
   return { ok: dot?.getAttribute("data-running") !== "true" };

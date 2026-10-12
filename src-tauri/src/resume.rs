@@ -22,6 +22,13 @@ pub fn validate(session: &Value, expected_id: &str, root: &Path) -> Result<(), S
         .get("workspaceRoot")
         .and_then(Value::as_str)
         .ok_or("the saved conversation has no workspace")?;
+    // M4-07: a remote folder does not exist here; compare it as its host spells it.
+    if let Some(remote) = crate::remote_ssh::remote_engine(root) {
+        if !remote.names_workspace(workspace) {
+            return Err("the saved conversation belongs to a different workspace".into());
+        }
+        return Ok(());
+    }
     let path = host_path(workspace);
     let canonical = path
         .canonicalize()
@@ -67,6 +74,14 @@ mod tests {
         let mut missing = good;
         missing["workspaceRoot"] = Value::Null;
         assert!(validate(&missing, "a", &root).is_err());
+    }
+    #[test]
+    fn a_remote_conversation_is_matched_on_its_remote_folder() {
+        let root = PathBuf::from("ssh://ops@127.0.0.1:2222/home/ops/proj");
+        let session = json!({"sessionId":"a","path":"durable.jsonl","workspaceRoot":"/home/ops/proj"});
+        assert!(validate(&session, "a", &root).is_ok());
+        let other = json!({"sessionId":"a","path":"durable.jsonl","workspaceRoot":"/home/ops/other"});
+        assert!(validate(&other, "a", &root).is_err());
     }
     #[test]
     fn resume_preserves_id_and_requests_metadata_without_replaying_local_history() {

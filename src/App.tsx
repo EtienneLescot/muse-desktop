@@ -6,6 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
+import { conflictRestart, hostPostureNotice, hostSandboxConfigForProject } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -38,16 +39,26 @@ import { ContextMeter } from "./components/ContextMeter";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { SharePanel } from "./components/SharePanel";
 import { WorktreeTools } from "./components/WorktreeTools";
-import { isTauriRuntime } from "./lib/env";
-import { formatWorktreeContinuationNote } from "./lib/handoff";
+import { confirmAction, isTauriRuntime } from "./lib/env";
+import { formatHandoffContext, handoffQuestion, userShellBlocked } from "./lib/handoff";
 import {
   folderName,
   parseWorkspaceRootObservation,
   projectWorkspaceOptions,
   projectWorkspaces,
 } from "./lib/projects";
+import {
+  describeRemoteEngine,
+  isRemoteWorkspace,
+  loadRemoteEngine,
+  remoteSignInHint,
+  remoteWorkspaceUri,
+  saveRemoteEngine,
+  worktreeUnavailableReason,
+  type RemoteEngineTarget,
+} from "./lib/remoteSsh";
 import { parseHarnessRules } from "./lib/harnessRules";
-import { planConversationWorktree } from "./lib/worktrees";
+import { insideWorktree, mainRootOf, planConversationWorktree } from "./lib/worktrees";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -135,6 +146,7 @@ export default function App() {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    hostSandboxForSession,
     sessionLoadedForSession,
     evtCount,
     sendInput,
@@ -145,11 +157,6 @@ export default function App() {
     retryFailedTurn,
     discardSend,
     approve,
-    allowlist,
-    allowDecisionFor,
-    rememberApproval,
-    revokeAllowRule,
-    setAllowRuleDecision,
     answerInput,
     cancelInput,
     cancelSession,
@@ -266,6 +273,8 @@ export default function App() {
     runUserShell,
     resizeTerminal,
     closeTerminal,
+    previewHandoff,
+    handoffConversation,
     prepareTerminalContext,
     filesForSession,
     prepareWorkspaceFileContext,
@@ -295,6 +304,7 @@ export default function App() {
     removeMemoryEntry,
     ackScanNudge,
     error,
+    errorHost,
     backendMissing,
     startupProbe,
     probeStartup,
@@ -306,9 +316,12 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // M2-05: the step a move to a worktree is on, or null. The button carries it
-  // because the conversation screen has no preparation banner of its own.
-  const [movingToWorktree, setMovingToWorktree] = useState<string | null>(null);
+  // M2-05: the step a move between Local and a worktree is on, or null. The
+  // button carries it because the conversation screen has no preparation
+  // banner of its own.
+  const [movingConversation, setMovingConversation] = useState<string | null>(null);
+  // Its composer waits: the supervisor refuses a turn in a folder being moved.
+  const [movingSessionId, setMovingSessionId] = useState<string | null>(null);
   // The conversation being started, before the host has given it a session id:
   // the first message as typed, and what the app is waiting for in plain words.
   // Null when idle.
@@ -482,10 +495,21 @@ export default function App() {
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
+  // M4-07: its folder is on another host, so the local-disk panels stand down.
+  const activeIsRemote = isRemoteWorkspace(active?.workspace);
   const activeProject =
     active === null ? null : projectForSession(active.session_id);
   const activeProjectSettings =
     activeProject === null ? globalSettings : settingsFor(activeProject.id);
+  // M0-13: what this conversation's host refuses (a Read only project), from
+  // the posture its host was started with, said before the click; and whether
+  // the project's settings changed since, which only a restart applies.
+  const activePosture = active === null
+    ? null
+    : hostPostureNotice(
+        hostSandboxForSession(active.session_id),
+        hostSandboxConfigForProject(sandbox, activeProject),
+      );
   // M0-03: retryable sends of the viewed conversation only — a retry never
   // routes by this view, it goes to the entry's own sessionId.
   const activePendingSends =
@@ -507,10 +531,18 @@ export default function App() {
     const parts = workspace.split(/[\\/]/).filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
-  const environmentOptions = useMemo(
-    () => projectWorkspaceOptions(projects),
-    [projects],
-  );
+  const [remoteEngine, setRemoteEngine] = useState<RemoteEngineTarget | null>(loadRemoteEngine);
+  const environmentOptions = useMemo(() => {
+    const options = projectWorkspaceOptions(projects);
+    // M4-07: a remote engine is a place a conversation runs, not a project.
+    return remoteEngine === null ? options : [...options, {
+      projectId: "",
+      projectName: describeRemoteEngine(remoteEngine),
+      workspace: remoteWorkspaceUri(remoteEngine),
+      optionId: "remote",
+      rootIndex: 0,
+    }];
+  }, [projects, remoteEngine]);
 
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
@@ -587,6 +619,8 @@ export default function App() {
   // US-33: sidecar startup failures surface explicitly (message + expected
   // paths + retry/re-pick actions), never as a blank screen.
   const sidecarKind = classifySidecarError(error);
+  // A posture conflict restarts the host that refused, not the default folder's.
+  const hostRestart = conflictRestart(error, errorHost);
   // macOS does not bundle the engine: a missing sidecar there means the Muse
   // CLI is simply not installed yet — a first-run step, not an error.
   const needsMuseSetup = sidecarKind === "missing" && isMacPlatform() && isTauriRuntime();
@@ -606,13 +640,42 @@ export default function App() {
       message={error}
       triedPaths={extractTriedPaths(error)}
       onRetry={() => {
-        void probeStartup(workspace);
-        void startSession();
+        // The failed request again, in its folder and project: not a new
+        // conversation in the default folder at the global posture.
+        const failed = errorHost;
+        void probeStartup(failed?.workspace ?? workspace);
+        void (failed === null
+          ? startSession()
+          : startSessionInWorkspace(
+              failed.workspace,
+              failed.projectId === undefined ? undefined : settingsFor(failed.projectId),
+              failed.projectId,
+            ));
       }}
       onPickWorkspace={setWorkspace}
       startupProbe={startupProbe}
     />
   );
+  // A failed action reports through `error` wherever it was clicked, so the
+  // banner follows the user: rendered only beside the conversation, a refused
+  // MCP probe or bundle on Extensions was invisible (M0-13 audit, 05/10/2026).
+  const errorBanner = !needsMuseSetup && sidecarKind === null && error ? (
+    <div className="error-banner" role="alert">
+      <span>{userFacingError(error)}</span>
+      {hostRestart !== null && !backendMissing && (
+        <button
+          type="button"
+          className="error-banner-action"
+          onClick={async () => {
+            if (!(await confirmAction("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions."))) return;
+            void restartHost(hostRestart.workspace, hostRestart.sandbox);
+          }}
+        >
+          Restart workspace host
+        </button>
+      )}
+    </div>
+  ) : null;
 
   /**
    * Drive the Muse CLI's device-code sign-in inside the built-in terminal.
@@ -687,48 +750,65 @@ export default function App() {
   }
 
   /**
-   * Continue this conversation in a worktree.
-   *
-   * This is not a transfer, and it does not pretend to be one: MSP has no
-   * multi-workspace contract, so a session cannot move between hosts. What
-   * happens is a copy of the folder, a new conversation in it, and a bounded
-   * context note in the composer — while this conversation stays exactly where
-   * it is, transcript included.
+   * M2-05: move this conversation and its uncommitted work between Local and a
+   * worktree. Local goes to a fresh worktree, a worktree back to its Local
+   * checkout. Nothing moves before the confirmation; a host that cannot move
+   * the conversation gets a new one in the target, with a note.
    */
-  async function moveToWorktree(sessionId: string): Promise<void> {
+  async function moveConversationFolder(sessionId: string): Promise<void> {
     const session = sessions.find((candidate) => candidate.session_id === sessionId);
-    if (session === undefined || movingToWorktree !== null) return;
+    if (session === undefined || movingConversation !== null) return;
+    const unavailable = worktreeUnavailableReason(session.workspace);
+    if (unavailable !== null) {
+      setError(unavailable);
+      return;
+    }
     const source = session.workspace;
+    const local = insideWorktree(source) ? mainRootOf(source) : null;
     try {
-      setError(null);
-      setMovingToWorktree("Creating a worktree…");
-      const plan = planConversationWorktree(
-        folderName(source),
-        undefined,
-        Date.now().toString(36).slice(-5),
-      );
-      const record = await createWorktreeForWorkspace(source, plan);
-      if (record === null) return;
-      setMovingToWorktree("Starting Muse in the copy…");
+      setMovingConversation("Checking what will move…");
+      setMovingSessionId(sessionId);
+      const preview = await previewHandoff(sessionId, local);
+      if (preview === null) return;
+      const question = handoffQuestion(preview, local !== null ? "Local" : "a new worktree");
+      if (question.blocked) {
+        setError(question.text);
+        return;
+      }
+      if (!(await confirmAction(question.text))) return;
+      let target = local;
+      if (target === null) {
+        setMovingConversation("Creating a worktree…");
+        const plan = planConversationWorktree(
+          folderName(source),
+          undefined,
+          Date.now().toString(36).slice(-5),
+        );
+        target = (await createWorktreeForWorkspace(source, plan))?.path ?? null;
+        if (target === null) return;
+      }
+      setMovingConversation("Moving the work…");
+      const result = await handoffConversation(sessionId, target, local === null);
+      if (result === null || result.sameSession) return;
+      setMovingConversation("Starting Muse there…");
       const project = projectForSession(sessionId);
       const opened = await startSessionInWorkspace(
-        record.path,
+        target,
         project !== null ? settingsFor(project.id) : undefined,
         project?.id,
       );
       if (opened === null) {
         setError(
-          "The worktree was created but no conversation could start in it; it is kept, and you can open it from the worktrees panel.",
+          "The work was moved, but no conversation could start in its new folder; open that folder to continue.",
         );
         return;
       }
-      prefillComposer(
-        formatWorktreeContinuationNote(source, record.path, record.branch),
-      );
+      prefillComposer(formatHandoffContext(result, logs[sessionId] ?? []));
     } catch (error) {
-      setError(userFacingError(error, "The worktree action could not be completed."));
+      setError(userFacingError(error, "The conversation could not be moved."));
     } finally {
-      setMovingToWorktree(null);
+      setMovingConversation(null);
+      setMovingSessionId(null);
     }
   }
 
@@ -748,7 +828,10 @@ export default function App() {
               // A running Muse host read its credentials at start: restart it
               // so it sees the new sign-in, reconnect, then replay the turn.
               const session = sessions.find((candidate) => candidate.session_id === target.sessionId);
-              if (session !== undefined && await restartHost(session.workspace)) {
+              if (session !== undefined && await restartHost(
+                session.host_workspace ?? session.workspace,
+                hostSandboxConfigForProject(sandbox, projectForSession(session.session_id)),
+              )) {
                 await reconnectSession(target.sessionId);
               }
               await retryFailedTurn(target.sessionId, target.entryId);
@@ -852,8 +935,8 @@ export default function App() {
             onArchive={archiveSession}
             onRestore={restoreSession}
             onFork={(id) => void forkSession(id)}
-            onMoveToWorktree={(id) => void moveToWorktree(id)}
-            movingToWorktree={movingToWorktree}
+            onMoveFolder={(id) => void moveConversationFolder(id)}
+            movingFolder={movingConversation}
             canStart
             projects={projects}
             threadProjects={threadProjects}
@@ -922,7 +1005,7 @@ export default function App() {
             <Icon name="folder" />
             <span>
               {(active && page === "task"
-                ? active.workspace.split(/[\\/]/).pop()
+                ? folderName(active.workspace)
                 : workspaceName) || "Muse-Desktop"}
             </span>
             <span className="separator">/</span>
@@ -992,6 +1075,7 @@ export default function App() {
           <section className="destination-page">
             <div className="eyebrow">MAKE IT YOURS</div>
             <h1>Settings</h1>{" "}
+            {errorBanner}
             <SettingsPanel
               workspace={workspace}
               onPickWorkspace={setWorkspace}
@@ -1006,11 +1090,16 @@ export default function App() {
               startupProbe={startupProbe}
               onProbeStartup={() => probeStartup(workspace)}
               onSignIn={signInWithMuseCli}
+              remoteEngine={remoteEngine}
+              onRemoteEngineChange={(next) => {
+                saveRemoteEngine(next);
+                setRemoteEngine(next);
+              }}
             />
             {/* Global capabilities, not work on the current conversation: they
                 used to be side-panel tabs next to Changes and Terminal. */}
             <div className="settings-extra">
-              <WorktreeTools workspace={active?.workspace ?? workspace} />
+              <WorktreeTools workspace={active !== null && !activeIsRemote ? active.workspace : workspace} />
               <ComputerUsePanel
                 status={computerUse}
                 busy={computerBusy}
@@ -1067,6 +1156,7 @@ export default function App() {
                 }[page]
               }
             </p>
+            {errorBanner}
             {page === "projects" && (
               <>
                 {" "}
@@ -1076,6 +1166,7 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
+                  sandbox={sandbox}
                   onCreate={(projectName, projectWorkspaces) =>
                     createProject(projectName, projectWorkspaces)
                   }
@@ -1091,7 +1182,6 @@ export default function App() {
                       project.id,
                     );
                   }}
-                  onSetGlobal={setGlobalSettings}
                   onSetOverride={setProjectOverride}
                   settingsFor={settingsFor}
                   onCheckWorkspace={async (path) => {
@@ -1112,7 +1202,6 @@ export default function App() {
                       return null;
                     }
                   }}
-                  hideGlobalSettings
                 />
               </>
             )}
@@ -1210,7 +1299,7 @@ export default function App() {
                     !backendMissing &&
                     active.session_durability?.toLowerCase() !== "ephemeral"
                   }
-                  onReconnectActive={(sessionId) => reconnectSession(sessionId)}
+                  onReconnectActive={(sessionId) => reconnectSession(sessionId, { reload: true })}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>
@@ -1304,12 +1393,12 @@ export default function App() {
                       <button
                         className="danger"
                         data-danger="true"
-                        onClick={() => {
+                        onClick={async () => {
                           const title = session.title || session.session_id.slice(0, 8);
                           if (
-                            !window.confirm(
+                            !(await confirmAction(
                               `Delete "${title}" permanently?\n\nIt will disappear from Muse and will not come back. The conversation file itself stays on disk, under the Muse data folder, until it is removed there.`,
-                            )
+                            ))
                           ) {
                             return;
                           }
@@ -1345,27 +1434,7 @@ export default function App() {
                 Muse. Your local history is still available.
               </div>
             )}
-            {needsMuseSetup
-              ? null
-              : sidecarKind !== null
-              ? sidecarPanel
-              : error && (
-                <div className="error-banner" role="alert">
-                  <span>{userFacingError(error)}</span>
-                  {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
-                    <button
-                      type="button"
-                      className="error-banner-action"
-                      onClick={() => {
-                        if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
-                        void restartHost(workspace);
-                      }}
-                    >
-                      Restart workspace host
-                    </button>
-                  )}
-                </div>
-              )}
+            {needsMuseSetup ? null : sidecarKind !== null ? sidecarPanel : errorBanner}
             {active === null && preparation !== null ? (
               /* The conversation opens on the first message, not on a spinner in
                  the middle of the welcome screen: the host has no session id yet,
@@ -1467,7 +1536,7 @@ export default function App() {
                 <div className="session-center">
                   <header className="task-heading">
                     <div className="eyebrow">
-                      {active.workspace.split(/[\\/]/).pop()} / CONVERSATION
+                      {folderName(active.workspace)} / CONVERSATION
                     </div>
                     <h1>{active.title || "New conversation"}</h1>
                     <div className="task-metadata">
@@ -1521,14 +1590,7 @@ export default function App() {
                     approvals={activeApprovals}
                     authorizationMode={authorizationMode}
                     onAuthorizationModeChange={setAuthorizationMode}
-                    rules={allowlist}
                     onDecision={approve}
-                    onRemember={(a, choiceId) =>
-                      void rememberApproval(a, choiceId)
-                    }
-                    decisionFor={allowDecisionFor}
-                    onRevoke={revokeAllowRule}
-                    onRuleDecision={setAllowRuleDecision}
                   />
                   <InputPanel
                     requests={activeInputRequests}
@@ -1566,10 +1628,12 @@ export default function App() {
                     onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onSignInForFailedTurn={
-                      isMacPlatform() && isTauriRuntime()
+                      // The local sign-in does not reach a remote engine's credentials.
+                      isMacPlatform() && isTauriRuntime() && !activeIsRemote
                         ? (entry) => setSignInFor({ sessionId: active.session_id, entryId: entry.id })
                         : undefined
                     }
+                    signInHint={remoteSignInHint(active.workspace) ?? undefined}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{
@@ -1657,6 +1721,24 @@ export default function App() {
                       </button>
                     </div>
                   ))}
+                  {activePosture?.note != null && (
+                    <p className="settings-note settings-note-warning posture-note" role="note">
+                      {activePosture.note}
+                      {activePosture.restart && (
+                        <button
+                          type="button"
+                          className="posture-restart"
+                          disabled={reconnectingId !== null || active.running}
+                          onClick={async () => {
+                            if (!(await confirmAction("Restart this folder's Muse host with the project's settings? Its other conversations will need to reconnect."))) return;
+                            void reconnectSession(active.session_id, { reload: true });
+                          }}
+                        >
+                          Restart host
+                        </button>
+                      )}
+                    </p>
+                  )}
                   <Composer
                     key={active.session_id}
                     draftKey={active.session_id}
@@ -1677,7 +1759,17 @@ export default function App() {
                           origin: "workspace",
                         })),
                     ]}
-                    disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
+                    disabled={
+                      backendMissing ||
+                      active.archived === true ||
+                      !connectedIds.includes(active.session_id) ||
+                      movingSessionId === active.session_id
+                    }
+                    disabledReason={
+                      movingSessionId === active.session_id
+                        ? "This conversation's folder is being moved: send once the move is done."
+                        : undefined
+                    }
                     modelControl={
                       <>
                         <ModelControl
@@ -1709,7 +1801,7 @@ export default function App() {
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
-                    workspace={active.workspace}
+                    workspace={activeIsRemote ? null : active.workspace}
                     onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
                     onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
                     onCancel={() => void cancelSession(active.session_id)}
@@ -1764,8 +1856,15 @@ export default function App() {
                         <Icon name="close" />
                       </button>
                     </nav>
-                    <div className="work-panel-body">
-                      {workPanel === "review" && (
+                    {/* M2-05: a moved conversation remounts its panels so the
+                        changes, terminal and files start over in its new folder. */}
+                    <div className="work-panel-body" key={active.workspace}>
+                      {activeIsRemote && workPanel !== "browser" && (
+                        <section className="settings-note" role="status">
+                          Not available for remote conversations: this panel works on this computer's files.
+                        </section>
+                      )}
+                      {workPanel === "review" && !activeIsRemote && (
                         <ReviewPanel
                           sessionId={active.session_id}
                           review={gitReview(active.session_id)}
@@ -1789,7 +1888,7 @@ export default function App() {
                           }}
                         />
                       )}
-                      {workPanel === "terminal" && (
+                      {workPanel === "terminal" && !activeIsRemote && (
                         <TerminalPanel
                           sessionId={active.session_id}
                           terminal={terminalForSession(active.session_id)}
@@ -1800,11 +1899,12 @@ export default function App() {
                           onClose={closeTerminal}
                           canRunThroughMuse={userShellAvailableForSession(active.session_id)}
                           sessionLoaded={sessionLoadedForSession(active.session_id)}
+                          runThroughMuseBlocked={userShellBlocked(active) ?? activePosture?.blocked ?? null}
                           onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />
                       )}
-                      {workPanel === "files" && (
+                      {workPanel === "files" && !activeIsRemote && (
                         <FilesPanel
                           sessionId={active.session_id}
                           state={filesForSession(active.session_id)}

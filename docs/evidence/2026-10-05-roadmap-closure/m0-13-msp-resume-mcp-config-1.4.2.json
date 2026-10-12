@@ -1,0 +1,43 @@
+{
+  "schema": "muse-desktop.msp-resume-mcp-config.v1",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "loaded": {
+    "startedWithout": {
+      "fixtures": 0
+    },
+    "resumeWithServer": "refused: session_configuration_conflict",
+    "fixturesAfter": 0
+  },
+  "freshHost": {
+    "resumeWithServer": "accepted",
+    "fixturesAfter": 1,
+    "thenResumeWithAnother": "refused: session_configuration_conflict"
+  },
+  "noConfig": {
+    "startedWithServer": {
+      "fixtures": 1
+    },
+    "resume": "accepted",
+    "fixturesAfter": 0,
+    "thenResumeWithServer": "refused: session_configuration_conflict"
+  },
+  "emptyConfig": {
+    "startedWithServer": {
+      "fixtures": 1
+    },
+    "resume": "accepted",
+    "fixturesAfter": 0,
+    "thenResumeWithServer": "refused: session_configuration_conflict"
+  },
+  "reading": [
+    "loaded: a conversation its host has loaded keeps its MCP configuration; another one is refused (session_configuration_conflict).",
+    "freshHost: in a new host the conversation is not loaded, and the resume binds the configuration it carries (the server starts as the engine's child; another config afterwards is refused).",
+    "noConfig / emptyConfig: a resume without servers binds none: the servers of the start do not come back."
+  ],
+  "ticket": "M0-13",
+  "date": "2026-10-06",
+  "platform": "Windows 11 (26200)",
+  "script": "scripts/msp-resume-mcp-config.mjs",
+  "engineRole": "the native engine every local host of the M0-13 instance runs (MUSE_DESKTOP_TEST_SIDECAR)",
+  "modelTurns": 0
+}

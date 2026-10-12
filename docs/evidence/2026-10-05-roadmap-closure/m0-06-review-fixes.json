@@ -1,0 +1,156 @@
+{
+  "schema": "muse-desktop.m0-06-review-fixes.v1",
+  "tickets": [
+    "M0-06"
+  ],
+  "platform": "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+  "liveTurns": 0,
+  "builds": {
+    "before": {
+      "commit": "a9ffff2",
+      "exeSha256": "00d8440747ceeb817c32ecf69a88deeca1adaed875d6e0acf8534d9101b8f9d2",
+      "date": "2026-10-06",
+      "restart": {
+        "prepare": {
+          "setElevated": true,
+          "projectCreated": true,
+          "startOk": true,
+          "model": {
+            "before": "Model: Model",
+            "options": 1,
+            "picked": "Model: muse-spark-1.3-contributor"
+          },
+          "stored": {
+            "isolation": "{\"model\":\"muse-spark-1.3-contributor\",\"sandbox\":\"workspace\",\"networkDefault\":\"prompt\",\"autoCompact\":true,\"reasoningEffort\":\"high\"}",
+            "projectDefaults": null
+          },
+          "errors": []
+        },
+        "checks": [
+          {
+            "shown": {
+              "checked": "Workspace only",
+              "status": "Current isolation: workspace"
+            },
+            "stored": {
+              "isolation": "{\"mode\":\"workspace\",\"networkAllowed\":false,\"elevatedAllowed\":false}",
+              "projectDefaults": null
+            },
+            "errors": []
+          },
+          {
+            "shown": {
+              "checked": "Workspace only",
+              "status": "Current isolation: workspace"
+            },
+            "stored": {
+              "isolation": "{\"mode\":\"workspace\",\"networkAllowed\":false,\"elevatedAllowed\":false}",
+              "projectDefaults": null
+            },
+            "errors": []
+          }
+        ],
+        "verdict": {
+          "modelChanged": true,
+          "isolationKeptOnEachRelaunch": false,
+          "modelKeptOnEachRelaunch": false
+        }
+      },
+      "retry": {
+        "setElevated": true,
+        "projectCreated": true,
+        "setNoNetwork": "deny",
+        "failedStart": {
+          "ok": false,
+          "workspacePath": "<project>",
+          "sandboxMode": "workspace"
+        },
+        "retryOffered": true,
+        "retried": null,
+        "shownAfter": [
+          "Pick a workspace folder first."
+        ],
+        "errors": [],
+        "verdict": {
+          "retriesTheProjectFolder": false,
+          "atTheProjectPosture": false
+        }
+      }
+    },
+    "after": {
+      "commit": "3805d1f",
+      "exeSha256": "5335dfb677cf34439ebde23dfe36c966a5ebd3272162508c0a01e1677783d1ca",
+      "date": "2026-10-06",
+      "restart": {
+        "prepare": {
+          "setElevated": true,
+          "projectCreated": true,
+          "startOk": true,
+          "model": {
+            "before": "Model: Model",
+            "options": 1,
+            "picked": "Model: muse-spark-1.3-contributor"
+          },
+          "stored": {
+            "isolation": "{\"mode\":\"elevated\",\"networkAllowed\":true,\"elevatedAllowed\":true}",
+            "projectDefaults": "{\"model\":\"muse-spark-1.3-contributor\",\"sandbox\":\"workspace\",\"networkDefault\":\"prompt\",\"autoCompact\":true,\"reasoningEffort\":\"high\"}"
+          },
+          "errors": []
+        },
+        "checks": [
+          {
+            "shown": {
+              "checked": "Elevated access",
+              "status": "Current isolation: Elevated access"
+            },
+            "stored": {
+              "isolation": "{\"mode\":\"elevated\",\"networkAllowed\":true,\"elevatedAllowed\":true}",
+              "projectDefaults": "{\"model\":\"muse-spark-1.3-contributor\",\"sandbox\":\"workspace\",\"networkDefault\":\"prompt\",\"autoCompact\":true,\"reasoningEffort\":\"high\"}"
+            },
+            "errors": []
+          },
+          {
+            "shown": {
+              "checked": "Elevated access",
+              "status": "Current isolation: Elevated access"
+            },
+            "stored": {
+              "isolation": "{\"mode\":\"elevated\",\"networkAllowed\":true,\"elevatedAllowed\":true}",
+              "projectDefaults": "{\"model\":\"muse-spark-1.3-contributor\",\"sandbox\":\"workspace\",\"networkDefault\":\"prompt\",\"autoCompact\":true,\"reasoningEffort\":\"high\"}"
+            },
+            "errors": []
+          }
+        ],
+        "verdict": {
+          "modelChanged": true,
+          "isolationKeptOnEachRelaunch": true,
+          "modelKeptOnEachRelaunch": true
+        }
+      },
+      "retry": {
+        "setElevated": true,
+        "projectCreated": true,
+        "setNoNetwork": "deny",
+        "failedStart": {
+          "ok": false,
+          "workspacePath": "<project>",
+          "sandboxMode": "workspace"
+        },
+        "retryOffered": true,
+        "retried": {
+          "workspacePath": "<project>",
+          "sandboxMode": "workspace"
+        },
+        "shownAfter": [
+          "Could not start the Muse sidecar start_session failed: could not spawn sidecar `<proof>/no-such-engine.exe` in <project>: Le ",
+          "Could not start the Muse sidecar start_session failed: could not spawn sidecar `<proof>/no-such-engine.exe` in <project>: Le "
+        ],
+        "errors": [],
+        "verdict": {
+          "retriesTheProjectFolder": true,
+          "atTheProjectPosture": true
+        }
+      }
+    }
+  }
+}

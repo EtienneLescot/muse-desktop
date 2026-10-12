@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { displayPath } from "../src/lib/paths.ts";
+import { displayPath, pathKey } from "../src/lib/paths.ts";
 
 test("displayPath strips the Windows verbatim drive prefix", () => {
   assert.equal(
@@ -23,4 +23,12 @@ test("displayPath leaves ordinary and degenerate values untouched", () => {
   assert.equal(displayPath(""), "");
   assert.equal(displayPath("\\\\?\\"), "\\\\?\\");
   assert.equal(displayPath("\\\\?\\relative\\path"), "\\\\?\\relative\\path");
+});
+
+test("pathKey matches Git's listing with the stored canonical form", () => {
+  assert.equal(
+    pathKey("C:/Users/etien/repo/.muse/worktrees/x"),
+    pathKey("\\\\?\\C:\\Users\\etien\\repo\\.muse\\worktrees\\x\\"),
+  );
+  assert.notEqual(pathKey("C:/repo/.muse/worktrees/x"), pathKey("C:/repo/.muse/worktrees/y"));
 });

@@ -1,0 +1,2029 @@
+{
+  "schema": "muse-desktop.m0-05-questions.v1",
+  "ticket": "M0-05",
+  "date": "2026-10-05",
+  "commit": "9771bdb",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 5,
+  "summary": "M0-05 questions proved natively on Windows with Muse 1.4.2 on the fixed build (9771bdb). The model's request_user_input question renders as an Input needed card and its answer drives the turn (reply GREEN+BLUE). An answer the host refuses (-32057: one box for min_selections 2) leaves the edited answer in the same card. A window reload brings the pending card back from list_pending_requests with no action. Killing only the conversation's engine removes the card, the transcript says \"Input cancelled: Muse stopped before you answered.\", and Reconnect resumes on a new engine with no card and a conversation that keeps working. Three defects found and fixed on the way: the engine that resumes a conversation still lists and re-issues the dead turn's question, so Reconnect and resume on open (679c44f) and a window reload (9771bdb) brought back a card every answer to which was refused; and each question was written twice to the transcript (679c44f).",
+  "method": [
+    "Real webview over CDP: the composer, the Input needed card (real mouse clicks on checkboxes, choice buttons and Send answer), the top bar's Reconnect, Delete in the conversation's Actions.",
+    "Host side read through the app's own list_pending_requests, a renderer-side tap on poll_events (the test conversation's events; the others counted by kind only) and the IPC trace on window.fetch. list_pending_requests is not read-only: it also rebuilds the app's approval registry for the conversation read; a question has no entry there, and no approval was pending in these conversations. (Corrected on 06/10/2026: this line first called the command read-only.)",
+    "The engine killed with taskkill /F: the muse.exe child of the app whose working directory, read from its PEB, is the test folder. The user's engines counted before and after.",
+    "Builds: pre-fix = b39935e with the 12-line host_exited hunk of d01fefa removed from the working tree (vite build, cargo build, file restored right after); head = b39935e; fixed = 679c44f, then 9771bdb. Each phase records its bundle name.",
+    "MSP level, app closed: msp-orphan-prompt.mjs ran its own engine on the conversation whose engine had been killed, no turn.",
+    "User profile untouched: posture (yolo) and isolation (network) read, never changed; projects byte-identical at cleanup; the user's selection given back; both test conversations deleted through the UI; app closed gracefully."
+  ],
+  "forgedInputs": [
+    "Each test conversation was started by a direct start_session call with the user's global posture and isolation and no connector servers, then adopted by the app on a page reload (restore_sessions). Why: the profile holds the 5-project maximum and every UI start needs a project root or the global default folder, both the user's. A real user starts it from a project.",
+    "The engine's death is a taskkill /F: a real crash cannot be scheduled. Only the test folder's engine was killed.",
+    "No answer was forged. The refused answer of (3) is the card's own output with one box ticked, refused by the host's bound check (min_selections 2). The harness can rewrite an answer in transit when the model sets no bound; it was not needed (answer-b path: host bound).",
+    "The harness reads the host's pending list through the app's list_pending_requests beside the app's own calls. That command is not read-only: it also rebuilds the app's approval registry for the conversation read (no approval was pending in these conversations). In death-b, callsSinceKill lists only that read after the resume: the app made none, the resume having reported no running turn. (Corrected on 06/10/2026: this line first called the command read-only.)",
+    "The stuck phase read the engine's own session log of test conversation A (read-only)."
+  ],
+  "fixes": [
+    {
+      "commit": "d01fefa (Fix step, before this proof)",
+      "defect": "When the engine died with the app open, the question card stayed and every answer could only fail.",
+      "before": "death-pre-fix: the card stayed, no notice, the answer refused (-32057 invalid_target).",
+      "after": "death-b: card removed, transcript says \"Input cancelled: Muse stopped before you answered.\"."
+    },
+    {
+      "commit": "679c44f",
+      "defect": "The engine that resumes the conversation still lists the dead turn's question and re-issues it right after session/resume: Reconnect and resume on open rebuilt the card, and every answer was refused.",
+      "before": "orphan-head (b39935e): card back at relaunch, answer refused -32603 \"no settlement projection; prompt state is unprovable\". death-pre-fix: the automatic resume's pending read listed the question again, answer refused -32057 invalid_target.",
+      "after": "orphan (679c44f) and orphan-b (9771bdb): no card at relaunch. death-b: no card after Reconnect while the engine still lists the question (engineStillListsTheDeadQuestion).",
+      "test": "test/visibleFailures.test.ts: brings back no question or approval of a turn that died with its engine"
+    },
+    {
+      "commit": "679c44f",
+      "defect": "Each question was written twice to the transcript: the host sends userInput/request and its userInput/requested twin.",
+      "before": "death-pre-fix: inputRequestedLines 2.",
+      "after": "death-b and answer-b: one line per question.",
+      "test": "test/visibleFailures.test.ts: writes one transcript line per question"
+    },
+    {
+      "commit": "9771bdb",
+      "defect": "A window reload during a new turn: the boot read listed the dead turn's question next to the live one. Two cards, the dead one first, its answer refused.",
+      "before": "First answer-b run on 679c44f, its record overwritten by the second run (outcome in finish-b and liveTurnsDetail): the boot read carried both ids, the answer sent to the dead card was refused -32057 invalid_target. finish-b: after the live question was answered and the turn ended, the dead card stayed with \"Waiting for your answer\".",
+      "after": "answer-b (9771bdb): q2_onlyTheLiveQuestion, the boot read carries the live id only. orphan-b: list_pending_requests returns nothing for the idle conversation.",
+      "test": "src-tauri cargo test: pending_rows_of_a_turn_that_is_not_running_are_dropped"
+    }
+  ],
+  "hostDefects": [
+    "Muse 1.4.2, to report upstream. A question left by a killed engine is still listed by approval/listPending with its dead turnId, and re-issued as userInput/request right after session/resume, while the resume reports status idle, activeTurnId null and pendingRequests [], and the engine itself cancels the turn (resume_reconcile:orphaned_by_process_loss). Every answer is refused: -32057 invalid_target in the same app run, -32603 \"no settlement projection; prompt state is unprovable\" after a relaunch. See msp-orphan-head, death-b, orphan-head.",
+    "Conversation A was killed with a question pending, resumed by the app about one second later (pre-fix run, resume on open), then answered on the dead question. Its MSP view journal was last written at 22:48:06Z. A later turn ran and completed in the engine, reply recorded, but no event reached the app, which kept showing the turn running (stuck). Not reproduced on B, reconnected by hand 4.3 s after the kill: its later turns streamed normally (finish-b, answer-b). Cause not established.",
+    "The -32057 reason is invalid_target for an out-of-bounds answer to a live question too (answer-b): it does not tell a bound from a dead question.",
+    "request_user_input takes 2 to 3 options per question; a 4-option call fails as a tool error the model sees (stuck)."
+  ],
+  "limits": [
+    "The kill of (4) ran on 679c44f. 9771bdb changes only list_pending_requests, which that path does not call, the resume having reported no running turn. On 9771bdb the resume part was checked again (orphan-b), not a second kill.",
+    "Resume on open: a conversation started or adopted in the current run is resumed silently right after host_exited (death-pre-fix, 6 ms); one resumed at boot keeps the manual Reconnect (death-b). \"Reconnect to continue.\" is then already done. Not changed here.",
+    "The card does not show a multi-select question's bounds: the user learns them from the question text and from the host's refusal. Not changed here.",
+    "Approval cards of a dead turn are covered by the same fixes (rows filtered by turn, re-issued requests ignored while no turn runs), but no approval was left behind by a killed engine natively here: the user's global posture is YOLO and stays so.",
+    "Windows only; macOS not run.",
+    "5 live turns instead of 3-4. One sent a 4-option question the tool rejects; it became the stuck measurement. One had its refusal step blocked by the dead card after the reload; it became the before of 9771bdb."
+  ],
+  "liveTurnsDetail": [
+    {
+      "phase": "death-pre-fix",
+      "conversation": "A",
+      "what": "fruit question pending, engine killed"
+    },
+    {
+      "phase": "answer",
+      "conversation": "A",
+      "what": "4-option colors question, rejected by the tool; the turn completed in the engine, no event reached the app (stuck)"
+    },
+    {
+      "phase": "death-b",
+      "conversation": "B",
+      "what": "fruit question pending, engine killed, Reconnect"
+    },
+    {
+      "phase": "answer-b, first run (overwritten)",
+      "conversation": "B",
+      "what": "colors question; after the reload two cards, dead and live; the live one answered by finish-b (BLUE+GREEN)"
+    },
+    {
+      "phase": "answer-b",
+      "conversation": "B",
+      "what": "colors question: refused, page reloaded, answered (GREEN+BLUE)"
+    }
+  ],
+  "phases": {
+    "launch-pre-fix": {
+      "build": "pre-fix",
+      "commit": "b39935e",
+      "started": true,
+      "pidRecorded": true,
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cjy0wcQy.js"
+      ]
+    },
+    "setup-pre-fix": {
+      "build": "pre-fix",
+      "commit": "b39935e",
+      "user": {
+        "projectsSha": "cac7d25ad66d3676",
+        "posture": "yolo",
+        "isolation": {
+          "mode": "network",
+          "disableWrite": false,
+          "disableShell": false
+        }
+      },
+      "startSession": {
+        "approvalMode": "allowAll",
+        "durability": "durable",
+        "sandboxMode": "network"
+      },
+      "engines": {
+        "before": {
+          "test": [],
+          "others": 1
+        },
+        "after": {
+          "test": [
+            {
+              "pid": 4436,
+              "created": "2026-10-06T00:46:52.2212200+02:00",
+              "cwd": "<test folder>"
+            }
+          ],
+          "others": 1
+        }
+      },
+      "view": {
+        "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+        "cards": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "logEntries": 0,
+      "verdict": {
+        "adoptedAfterReload": true,
+        "active": true,
+        "oneEngineInTestFolder": true,
+        "noTurn": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cjy0wcQy.js"
+      ]
+    },
+    "death-pre-fix": {
+      "build": "pre-fix",
+      "commit": "b39935e",
+      "liveTurns": 1,
+      "sendInput": {
+        "ok": true
+      },
+      "msToCard": 9717,
+      "hostPending": [
+        {
+          "inputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+          "toolName": "request_user_input",
+          "questions": [
+            {
+              "id": "fruit",
+              "header": "Fruit",
+              "question": "Which fruit should I name?",
+              "mode": "single",
+              "minSelections": null,
+              "maxSelections": null,
+              "options": [
+                "Apple",
+                "Banana",
+                "Cherry"
+              ]
+            }
+          ]
+        }
+      ],
+      "hostPrompt": {
+        "inputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+        "toolName": "request_user_input",
+        "questions": [
+          {
+            "id": "fruit",
+            "header": "Fruit",
+            "question": "Which fruit should I name?",
+            "mode": "single",
+            "minSelections": null,
+            "maxSelections": null,
+            "options": [
+              "Apple",
+              "Banana",
+              "Cherry"
+            ]
+          }
+        ]
+      },
+      "card": {
+        "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+        "title": "Input needed: request_user_input",
+        "questions": [
+          {
+            "header": "Fruit",
+            "question": "Which fruit should I name?",
+            "choices": [
+              {
+                "label": "Apple",
+                "pressed": false
+              },
+              {
+                "label": "Banana",
+                "pressed": false
+              },
+              {
+                "label": "Cherry",
+                "pressed": false
+              }
+            ],
+            "boxes": []
+          }
+        ],
+        "actions": [
+          "Send answer",
+          "Skip"
+        ]
+      },
+      "view": {
+        "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+        "cards": [
+          {
+            "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "title": "Input needed: request_user_input",
+            "questions": [
+              {
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ],
+                "boxes": []
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ]
+          }
+        ],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "inputRequestEvents": [
+        "{\"inputId\":\"01a10e40-a056-7ea1-9ca9-ca72da1b5060\",\"itemId\":\"01a10e40-a056-7ea1-9ca9-ca72da1b5060\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\",\"options\":[{\"description\":\"\",\"label\":\"Apple\"},{\"description\":\"\",\"label\":\"Banana\"},{\"description\":\"\",\"label\":\"Cherry\"}],\"question\":\"Which fruit should I name?\"}],\"request_id\":\"01a10e40-a056-7ea1-9ca9-c",
+        "{\"inputId\":\"01a10e40-a056-7ea1-9ca9-ca72da1b5060\",\"itemId\":\"01a10e40-a056-7ea1-9ca9-ca72da1b5060\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\",\"options\":[{\"description\":\"\",\"label\":\"Apple\"},{\"description\":\"\",\"label\":\"Banana\"},{\"description\":\"\",\"label\":\"Cherry\"}],\"question\":\"Which fruit should I name?\"}],\"request_id\":\"01a10e40-a056-7ea1-9ca9-c"
+      ],
+      "shotBefore": "shots/m0-05-q-death-pre-fix-card.png",
+      "before": {
+        "engines": {
+          "test": [
+            {
+              "pid": 4436,
+              "created": "2026-10-06T00:46:52.2212200+02:00",
+              "cwd": "<test folder>"
+            }
+          ],
+          "others": 1
+        },
+        "hostPending": [
+          {
+            "inputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "toolName": "request_user_input",
+            "questions": [
+              {
+                "id": "fruit",
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "mode": "single",
+                "minSelections": null,
+                "maxSelections": null,
+                "options": [
+                  "Apple",
+                  "Banana",
+                  "Cherry"
+                ]
+              }
+            ]
+          }
+        ],
+        "view": {
+          "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+          "cards": [
+            {
+              "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+              "title": "Input needed: request_user_input",
+              "questions": [
+                {
+                  "header": "Fruit",
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ],
+                  "boxes": []
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ]
+            }
+          ],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        }
+      },
+      "after": {
+        "msToHostExited": 307,
+        "hostExitedEvent": {
+          "atMs": 14451,
+          "kind": "host_exited",
+          "payload": "sidecar host exited (code Some(1), signal None). "
+        },
+        "testEvents": [
+          {
+            "kind": "host_exited",
+            "payload": "sidecar host exited (code Some(1), signal None). "
+          }
+        ],
+        "otherSessionsEventKinds": {},
+        "appAlive": true,
+        "victimAlive": false,
+        "otherEnginesAlive": 1,
+        "otherEnginesBefore": 1,
+        "view": {
+          "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+          "cards": [
+            {
+              "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+              "title": "Input needed: request_user_input",
+              "questions": [
+                {
+                  "header": "Fruit",
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ],
+                  "boxes": []
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ]
+            }
+          ],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "transcript": [
+          {
+            "role": "user",
+            "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input"
+          },
+          {
+            "role": "tool",
+            "text": "Input requested: request_user_input"
+          },
+          {
+            "role": "tool",
+            "text": "Input requested: request_user_input"
+          },
+          {
+            "role": "system",
+            "text": "Muse stopped because the host process ended. Reconnect to continue."
+          }
+        ]
+      },
+      "shotAfter": "shots/m0-05-q-death-pre-fix-transcript.png",
+      "staleAnswer": {
+        "choose": {
+          "clicked": true
+        },
+        "send": {
+          "clicked": true
+        },
+        "call": {
+          "atMs": 65257,
+          "args": {
+            "sessionId": "01a10e3f-a329-7271-8930-e0d36588c00b",
+            "userInputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "answers": [
+              {
+                "questionId": "fruit",
+                "selectedLabel": "Banana"
+              }
+            ]
+          },
+          "ok": false,
+          "result": "\"MSP error -32057: answer is invalid for user input 01a10e40-a056-7ea1-9ca9-ca72da1b5060 [userInputAnswerInvalid] (invalid_target) [retryable=false]\""
+        },
+        "view": {
+          "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+          "cards": [
+            {
+              "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+              "title": "Input needed: request_user_input",
+              "questions": [
+                {
+                  "header": "Fruit",
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": true
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ],
+                  "boxes": []
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ]
+            }
+          ],
+          "banner": "Your response could not be submitted. — MSP error -32057: answer is invalid for user input 01a10e40-a056-7ea1-9ca9-ca72da1b5060 [userInputAnswerInvalid] (invalid_target) [retryable=false]",
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "shot": "shots/m0-05-q-death-pre-fix-stale-answer.png"
+      },
+      "verdict": {
+        "testEngineKilled": true,
+        "otherEnginesUntouched": true,
+        "hostExitedOnlyForTheTestConversation": true,
+        "disconnected": false,
+        "cardStayedOnScreen": true,
+        "noCancelledNotice": true,
+        "staleAnswerFails": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cjy0wcQy.js"
+      ],
+      "note": "disconnected is false: the app resumed the conversation silently 6 ms after host_exited (resume on open: adopted in this run, never resumed), so the pill read Connected again. Read from the page's IPC trace right after the phase, same page: resume_session ok with no running turn, then the pending read listing the dead question again, then the answer refused -32057 invalid_target 4.8 s after the kill. callsSinceKill was added to the harness after this run."
+    },
+    "launch-head": {
+      "build": "head",
+      "commit": "b39935e",
+      "started": true,
+      "pidRecorded": true,
+      "consoleErrors": [],
+      "bundle": [
+        "index-CJ4aU4mu.js"
+      ]
+    },
+    "orphan-head": {
+      "build": "head",
+      "commit": "b39935e",
+      "liveTurns": 0,
+      "connected": true,
+      "view": {
+        "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+        "cards": [
+          {
+            "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "title": "Input needed: request_user_input",
+            "questions": [
+              {
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": true
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ],
+                "boxes": []
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ]
+          }
+        ],
+        "banner": "Your response could not be submitted. — MSP error -32603: user-input fold read failed: session 01a10e3f-a329-7271-8930-e0d36588c00b has no settlement projection; prompt state is unprovable [internal] [retryable=false]",
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "appPendingRead": [
+        {
+          "inputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+          "toolName": "request_user_input",
+          "questions": [
+            {
+              "id": "fruit",
+              "header": "Fruit",
+              "question": "Which fruit should I name?",
+              "mode": "single",
+              "minSelections": null,
+              "maxSelections": null,
+              "options": [
+                "Apple",
+                "Banana",
+                "Cherry"
+              ]
+            }
+          ]
+        }
+      ],
+      "engines": {
+        "test": [
+          {
+            "pid": 48272,
+            "created": "2026-10-06T00:55:11.3743960+02:00",
+            "cwd": "<test folder>"
+          }
+        ],
+        "others": 0
+      },
+      "answer": {
+        "choose": {
+          "clicked": true
+        },
+        "send": {
+          "clicked": true
+        },
+        "call": {
+          "atMs": 33998,
+          "args": {
+            "sessionId": "01a10e3f-a329-7271-8930-e0d36588c00b",
+            "userInputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "answers": [
+              {
+                "questionId": "fruit",
+                "selectedLabel": "Apple"
+              }
+            ]
+          },
+          "ok": false,
+          "result": "\"MSP error -32603: user-input fold read failed: session 01a10e3f-a329-7271-8930-e0d36588c00b has no settlement projection; prompt state is unprovable [internal] [retryable=false]\""
+        },
+        "view": {
+          "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+          "cards": [
+            {
+              "key": "01a10e3f-a329-7271-8930-e0d36588c00b:01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+              "title": "Input needed: request_user_input",
+              "questions": [
+                {
+                  "header": "Fruit",
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": true
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ],
+                  "boxes": []
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ]
+            }
+          ],
+          "banner": "Your response could not be submitted. — MSP error -32603: user-input fold read failed: session 01a10e3f-a329-7271-8930-e0d36588c00b has no settlement projection; prompt state is unprovable [internal] [retryable=false]",
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        }
+      },
+      "shot": "shots/m0-05-q-orphan-head.png",
+      "verdict": {
+        "resumedOnANewEngine": true,
+        "cardForTheKilledPrompt": true,
+        "answerRefused": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-CJ4aU4mu.js"
+      ]
+    },
+    "msp-orphan-head": {
+      "commit": "b39935e",
+      "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+      "liveTurns": 0,
+      "engineArgs": [
+        "serve",
+        "--sandbox-network",
+        "enabled"
+      ],
+      "initialize": {
+        "ok": true
+      },
+      "readBeforeResume": {
+        "ok": true,
+        "session": {
+          "status": "notLoaded",
+          "activeTurnId": null,
+          "turnCount": 1
+        }
+      },
+      "listPendingBeforeResume": {
+        "ok": true,
+        "userInputs": [
+          {
+            "userInputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "turnId": "01a10e40-7172-769e-824d-bf9f0f148373",
+            "toolName": "request_user_input",
+            "questions": [
+              "fruit"
+            ]
+          }
+        ],
+        "approvals": 0
+      },
+      "resume": {
+        "ok": true,
+        "session": {
+          "status": "idle",
+          "activeTurnId": null,
+          "turnCount": 1
+        },
+        "pendingRequests": []
+      },
+      "framesAfterResume": [
+        {
+          "ms": 2348,
+          "request": "userInput/request",
+          "params": {
+            "userInputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "turnId": "01a10e40-7172-769e-824d-bf9f0f148373",
+            "toolName": "request_user_input"
+          }
+        }
+      ],
+      "listPendingAfterResume": {
+        "ok": true,
+        "userInputs": [
+          {
+            "userInputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+            "turnId": "01a10e40-7172-769e-824d-bf9f0f148373",
+            "toolName": "request_user_input",
+            "questions": [
+              "fruit"
+            ]
+          }
+        ],
+        "approvals": 0
+      },
+      "verdict": {
+        "sessionRunsNoTurn": true,
+        "foldStillListsTheQuestion": true,
+        "questionReissuedAfterResume": true
+      },
+      "stderrTail": ""
+    },
+    "launch": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "started": true,
+      "pidRecorded": true,
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "orphan": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "liveTurns": 0,
+      "connected": true,
+      "view": {
+        "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+        "cards": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "appPendingRead": [
+        {
+          "inputId": "01a10e40-a056-7ea1-9ca9-ca72da1b5060",
+          "toolName": "request_user_input",
+          "questions": [
+            {
+              "id": "fruit",
+              "header": "Fruit",
+              "question": "Which fruit should I name?",
+              "mode": "single",
+              "minSelections": null,
+              "maxSelections": null,
+              "options": [
+                "Apple",
+                "Banana",
+                "Cherry"
+              ]
+            }
+          ]
+        }
+      ],
+      "engines": {
+        "test": [
+          {
+            "pid": 48428,
+            "created": "2026-10-06T01:02:20.7296910+02:00",
+            "cwd": "<test folder>"
+          }
+        ],
+        "others": 0
+      },
+      "transcriptTail": [
+        {
+          "role": "system",
+          "text": "Muse stopped because the host process ended. Reconnect to continue."
+        },
+        {
+          "role": "tool",
+          "text": "The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state befor"
+        },
+        {
+          "role": "system",
+          "text": "Stopped"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the"
+        },
+        {
+          "role": "tool",
+          "text": "Input requested: request_user_input"
+        }
+      ],
+      "verdict": {
+        "resumedOnANewEngine": true,
+        "noCardForTheKilledPrompt": true,
+        "engineStillListsIt": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ],
+      "note": "679c44f: list_pending_requests still returned the dead question (engineStillListsIt); the renderer showed no card. On 9771bdb it returns none (orphan-b)."
+    },
+    "answer": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "failure": "no question card within the bound; transcript: [{\"role\":\"user\",\"text\":\"Before anything else, call your request_user_input tool exactly once, with one multi-select question: id \\\"colors\\\", header \\\"Colors\\\", question \\\"Pick exactly two colors\\\", options \\\"Red\\\", \\\"Green\\\", \\\"Blue\\\", \\\"Yellow\\\", selection {\\\"mode\\\": \\\"multiple\\\", \\\"min_selections\\\": 2, \\\"max_selections\\\": 2}. After my answer,\"},{\"role\":\"assistant\",\"text\":\"\"}]",
+      "consoleErrors": [],
+      "liveTurns": 1,
+      "note": "Conversation A after its engine was killed: the model's question had 4 options and the tool rejected it; the turn ran and completed in the engine but no event reached the app. See stuck."
+    },
+    "stuck": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "liveTurns": 0,
+      "engineRecord": {
+        "runStartedAt": "2026-10-05T23:02:49.763Z",
+        "toolCallsRejected": [
+          "invalid request_user_input request: question `colors` must have 2-3 options, got 4"
+        ],
+        "assistantMessages": [
+          "Failed: the input tool allows max 3 options, so the 4-color question was rejected and I got no answer to echo."
+        ],
+        "terminal": [
+          {
+            "terminal": "completed",
+            "turnDurationMs": 15296,
+            "at": "2026-10-05T23:03:05.052Z"
+          }
+        ]
+      },
+      "engineViewLastWrites": {
+        "HEAD.json": "2026-10-05T22:55:13.302Z",
+        "index.bin": "2026-10-05T22:48:06.781Z",
+        "journal.bin": "2026-10-05T22:48:06.781Z"
+      },
+      "app": {
+        "tapInstalledAt": "2026-10-05T23:02:49.153Z",
+        "eventsForTheConversation": [],
+        "view": {
+          "activeSid": "01a10e3f-a329-7271-8930-e0d36588c00b",
+          "cards": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "No recent host update No host event for 10m 22s. Muse may still be working. Last event: message accepted. Sync now Reconnect Stop",
+          "reconnect": null,
+          "running": "true"
+        }
+      },
+      "verdict": {
+        "tapInstalledBeforeTheTurn": true,
+        "engineCompletedTheTurn": true,
+        "modelRepliedInTheEngine": true,
+        "noEventReachedTheApp": true,
+        "appStillShowsTheTurnRunning": true,
+        "engineViewNotWrittenSinceBeforeTheTurn": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "setup-b": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "user": {
+        "projectsSha": "cac7d25ad66d3676",
+        "posture": "yolo",
+        "isolation": {
+          "mode": "network",
+          "disableWrite": false,
+          "disableShell": false
+        }
+      },
+      "startSession": {
+        "approvalMode": "allowAll",
+        "durability": "durable",
+        "sandboxMode": "network"
+      },
+      "engines": {
+        "before": {
+          "test": [],
+          "others": 1
+        },
+        "after": {
+          "test": [
+            {
+              "pid": 29612,
+              "created": "2026-10-06T01:13:44.9015400+02:00",
+              "cwd": "<test folder>"
+            }
+          ],
+          "others": 1
+        }
+      },
+      "view": {
+        "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+        "cards": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "logEntries": 0,
+      "verdict": {
+        "adoptedAfterReload": true,
+        "active": true,
+        "oneEngineInTestFolder": true,
+        "noTurn": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "launch-b": {
+      "build": "fixed",
+      "commit": "9771bdb",
+      "started": true,
+      "pidRecorded": true,
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "death-b": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "liveTurns": 1,
+      "sendInput": {
+        "ok": true
+      },
+      "msToCard": 4871,
+      "hostPending": [
+        {
+          "inputId": "01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+          "toolName": "request_user_input",
+          "questions": [
+            {
+              "id": "fruit",
+              "header": "Fruit",
+              "question": "Which fruit should I name?",
+              "mode": "single",
+              "minSelections": null,
+              "maxSelections": null,
+              "options": [
+                "Apple",
+                "Banana",
+                "Cherry"
+              ]
+            }
+          ]
+        }
+      ],
+      "hostPrompt": {
+        "inputId": "01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+        "toolName": "request_user_input",
+        "questions": [
+          {
+            "id": "fruit",
+            "header": "Fruit",
+            "question": "Which fruit should I name?",
+            "mode": "single",
+            "minSelections": null,
+            "maxSelections": null,
+            "options": [
+              "Apple",
+              "Banana",
+              "Cherry"
+            ]
+          }
+        ]
+      },
+      "card": {
+        "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+        "title": "Input needed: request_user_input",
+        "questions": [
+          {
+            "header": "Fruit",
+            "question": "Which fruit should I name?",
+            "choices": [
+              {
+                "label": "Apple",
+                "pressed": false
+              },
+              {
+                "label": "Banana",
+                "pressed": false
+              },
+              {
+                "label": "Cherry",
+                "pressed": false
+              }
+            ],
+            "boxes": []
+          }
+        ],
+        "actions": [
+          "Send answer",
+          "Skip"
+        ]
+      },
+      "view": {
+        "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+        "cards": [
+          {
+            "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+            "title": "Input needed: request_user_input",
+            "questions": [
+              {
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ],
+                "boxes": []
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ]
+          }
+        ],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "inputRequestEvents": [
+        "{\"inputId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"itemId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\",\"options\":[{\"description\":\"\",\"label\":\"Apple\"},{\"description\":\"\",\"label\":\"Banana\"},{\"description\":\"\",\"label\":\"Cherry\"}],\"question\":\"Which fruit should I name?\"}],\"request_id\":\"01a10e58-b25f-7e42-b1cc-1",
+        "{\"inputId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"itemId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\",\"options\":[{\"description\":\"\",\"label\":\"Apple\"},{\"description\":\"\",\"label\":\"Banana\"},{\"description\":\"\",\"label\":\"Cherry\"}],\"question\":\"Which fruit should I name?\"}],\"request_id\":\"01a10e58-b25f-7e42-b1cc-1"
+      ],
+      "shotBefore": "shots/m0-05-q-death-card-b.png",
+      "before": {
+        "engines": {
+          "test": [
+            {
+              "pid": 54288,
+              "created": "2026-10-06T01:13:57.8359870+02:00",
+              "cwd": "<test folder>"
+            }
+          ],
+          "others": 0
+        },
+        "hostPending": [
+          {
+            "inputId": "01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+            "toolName": "request_user_input",
+            "questions": [
+              {
+                "id": "fruit",
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "mode": "single",
+                "minSelections": null,
+                "maxSelections": null,
+                "options": [
+                  "Apple",
+                  "Banana",
+                  "Cherry"
+                ]
+              }
+            ]
+          }
+        ],
+        "view": {
+          "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+          "cards": [
+            {
+              "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+              "title": "Input needed: request_user_input",
+              "questions": [
+                {
+                  "header": "Fruit",
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ],
+                  "boxes": []
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ]
+            }
+          ],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        }
+      },
+      "after": {
+        "msToHostExited": 310,
+        "hostExitedEvent": {
+          "atMs": 6879,
+          "kind": "host_exited",
+          "payload": "sidecar host exited (code Some(1), signal None). "
+        },
+        "testEvents": [
+          {
+            "kind": "host_exited",
+            "payload": "sidecar host exited (code Some(1), signal None). "
+          }
+        ],
+        "otherSessionsEventKinds": {},
+        "appAlive": true,
+        "victimAlive": false,
+        "otherEnginesAlive": 0,
+        "otherEnginesBefore": 0,
+        "view": {
+          "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+          "cards": [],
+          "banner": null,
+          "connection": "Disconnected",
+          "health": null,
+          "reconnect": {
+            "text": "Reconnect",
+            "disabled": false
+          }
+        },
+        "transcript": [
+          {
+            "role": "user",
+            "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input"
+          },
+          {
+            "role": "tool",
+            "text": "Input requested: request_user_input"
+          },
+          {
+            "role": "system",
+            "text": "Input cancelled: Muse stopped before you answered."
+          },
+          {
+            "role": "system",
+            "text": "Muse stopped because the host process ended. Reconnect to continue."
+          }
+        ],
+        "inputRequestedLines": 1
+      },
+      "shotAfter": "shots/m0-05-q-death-transcript-b.png",
+      "reconnect": {
+        "click": {
+          "clicked": true
+        },
+        "resumeSession": {
+          "ok": true,
+          "running": false,
+          "loaded": true
+        },
+        "connection": "Connected",
+        "engines": {
+          "test": [
+            {
+              "pid": 39552,
+              "created": "2026-10-06T01:14:22.5228690+02:00",
+              "cwd": "<test folder>"
+            }
+          ],
+          "others": 0
+        },
+        "newEngineIsAnotherProcess": true,
+        "hostPendingAfterResume": [
+          {
+            "inputId": "01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+            "toolName": "request_user_input",
+            "questions": [
+              {
+                "id": "fruit",
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "mode": "single",
+                "minSelections": null,
+                "maxSelections": null,
+                "options": [
+                  "Apple",
+                  "Banana",
+                  "Cherry"
+                ]
+              }
+            ]
+          }
+        ],
+        "view": {
+          "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+          "cards": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": null,
+          "reconnect": null
+        },
+        "eventsAfterResume": [
+          {
+            "kind": "cancelled",
+            "payload": "{\"durationMs\":null,\"error\":null,\"reason\":\"resume_reconcile:orphaned_by_process_loss\",\"terminal\":\"cancelled\",\"turnId\":\"01a10e58-a1b7-7936-8299-55710e2905de\"}"
+          },
+          {
+            "kind": "item_started",
+            "payload": "{\"commandText\":null,\"itemId\":\"9925d184-ca15-4606-b092-a8b8a74f2639\",\"itemKind\":\"reminderChild\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":null,\"turnId\":\"01a10e58-a1b7-7936-8299-55710e2905de\"}"
+          },
+          {
+            "kind": "subagent_event",
+            "payload": "{\"agent_id\":\"9925d184-ca15-4606-b092-a8b8a74f2639\",\"childSessionId\":\"e441afab-a0b9-403d-ab37-3299533a6514\",\"itemId\":\"9925d184-ca15-4606-b092-a8b8a74f2639\",\"replace\":true,\"status\":\"completed\",\"text\":\"R"
+          },
+          {
+            "kind": "item_done",
+            "payload": "{\"itemId\":\"9925d184-ca15-4606-b092-a8b8a74f2639\",\"turnId\":\"01a10e58-a1b7-7936-8299-55710e2905de\"}"
+          },
+          {
+            "kind": "item_started",
+            "payload": "{\"commandText\":null,\"itemId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"itemKind\":\"toolCall\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":\"request_user_input\",\"turnId\":\"01a10e58-a1b7-7936-8299-55710"
+          },
+          {
+            "kind": "shell_output",
+            "payload": "{\"itemId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"outputRef\":null,\"richContent\":null,\"text\":\"The previous process terminated while this tool call was in flight, and no result was recorded. The outcome"
+          },
+          {
+            "kind": "item_done",
+            "payload": "{\"itemId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"turnId\":\"01a10e58-a1b7-7936-8299-55710e2905de\"}"
+          },
+          {
+            "kind": "input_request",
+            "payload": "{\"inputId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"itemId\":\"01a10e58-b25f-7e42-b1cc-1ab1ec4ca040\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\","
+          }
+        ],
+        "transcript": [
+          {
+            "role": "user",
+            "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Input requested: request_user_input"
+          },
+          {
+            "role": "system",
+            "text": "Input cancelled: Muse stopped before you answered."
+          },
+          {
+            "role": "system",
+            "text": "Muse stopped because the host process ended. Reconnect to continue."
+          },
+          {
+            "role": "tool",
+            "text": "The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state before retrying."
+          },
+          {
+            "role": "system",
+            "text": "Stopped"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state before retrying."
+          }
+        ],
+        "callsSinceKill": [
+          {
+            "ms": 4265,
+            "cmd": "resume_session",
+            "ok": true,
+            "running": false
+          },
+          {
+            "ms": 11567,
+            "cmd": "list_pending_requests",
+            "ok": true,
+            "userInputIds": [
+              "01a10e58-b25f-7e42-b1cc-1ab1ec4ca040"
+            ]
+          }
+        ]
+      },
+      "shotReconnected": "shots/m0-05-q-death-reconnected-b.png",
+      "verdict": {
+        "testEngineKilled": true,
+        "otherEnginesUntouched": true,
+        "hostExitedOnlyForTheTestConversation": true,
+        "cardRemoved": true,
+        "transcriptSaysInputCancelled": true,
+        "disconnected": true,
+        "reconnectWorks": true,
+        "noCardAfterReconnect": true,
+        "engineStillListsTheDeadQuestion": true,
+        "oneTranscriptLinePerQuestion": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "answer-b": {
+      "build": "fixed",
+      "commit": "9771bdb",
+      "liveTurns": 1,
+      "atStart": {
+        "view": {
+          "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+          "cards": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": null,
+          "reconnect": null
+        },
+        "hostPending": []
+      },
+      "sendInput": {
+        "ok": true
+      },
+      "msToCard": 12967,
+      "hostPending": [
+        {
+          "inputId": "01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+          "toolName": "request_user_input",
+          "questions": [
+            {
+              "id": "colors",
+              "header": "Colors",
+              "question": "Pick exactly two colors",
+              "mode": "multiple",
+              "minSelections": 2,
+              "maxSelections": 2,
+              "options": [
+                "Red",
+                "Green",
+                "Blue"
+              ]
+            }
+          ]
+        }
+      ],
+      "hostPrompt": {
+        "inputId": "01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+        "toolName": "request_user_input",
+        "questions": [
+          {
+            "id": "colors",
+            "header": "Colors",
+            "question": "Pick exactly two colors",
+            "mode": "multiple",
+            "minSelections": 2,
+            "maxSelections": 2,
+            "options": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        ]
+      },
+      "card": {
+        "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+        "title": "Input needed: request_user_input",
+        "questions": [
+          {
+            "header": "Colors",
+            "question": "Pick exactly two colors",
+            "choices": [],
+            "boxes": [
+              {
+                "label": "Red",
+                "checked": false
+              },
+              {
+                "label": "Green",
+                "checked": false
+              },
+              {
+                "label": "Blue",
+                "checked": false
+              }
+            ]
+          }
+        ],
+        "actions": [
+          "Send answer",
+          "Skip"
+        ]
+      },
+      "view": {
+        "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+        "cards": [
+          {
+            "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+            "title": "Input needed: request_user_input",
+            "questions": [
+              {
+                "header": "Colors",
+                "question": "Pick exactly two colors",
+                "choices": [],
+                "boxes": [
+                  {
+                    "label": "Red",
+                    "checked": false
+                  },
+                  {
+                    "label": "Green",
+                    "checked": false
+                  },
+                  {
+                    "label": "Blue",
+                    "checked": false
+                  }
+                ]
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ]
+          }
+        ],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "inputRequestEvents": [
+        "{\"inputId\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb6\",\"itemId\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb6\",\"questions\":[{\"header\":\"Colors\",\"id\":\"colors\",\"maxSelections\":2,\"minSelections\":2,\"mode\":\"multiple\",\"options\":[{\"description\":\"\",\"label\":\"Red\"},{\"description\":\"\",\"label\":\"Green\"},{\"description\":\"\",\"label\":\"Blue\"}],\"question\":\"Pick exactly two colors\"}],\"request_id\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb",
+        "{\"inputId\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb6\",\"itemId\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb6\",\"questions\":[{\"header\":\"Colors\",\"id\":\"colors\",\"maxSelections\":2,\"minSelections\":2,\"mode\":\"multiple\",\"options\":[{\"description\":\"\",\"label\":\"Red\"},{\"description\":\"\",\"label\":\"Green\"},{\"description\":\"\",\"label\":\"Blue\"}],\"question\":\"Pick exactly two colors\"}],\"request_id\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb"
+      ],
+      "path": "host bound: one box out of min_selections 2",
+      "refused": {
+        "pick": {
+          "clicked": true
+        },
+        "send": {
+          "clicked": true
+        },
+        "call": {
+          "atMs": 39889,
+          "args": {
+            "sessionId": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+            "userInputId": "01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+            "answers": [
+              {
+                "questionId": "colors",
+                "selectedLabels": [
+                  "Green"
+                ]
+              }
+            ]
+          },
+          "ok": false,
+          "result": "\"MSP error -32057: answer is invalid for user input 01a10e62-4b1e-7023-afe7-a6090e09dbb6 [userInputAnswerInvalid] (invalid_target) [retryable=false]\""
+        },
+        "rewrite": null,
+        "after": {
+          "view": {
+            "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+            "cards": [
+              {
+                "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+                "title": "Input needed: request_user_input",
+                "questions": [
+                  {
+                    "header": "Colors",
+                    "question": "Pick exactly two colors",
+                    "choices": [],
+                    "boxes": [
+                      {
+                        "label": "Red",
+                        "checked": false
+                      },
+                      {
+                        "label": "Green",
+                        "checked": true
+                      },
+                      {
+                        "label": "Blue",
+                        "checked": false
+                      }
+                    ]
+                  }
+                ],
+                "actions": [
+                  "Send answer",
+                  "Skip"
+                ]
+              }
+            ],
+            "banner": "Your response could not be submitted. — MSP error -32057: answer is invalid for user input 01a10e62-4b1e-7023-afe7-a6090e09dbb6 [userInputAnswerInvalid] (invalid_target) [retryable=false]",
+            "connection": "Connected",
+            "health": "Waiting for your answer Muse needs your answer before it can continue.",
+            "reconnect": null
+          },
+          "sameCardNode": true,
+          "hostPending": [
+            {
+              "inputId": "01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+              "toolName": "request_user_input",
+              "questions": [
+                {
+                  "id": "colors",
+                  "header": "Colors",
+                  "question": "Pick exactly two colors",
+                  "mode": "multiple",
+                  "minSelections": 2,
+                  "maxSelections": 2,
+                  "options": [
+                    "Red",
+                    "Green",
+                    "Blue"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "shotRefused": "shots/m0-05-q-refused-keeps-answer-b.png",
+      "reloaded": {
+        "msToCard": 2006,
+        "card": {
+          "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+          "title": "Input needed: request_user_input",
+          "questions": [
+            {
+              "header": "Colors",
+              "question": "Pick exactly two colors",
+              "choices": [],
+              "boxes": [
+                {
+                  "label": "Red",
+                  "checked": false
+                },
+                {
+                  "label": "Green",
+                  "checked": false
+                },
+                {
+                  "label": "Blue",
+                  "checked": false
+                }
+              ]
+            }
+          ],
+          "actions": [
+            "Send answer",
+            "Skip"
+          ]
+        },
+        "bootListPending": [
+          {
+            "ok": true,
+            "userInputIds": [
+              "01a10e62-4b1e-7023-afe7-a6090e09dbb6"
+            ]
+          }
+        ],
+        "inputRequestEventsSinceReload": 0
+      },
+      "shotReloaded": "shots/m0-05-q-reload-card-back-b.png",
+      "accepted": {
+        "picks": [
+          {
+            "clicked": true
+          },
+          {
+            "clicked": true
+          }
+        ],
+        "before": {
+          "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+          "title": "Input needed: request_user_input",
+          "questions": [
+            {
+              "header": "Colors",
+              "question": "Pick exactly two colors",
+              "choices": [],
+              "boxes": [
+                {
+                  "label": "Red",
+                  "checked": false
+                },
+                {
+                  "label": "Green",
+                  "checked": true
+                },
+                {
+                  "label": "Blue",
+                  "checked": true
+                }
+              ]
+            }
+          ],
+          "actions": [
+            "Send answer",
+            "Skip"
+          ]
+        },
+        "send": {
+          "clicked": true
+        },
+        "call": {
+          "atMs": 3528,
+          "args": {
+            "sessionId": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+            "userInputId": "01a10e62-4b1e-7023-afe7-a6090e09dbb6",
+            "answers": [
+              {
+                "questionId": "colors",
+                "selectedLabels": [
+                  "Green",
+                  "Blue"
+                ]
+              }
+            ]
+          },
+          "ok": true,
+          "result": "null"
+        }
+      },
+      "end": {
+        "idle": true,
+        "msToIdle": 8921
+      },
+      "events": [
+        {
+          "kind": "input_settled",
+          "payload": "{\"inputId\":\"01a10e62-4b1e-7023-afe7-a6090e09dbb6\",\"outcome\":\"answered\"}"
+        }
+      ],
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Before anything else, call your request_user_input tool exactly once, with one multi-select question: id \"colors\", header \"Colors\", question \"Pick exactly two colors\", options \"Red\", \"Green\", \"Blue\", selection {\"mode\": \"multiple\", \"min_selections\": 2, \"max_selections\": 2}. After my answer, reply wit"
+        },
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input"
+        },
+        {
+          "role": "tool",
+          "text": "Input requested: request_user_input"
+        },
+        {
+          "role": "assistant",
+          "text": "GREEN+BLUE"
+        },
+        {
+          "role": "system",
+          "text": "Input answered"
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input {\"status\":\"answered\",\"answers\":[{\"id\":\"colors\",\"selected_labels\":[\"Green\",\"Blue\"]}]}"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "reply": "GREEN+BLUE",
+      "shotEnd": "shots/m0-05-q-answered-transcript-b.png",
+      "verdict": {
+        "q1_questionCardRendered": true,
+        "q1_oneTranscriptLinePerQuestion": true,
+        "q3_firstAnswerRefused32057": true,
+        "q3_refusalShownToUser": true,
+        "q3_cardKeptSameNode": true,
+        "q3_cardKeptTheEditedAnswer": true,
+        "q3_hostStillPendingAfterRefusal": true,
+        "q2_cardBackWithoutAction": true,
+        "q2_sameQuestion": true,
+        "q2_onlyTheLiveQuestion": true,
+        "q2_cardFromHostPendingList": true,
+        "q2_noReplayedEvent": true,
+        "q1_answerAccepted": true,
+        "q1_settledAnswered": true,
+        "q1_turnContinuedWithTheAnswer": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "finish-b": {
+      "build": "fixed",
+      "commit": "679c44f",
+      "liveTurns": 0,
+      "question": {
+        "inputId": "01a10e59-6d80-7113-89a3-800bb9bb6402",
+        "toolName": "request_user_input",
+        "questions": [
+          {
+            "id": "colors",
+            "header": "Colors",
+            "question": "Pick exactly two colors",
+            "mode": "multiple",
+            "minSelections": 2,
+            "maxSelections": 2,
+            "options": [
+              "Blue",
+              "Green",
+              "Red"
+            ]
+          }
+        ]
+      },
+      "cardsBefore": [
+        "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+        "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e59-6d80-7113-89a3-800bb9bb6402"
+      ],
+      "picks": [
+        {
+          "clicked": true
+        },
+        {
+          "clicked": true
+        }
+      ],
+      "send": {
+        "clicked": true
+      },
+      "call": {
+        "atMs": 298910,
+        "args": {
+          "sessionId": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+          "userInputId": "01a10e59-6d80-7113-89a3-800bb9bb6402",
+          "answers": [
+            {
+              "questionId": "colors",
+              "selectedLabels": [
+                "Blue",
+                "Green"
+              ]
+            }
+          ]
+        },
+        "ok": true,
+        "result": "null"
+      },
+      "end": {
+        "idle": true,
+        "msToEnd": 10534
+      },
+      "eventsAfterAnswer": [
+        "input_settled",
+        "item_started",
+        "shell_output",
+        "item_done",
+        "item_started",
+        "subagent_event",
+        "item_done",
+        "subagent_event",
+        "item_started",
+        "item_started",
+        "output",
+        "item_done",
+        "token_usage",
+        "item_started",
+        "subagent_event",
+        "item_done",
+        "subagent_event",
+        "item_started",
+        "subagent_event",
+        "item_started",
+        "item_started",
+        "subagent_event",
+        "item_done",
+        "item_started",
+        "subagent_event",
+        "item_done",
+        "completed"
+      ],
+      "view": {
+        "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+        "cards": [
+          {
+            "key": "01a10e58-3e5d-7d80-a27b-c280f1479dca:01a10e58-b25f-7e42-b1cc-1ab1ec4ca040",
+            "title": "Input needed: request_user_input",
+            "questions": [
+              {
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": true
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ],
+                "boxes": []
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ]
+          }
+        ],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "transcriptTail": [
+        {
+          "role": "tool",
+          "text": "request_user_input {\"status\":\"answered\",\"answers\":[{\"id\":\"colors\",\"selected_labels\":[\"Blue\",\"Green\"]}]}"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "answerAccepted": true,
+        "eventsReachedTheApp": true,
+        "turnEnded": true,
+        "replyCarriesTheAnswer": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ],
+      "note": "Continues the first answer-b turn (679c44f) after its reload: the live question answered with valid picks, the turn ended. The dead card stayed on screen: the defect 9771bdb fixes."
+    },
+    "orphan-b": {
+      "build": "fixed",
+      "commit": "9771bdb",
+      "liveTurns": 0,
+      "connected": true,
+      "view": {
+        "activeSid": "01a10e58-3e5d-7d80-a27b-c280f1479dca",
+        "cards": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "appPendingRead": [],
+      "engines": {
+        "test": [
+          {
+            "pid": 2772,
+            "created": "2026-10-06T01:24:06.2197790+02:00",
+            "cwd": "<test folder>"
+          }
+        ],
+        "others": 0
+      },
+      "transcriptTail": [
+        {
+          "role": "tool",
+          "text": "request_user_input {\"status\":\"answered\",\"answers\":[{\"id\":\"colors\",\"selected_labels\":[\"Blue\",\"Green\"]}]}"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "BLUE+GREEN"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "resumedOnANewEngine": true,
+        "noCardForTheKilledPrompt": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DdrKhQia.js"
+      ]
+    },
+    "cleanup": {
+      "build": "fixed",
+      "commit": "9771bdb",
+      "conversations": [
+        {
+          "folder": "ws",
+          "deleted": true,
+          "confirmed": true
+        },
+        {
+          "folder": "b",
+          "deleted": true,
+          "confirmed": true
+        }
+      ],
+      "originalSelection": true,
+      "user": {
+        "projectsUnchanged": true,
+        "postureUnchanged": true,
+        "isolationUnchanged": true
+      },
+      "close": {
+        "graceful": true,
+        "exited": true
+      },
+      "verdict": {
+        "conversationsDeleted": true,
+        "projectsUnchanged": true,
+        "postureUnchanged": true,
+        "isolationUnchanged": true,
+        "closedGracefully": true
+      }
+    }
+  }
+}

@@ -1,14 +1,11 @@
 /**
  * Truncation caps in the persistence layer.
  *
- * `persist.ts` bounds two unbounded-by-nature collections:
+ * `persist.ts` bounds the per-session log, an unbounded-by-nature collection,
+ * at `MAX_LOG_ENTRIES` (applied in three places: `loadLog`, `appendLog`,
+ * `saveLog`).
  *
- *   - the per-session log, capped at `MAX_LOG_ENTRIES` (applied in three places:
- *     `loadLog`, `appendLog`, `saveLog`);
- *   - the approval allowlist, capped at `MAX_ALLOWLIST_RULES` (applied in two:
- *     `loadAllowlist`, `saveAllowlist`).
- *
- * Neither constant had a test. The risk is quiet: a broken cap does not throw,
+ * The constant had no test. The risk is quiet: a broken cap does not throw,
  * it lets history grow without limit, and the transcript renderer mounts a
  * bounded window precisely because a huge log is slow to display. A cap that
  * silently kept the *oldest* entries instead of the newest would also lose the
@@ -17,12 +14,9 @@
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_ALLOWLIST_RULES,
   MAX_LOG_ENTRIES,
   appendLog,
-  loadAllowlist,
   loadLog,
-  saveAllowlist,
   saveLog,
   type LogEntry,
 } from "../src/lib/persist.ts";
@@ -136,46 +130,5 @@ describe("legacy host-internal child lanes", () => {
   it("never un-flags an entry that already carries the flag", () => {
     seed("s-flagged", [subagent({ subagentInternal: true, objective: "whatever" })]);
     assert.equal(loadLog("s-flagged")[0]?.subagentInternal, true);
-  });
-});
-
-describe("allowlist truncation", () => {
-  const rule = (n: number) => ({
-    id: `id-${n}`,
-    pattern: `tool-${n}`,
-    scope: "",
-    decision: "allow" as const,
-    createdAt: n,
-  });
-
-  it("keeps at most MAX_ALLOWLIST_RULES on save", () => {
-    saveAllowlist(Array.from({ length: MAX_ALLOWLIST_RULES + 30 }, (_, i) => rule(i)));
-    assert.equal(loadAllowlist().length, MAX_ALLOWLIST_RULES);
-  });
-
-  it("keeps the most recent rules when truncating", () => {
-    saveAllowlist(Array.from({ length: MAX_ALLOWLIST_RULES + 3 }, (_, i) => rule(i)));
-    const kept = loadAllowlist();
-    assert.equal(kept[kept.length - 1]?.pattern, `tool-${MAX_ALLOWLIST_RULES + 2}`);
-    // The three oldest are the ones dropped.
-    assert.equal(kept[0]?.pattern, "tool-3");
-  });
-
-  it("bounds loadAllowlist when storage already holds too many rules", () => {
-    const many = Array.from({ length: MAX_ALLOWLIST_RULES + 60 }, (_, i) => rule(i));
-    (globalThis as unknown as { localStorage: Storage }).localStorage.setItem(
-      "muse-desktop.allowlist.v1",
-      JSON.stringify(many),
-    );
-    assert.equal(loadAllowlist().length, MAX_ALLOWLIST_RULES);
-  });
-
-  it("leaves a list below the cap untouched", () => {
-    const five = Array.from({ length: 5 }, (_, i) => rule(i));
-    saveAllowlist(five);
-    assert.deepEqual(
-      loadAllowlist().map((r) => r.pattern),
-      five.map((r) => r.pattern),
-    );
   });
 });

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 const MAX_FILES: usize = 256;
 const MAX_FILE_BYTES: usize = 4 * 1024 * 1024;
@@ -65,11 +65,7 @@ fn safe_relative_path(raw: &str) -> Result<PathBuf, String> {
 fn package_root(app: &AppHandle, package_id: &str, version: &str) -> Result<PathBuf, String> {
     let id = safe_segment(package_id, "id")?;
     let version = safe_segment(version, "version")?;
-    let base = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("cannot resolve app data directory: {error}"))?;
-    Ok(base.join("mcp-packages").join(id).join(version))
+    Ok(crate::app_data_dir(app)?.join("mcp-packages").join(id).join(version))
 }
 
 /// Install one package revision. Existing revisions are immutable so a

@@ -45,6 +45,16 @@ export function SharePanel({ shareState, activeSessionId, onShareSession, onPubl
   const [busyBundle, setBusyBundle] = useState<string | null>(null);
   const [duration, setDuration] = useState<number>(24);
   const [now, setNow] = useState<number>(() => Date.now());
+  // M0-13: a snapshot that creates nothing says why (it used to do nothing).
+  const [snapshotRefusal, setSnapshotRefusal] = useState<string | null>(null);
+  const snapshot = (format: "markdown" | "json") => {
+    if (activeSessionId === null) return;
+    const created = onShareSession(activeSessionId, format);
+    setSnapshotRefusal(created ? null : shareState.mode === "disabled"
+      ? "Sharing is turned off: nothing was snapshotted."
+      : "Nothing to snapshot: this conversation has no messages yet.");
+  };
+  useEffect(() => setSnapshotRefusal(null), [activeSessionId]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
@@ -139,18 +149,21 @@ export function SharePanel({ shareState, activeSessionId, onShareSession, onPubl
         <button
           type="button"
           disabled={activeSessionId === null}
-          onClick={() => activeSessionId && onShareSession(activeSessionId, "markdown")}
+          onClick={() => snapshot("markdown")}
         >
           Markdown
         </button>
         <button
           type="button"
           disabled={activeSessionId === null}
-          onClick={() => activeSessionId && onShareSession(activeSessionId, "json")}
+          onClick={() => snapshot("json")}
         >
           JSON
         </button>
         {activeSessionId === null && <span className="share-bundle-meta">No conversation open.</span>}
+        {activeSessionId !== null && snapshotRefusal && (
+          <span className="share-bundle-meta" role="status">{snapshotRefusal}</span>
+        )}
       </div>
 
       {bundles.length === 0 ? (

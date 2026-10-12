@@ -71,6 +71,28 @@ fn bound_value(value: Value) -> Value {
     }
 }
 
+/// The platform shell running the command line as the user typed it (a
+/// worktree setup command runs through it too).
+pub(crate) fn shell(command: &str) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // `cmd /S /C "<line>"` strips the outer quotes and runs the line as
+        // typed. Passed as an ordinary argument, the line was quoted again with
+        // `\"`, which cmd does not read: a quoted program path (any path with a
+        // space) never started (M3-01).
+        let mut c = Command::new("cmd");
+        c.raw_arg("/D /S /C").raw_arg(format!("\"{command}\""));
+        c
+    }
+    #[cfg(not(windows))]
+    {
+        let mut c = Command::new("sh");
+        c.args(["-lc", command]);
+        c
+    }
+}
+
 fn spawn(command: &str, workspace: Option<&Path>) -> Result<Child, String> {
     let command = command.trim();
     if command.is_empty() {
@@ -81,15 +103,7 @@ fn spawn(command: &str, workspace: Option<&Path>) -> Result<Child, String> {
             "local MCP command is limited to {MAX_COMMAND_CHARS} characters"
         ));
     }
-    let mut cmd = if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.args(["/D", "/S", "/C", command]);
-        c
-    } else {
-        let mut c = Command::new("sh");
-        c.args(["-lc", command]);
-        c
-    };
+    let mut cmd = shell(command);
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
     if let Some(root) = workspace {
         if !root.is_dir() {
@@ -608,6 +622,27 @@ mod tests {
             .unwrap();
         let (_, changed) = recv_response_id_with_notifications(&rx, Instant::now(), 9).unwrap();
         assert!(changed);
+    }
+
+    /// M3-01: a server under a folder with a space needs a quoted path, and
+    /// cmd never started it while Rust re-quoted the line.
+    #[cfg(windows)]
+    #[test]
+    fn a_quoted_program_path_with_spaces_runs() {
+        // Beside the test binary, not in %TEMP%.
+        let dir = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join(format!("mcp quoted {}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("echo args.cmd");
+        std::fs::write(&script, "@echo quoted-ok %~1\r\n").unwrap();
+        let output = shell(&format!("\"{}\" \"two words\"", script.display()))
+            .output()
+            .unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "quoted-ok two words");
     }
 
     #[test]

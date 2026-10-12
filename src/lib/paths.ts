@@ -18,3 +18,12 @@ export function displayPath(path: string): string {
   }
   return path;
 }
+
+/**
+ * Identity of a folder for comparisons: Git lists `C:/…`, the native layer
+ * stores `\\?\C:\…`. Case is folded: Windows and macOS ignore it by default,
+ * and a false match only keeps a worktree that could have gone.
+ */
+export function pathKey(path: string): string {
+  return displayPath(path).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}

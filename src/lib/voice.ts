@@ -1,10 +1,16 @@
 /**
  * M4-08 voice input boundary.
  *
- * The browser speech API is used only for an explicit, user-triggered local
- * transcription. Audio is never persisted or sent to the Muse host; the
- * resulting text remains editable in the composer before it is submitted.
+ * Product decision 05/10/2026: dictation uses the WebView's default speech
+ * API, only on an explicit user action. That API is not local: WebView2 on
+ * Windows sends the audio to Microsoft's online speech recognition, and the UI
+ * says so (VOICE_SERVICE_NOTE). Audio is never persisted or sent to the Muse
+ * host; the resulting text remains editable in the composer before it is
+ * submitted.
  */
+
+export const VOICE_SERVICE_NOTE =
+  "Dictation uses the system speech service; on Windows, audio is sent to Microsoft's online speech recognition.";
 
 export const MAX_VOICE_TRANSCRIPT_CHARS = 8_000;
 
@@ -40,7 +46,7 @@ export interface VoiceRecognition {
 
 export type VoiceRecognitionFactory = new () => VoiceRecognition;
 
-export type VoicePermissionState = "granted" | "denied" | "unavailable";
+export type VoicePermissionState = "granted" | "denied" | "no-microphone" | "unavailable";
 
 /** Discover the standard or WebKit-prefixed speech recognition constructor. */
 export function getVoiceRecognitionFactory(
@@ -88,9 +94,19 @@ export async function requestVoicePermission(
       }
     }
     return "granted";
-  } catch {
-    return "denied";
+  } catch (error) {
+    const name = error && typeof error === "object" ? (error as { name?: unknown }).name : undefined;
+    return name === "NotFoundError" || name === "OverconstrainedError" ? "no-microphone" : "denied";
   }
+}
+
+/** Stop recognition so no late result, error or end event reaches the composer. */
+export function abortVoiceRecognition(recognition: VoiceRecognition | null): void {
+  if (recognition === null) return;
+  recognition.onresult = null;
+  recognition.onerror = null;
+  recognition.onend = null;
+  recognition.abort();
 }
 
 function normalizeTranscript(value: string): string {

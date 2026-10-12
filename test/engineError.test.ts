@@ -92,6 +92,15 @@ describe("M0-07 structured engine failures", () => {
     assert.equal(tooDeep?.resultPreview, undefined);
   });
 
+  it("never splits a surrogate pair when bounding previews and issues", () => {
+    const result = parseTurnCompletion("turn/completed", JSON.stringify({
+      text: `${"x".repeat(318)}😀tail`,
+      issues: [`${"i".repeat(218)}😀tail`],
+    }));
+    assert.equal(result?.resultPreview, `${"x".repeat(318)}…`);
+    assert.deepEqual(result?.resultIssues, [`${"i".repeat(218)}…`]);
+  });
+
   it("keeps explicit structured issues and next steps bounded", () => {
     const result = parseTurnCompletion("turn/completed", JSON.stringify({
       result: {

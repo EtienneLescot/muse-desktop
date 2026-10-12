@@ -1,0 +1,577 @@
+{
+  "schema": "muse-desktop.m4-07-remote-engine.v2",
+  "ticket": "M4-07",
+  "date": "2026-10-06",
+  "commit": "d7629c2",
+  "productTreeClean": true,
+  "exeSha256": "37061d396e7392c2ace8ebf73b7f4aebce4e89e827029fca8fdf9f35da9f360e",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+  "host": "a WSL2 Ubuntu VM on the same PC (separate OS, sshd and user database), not a separate machine; sshd on 127.0.0.1:2222, key-only, the key in the Windows ssh-agent",
+  "harness": "scripts/cdp-m4-07-remote-engine.mjs",
+  "method": "Real webview of an isolated instance (fresh data folder and WebView2 profile, started from PowerShell with no WEBVIEW2_* variable, local engine pinned by MUSE_DESKTOP_TEST_SIDECAR), the system OpenSSH client and the user's ssh agent. App actions go through the UI (Settings form, welcome picker, composer, work panel, Reconnect, the conversation's actions dialog); the native git, terminal and files commands are invoked directly only to show they refuse. Remote facts come from a separate ssh session as the same user (stat and cat of the file, grep of the workspace, pgrep of `muse serve` with its working folder and environment). The app's ssh child is found by its command line and parent (Win32_Process) and killed by PID with taskkill /F; the app itself is closed with WM_CLOSE.",
+  "limits": [
+    "The host is a VM on the same PC: a real network (latency, a link dropped by a router rather than by a killed process) is not measured.",
+    "The remote engine is 1.3.0, the fixed binary installed on that host; the local test sidecar is the native 1.4.2 and no local conversation runs here."
+  ],
+  "liveTurns": 2,
+  "summary": "M4-07 proved natively on Windows, in the isolated test mode, against a WSL2 Ubuntu VM on the same PC: the target typed in Settings, a new conversation started on its ssh:// key, the system OpenSSH spawned as the app's child, a Muse 1.3.0 engine on linux handshaking over it. One live turn wrote a file with write_file in the remote folder, read back over a separate ssh session. Changes, Terminal, Files and the native git, terminal and files commands refused. The ssh child killed by PID left an honest Disconnected state; Reconnect resumed the same session over a new link, the history was read back, and a second turn recalled a code said only in the first prompt, with no tool call. Four failed starts each gave one actionable sentence, known_hosts byte-identical. The app closed on WM_CLOSE leaving no ssh child and no remote muse serve. No product defect found; one change made before the proof (d7629c2): in test mode, a configured ssh:// target is reached over the system ssh, every local engine stays the test sidecar.",
+  "observations": [
+    "The two prompts (harness constants PROMPT_WRITE and PROMPT_RECALL): the first asks for remote-proof.txt holding the marker, written with the file tool, and gives a second code to keep but never write or use in a command; the second asks for that code without any tool.",
+    "The first link death was resumed by the app on its own (resume-on-open: one silent attempt per conversation per run, already recorded in m0-05-questions.json and left unchanged); the second left the conversation Disconnected with Reconnect and the composer's Send disabled. Each death added one system line to the transcript.",
+    "The unknown-host-key start took 10.2 s, the others 0.5 to 2.6 s: localhost resolves to ::1 first, where port 2222 does not answer, and ssh waits its ConnectTimeout (10 s) before 127.0.0.1, whose key is unknown under that name (checked afterwards with ssh -v, known_hosts unchanged)."
+  ],
+  "engines": {
+    "remote": {
+      "kernel": "Linux 5.15.146.1-microsoft-standard-WSL2",
+      "distro": "Ubuntu 24.04.2 LTS",
+      "museVersion": "Muse Code 1.3.0 (1.3.0-R3401.1)",
+      "binary": "a fixed Muse binary, not the self-updating launcher"
+    },
+    "localTestSidecar": {
+      "version": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+      "sha256": "39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba",
+      "role": "MUSE_DESKTOP_TEST_SIDECAR: every local engine of this instance; none is started here"
+    }
+  },
+  "preflight": {
+    "folder": ".git",
+    "servesBefore": {
+      "ours": [],
+      "othersOnHost": 0
+    },
+    "knownHosts": {
+      "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+      "bytes": 2610,
+      "loopbackKnown": true,
+      "localhostKnown": false
+    }
+  },
+  "isolation": {
+    "testModeMarker": true,
+    "webviewProfileUnderTestFolder": true,
+    "testMode": true,
+    "hostEnginesAtBoot": [],
+    "remoteTargetAtBoot": null
+  },
+  "start": {
+    "settings": {
+      "status": "Saved. Pick \"Remote: <user>@127.0.0.1\" as the project of a new conversation.",
+      "stored": {
+        "user": "<user>",
+        "host": "127.0.0.1",
+        "port": 2222,
+        "musePath": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+        "workspacePath": "<remote home>/muse-proofs/m4-07-muwdmtak"
+      }
+    },
+    "picked": {
+      "found": true,
+      "optionText": "Remote: <user>@127.0.0.1 · m4-07-muwdmtak ssh://<user>@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+      "trigger": "Remote: <user>@127.0.0.1 · m4-07-muwdmtak m4-07-muwdmtak",
+      "note": "Runs in m4-07-muwdmtak. The agent reads the rules of that folder.",
+      "worktreeSwitchDisabled": true
+    },
+    "sent": {
+      "clicked": true
+    },
+    "ms": 1023,
+    "args": {
+      "workspacePath": "ssh://<user>@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+      "authorizationMode": "ask",
+      "sandboxMode": "workspace",
+      "sandboxDisableWrite": false,
+      "sandboxDisableShell": false
+    },
+    "ok": true,
+    "sessionId": "01a1102f…",
+    "session": {
+      "workspace": "ssh://<user>@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+      "running": false,
+      "session_durability": "durable",
+      "approval_mode": "promptUnmatched",
+      "granted_capabilities": [
+        "userShell",
+        "sessionMcp"
+      ],
+      "model_id": "muse-spark-1.3-contributor",
+      "loaded": true
+    },
+    "storedConversationWorkspace": "ssh://<user>@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+    "sshLink": [
+      {
+        "pid": 32808,
+        "parentIsApp": true,
+        "exe": "C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+        "argv": "\"C:\\Windows\\System32\\OpenSSH\\ssh.exe\" -T -a -x -o ClearAllForwardings=yes -o RemoteCommand=none -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p 2222 -o BatchMode=yes -o ConnectTimeout=10 <user>@127.0.0.1 -- \"cd <remote home>/muse-proofs/m4-07-muwdmtak && exec env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 <remote home>/.local/bin/muse-bin-1.3.0-R3401.1 serve --sandbox-network restricted --trust-workspace\""
+      }
+    ],
+    "appChildren": [
+      "conhost.exe",
+      "msedgewebview2.exe",
+      "ssh.exe"
+    ],
+    "hostEngines": [
+      {
+        "serverVersion": "1.3.0",
+        "schemaFingerprint": "sha256:7469c9e352e67def4a59df7e439984d7194fa351e1c8b7abb34060fd977ced81",
+        "platform": "linux"
+      }
+    ],
+    "servesDuringTurn": {
+      "ours": [
+        {
+          "pid": 2751,
+          "cwd": "<remote home>/muse-proofs/m4-07-muwdmtak",
+          "env": "MUSE_LOGIN=0 MUSE_NO_AUTO_UPDATE=1",
+          "cmd": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1 serve --sandbox-network restricted --trust-workspace"
+        }
+      ],
+      "othersOnHost": 0
+    }
+  },
+  "turn": {
+    "assistantCount": 2,
+    "last": "WRITTEN",
+    "toolCount": 1,
+    "tools": [
+      "write_file · remote-proof.txt\nwrote 14 bytes to <remote home>/muse-proofs/m4-07-muwdmtak/remote-proof.txt"
+    ],
+    "failed": [],
+    "health": null,
+    "running": "false",
+    "cards": [],
+    "approvals": [],
+    "ms": 57618,
+    "remoteFile": {
+      "exists": true,
+      "owner": "<user> 14",
+      "content": "M4-07-muwdmtak"
+    },
+    "secretInWorkspace": null,
+    "header": {
+      "pill": "Connected",
+      "notice": null,
+      "reconnectButton": null,
+      "banner": null
+    }
+  },
+  "localOnly": {
+    "panels": {
+      "Changes": {
+        "notice": "Not available for remote conversations: this panel works on this computer's files.",
+        "terminal": false,
+        "review": false,
+        "files": false
+      },
+      "Terminal": {
+        "notice": "Not available for remote conversations: this panel works on this computer's files.",
+        "terminal": false,
+        "review": false,
+        "files": false
+      },
+      "Files": {
+        "notice": "Not available for remote conversations: this panel works on this computer's files.",
+        "terminal": false,
+        "review": false,
+        "files": false
+      },
+      "Browser": {
+        "notice": null,
+        "terminal": false,
+        "review": false,
+        "files": false
+      }
+    },
+    "native": {
+      "git_status": "Not available for remote conversations.",
+      "terminal_open": "Not available for remote conversations.",
+      "files_list": "Not available for remote conversations."
+    },
+    "worktreeAction": {
+      "found": true,
+      "text": "Move to worktree",
+      "disabled": true,
+      "title": "Not available for remote conversations: a worktree is a local git copy."
+    },
+    "welcomeWorktreeSwitchDisabled": true,
+    "localDiskCallsAnswered": []
+  },
+  "reconnect": {
+    "kills": [
+      {
+        "killedPid": 32808,
+        "parentWasApp": true,
+        "taskkill": "Opération réussie : le processus avec PID 32808 a été terminé.",
+        "timeline": [
+          {
+            "atMs": 1,
+            "pill": "Connected",
+            "notice": null,
+            "reconnectButton": null,
+            "banner": null
+          },
+          {
+            "atMs": 811,
+            "pill": "Connecting",
+            "notice": null,
+            "reconnectButton": "Reconnect",
+            "banner": null
+          },
+          {
+            "atMs": 1419,
+            "pill": "Connected",
+            "notice": null,
+            "reconnectButton": null,
+            "banner": null
+          }
+        ],
+        "silentResumes": [
+          {
+            "atMs": 69708,
+            "ok": true
+          }
+        ],
+        "linksAfter": [
+          {
+            "pid": 36620,
+            "parentIsApp": true
+          }
+        ],
+        "remoteAfterKill": {
+          "ours": [
+            {
+              "pid": 2950,
+              "cwd": "<remote home>/muse-proofs/m4-07-muwdmtak",
+              "env": "MUSE_LOGIN=0 MUSE_NO_AUTO_UPDATE=1",
+              "cmd": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1 serve --sandbox-network restricted --trust-workspace"
+            }
+          ],
+          "othersOnHost": 0
+        }
+      },
+      {
+        "killedPid": 36620,
+        "parentWasApp": true,
+        "taskkill": "Opération réussie : le processus avec PID 36620 a été terminé.",
+        "timeline": [
+          {
+            "atMs": 1,
+            "pill": "Connected",
+            "notice": null,
+            "reconnectButton": null,
+            "banner": null
+          },
+          {
+            "atMs": 406,
+            "pill": "Disconnected",
+            "notice": null,
+            "reconnectButton": "Reconnect",
+            "banner": null
+          }
+        ],
+        "silentResumes": [],
+        "linksAfter": [],
+        "remoteAfterKill": {
+          "ours": [],
+          "othersOnHost": 0
+        }
+      }
+    ],
+    "composerWhileDisconnected": {
+      "composer": true,
+      "sendDisabled": true
+    },
+    "reconnectClicked": true,
+    "msToConnected": 2633,
+    "reconnectedHeader": {
+      "pill": "Connected",
+      "notice": null,
+      "reconnectButton": null,
+      "banner": null
+    },
+    "resumeSession": [
+      {
+        "ok": true,
+        "workspacePath": "ssh://<user>@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+        "result": "{\"approval_mode\":\"promptUnmatched\",\"granted_capabilities\":[\"userShell\",\"sessionMcp\"],\"loaded\":true,\"model_id\":\"muse-spark-1.3-contributor\",\"running\":false,\"session_durability\":\"durable\",\"session_id\":\"01a1102f-7a60-7353-9a03-7f6e45d41ecc\",\"title\":\"Use your file-writing tool, not a shell command, to c",
+        "sameSession": true
+      }
+    ],
+    "historyReads": [
+      {
+        "cmd": "read_session_history",
+        "ok": true,
+        "hasMarker": true
+      }
+    ],
+    "hostHistory": {
+      "ok": true,
+      "items": [
+        {
+          "turn": "01a1102f-7666-768e-8b9e-23865a813a37",
+          "kind": "userMessage"
+        },
+        {
+          "turn": "01a1102f-7666-768e-8b9e-23865a813a37",
+          "kind": "reminderChild"
+        },
+        {
+          "turn": "01a1102f-7666-768e-8b9e-23865a813a37",
+          "kind": "reasoning"
+        },
+        {
+          "turn": "01a1102f-7666-768e-8b9e-23865a813a37",
+          "kind": "toolCall"
+        },
+        {
+          "turn": "01a1102f-7666-768e-8b9e-23865a813a37",
+          "kind": "agentMessage"
+        },
+        {
+          "turn": "01a1102f-7666-768e-8b9e-23865a813a37",
+          "kind": "reminderChild"
+        }
+      ],
+      "hasPrompt": true,
+      "hasSecretInPrompt": true
+    },
+    "screenAfterReconnect": {
+      "lanes": [
+        "user",
+        "thinking",
+        "tool",
+        "assistant",
+        "system",
+        "system"
+      ],
+      "firstPromptShown": true,
+      "writtenReplyShown": true
+    },
+    "newSshLink": [
+      {
+        "pid": 5304,
+        "killedBefore": false,
+        "exe": "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+      }
+    ],
+    "servesAfterReconnect": {
+      "ours": [
+        {
+          "pid": 3077,
+          "cwd": "<remote home>/muse-proofs/m4-07-muwdmtak",
+          "env": "MUSE_LOGIN=0 MUSE_NO_AUTO_UPDATE=1",
+          "cmd": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1 serve --sandbox-network restricted --trust-workspace"
+        }
+      ],
+      "othersOnHost": 0
+    },
+    "followUp": {
+      "clicked": true
+    },
+    "recall": {
+      "assistantCount": 4,
+      "last": "KEEP-E762A7F6",
+      "toolCount": 1,
+      "failed": [],
+      "health": null,
+      "running": "false",
+      "cards": [],
+      "approvals": [],
+      "ms": 30352,
+      "toolCallsThisTurn": 0,
+      "hostItemsThisTurn": [
+        "userMessage",
+        "reminderChild",
+        "reasoning",
+        "agentMessage",
+        "reminderChild"
+      ]
+    }
+  },
+  "failures": [
+    {
+      "cause": "unknown host key",
+      "target": {
+        "host": "localhost"
+      },
+      "settingsStatus": "Saved. Pick \"Remote: <user>@localhost\" as the project of a new conversation.",
+      "storedTarget": {
+        "user": "<user>",
+        "host": "localhost",
+        "port": 2222,
+        "musePath": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+        "workspacePath": "<remote home>/muse-proofs/m4-07-muwdmtak"
+      },
+      "startArgsWorkspacePath": "ssh://<user>@localhost:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+      "startOk": false,
+      "ms": 10232,
+      "error": "\"The host key of localhost:2222 is not trusted yet, or it changed. Check it once from a terminal: ssh -p 2222 <user>@localhost\"",
+      "banner": "This conversation could not be started. — The host key of localhost:2222 is not trusted yet, or it changed. Check it once from a terminal: ssh -p 2222 <user>@localhost",
+      "restartOffered": [],
+      "matchesExpected": true,
+      "knownHostsBefore": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsAfter": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsByteIdentical": true,
+      "appSshLinksAfter": 1
+    },
+    {
+      "cause": "authentication refused",
+      "target": {
+        "user": "nobody"
+      },
+      "settingsStatus": "Saved. Pick \"Remote: nobody@127.0.0.1\" as the project of a new conversation.",
+      "storedTarget": {
+        "user": "nobody",
+        "host": "127.0.0.1",
+        "port": 2222,
+        "musePath": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+        "workspacePath": "<remote home>/muse-proofs/m4-07-muwdmtak"
+      },
+      "startArgsWorkspacePath": "ssh://nobody@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+      "startOk": false,
+      "ms": 515,
+      "error": "\"nobody@127.0.0.1 refused the ssh authentication. Load a key into your ssh agent: the desktop never asks for a password.\"",
+      "banner": "This conversation could not be started. — nobody@127.0.0.1 refused the ssh authentication. Load a key into your ssh agent: the desktop never asks for a password.",
+      "restartOffered": [],
+      "matchesExpected": true,
+      "knownHostsBefore": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsAfter": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsByteIdentical": true,
+      "appSshLinksAfter": 1
+    },
+    {
+      "cause": "connection refused",
+      "target": {
+        "port": 2223
+      },
+      "settingsStatus": "Saved. Pick \"Remote: <user>@127.0.0.1\" as the project of a new conversation.",
+      "storedTarget": {
+        "user": "<user>",
+        "host": "127.0.0.1",
+        "port": 2223,
+        "musePath": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+        "workspacePath": "<remote home>/muse-proofs/m4-07-muwdmtak"
+      },
+      "startArgsWorkspacePath": "ssh://<user>@127.0.0.1:2223<remote home>/muse-proofs/m4-07-muwdmtak?muse=<remote home>/.local/bin/muse-bin-1.3.0-R3401.1",
+      "startOk": false,
+      "ms": 2570,
+      "error": "\"127.0.0.1:2223 refused the connection. Check that an ssh server listens on that port.\"",
+      "banner": "This conversation could not be started. — 127.0.0.1:2223 refused the connection. Check that an ssh server listens on that port.",
+      "restartOffered": [],
+      "matchesExpected": true,
+      "knownHostsBefore": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsAfter": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsByteIdentical": true,
+      "appSshLinksAfter": 1
+    },
+    {
+      "cause": "remote Muse missing",
+      "target": {
+        "musePath": "/nonexistent/muse"
+      },
+      "settingsStatus": "Saved. Pick \"Remote: <user>@127.0.0.1\" as the project of a new conversation.",
+      "storedTarget": {
+        "user": "<user>",
+        "host": "127.0.0.1",
+        "port": 2222,
+        "musePath": "/nonexistent/muse",
+        "workspacePath": "<remote home>/muse-proofs/m4-07-muwdmtak"
+      },
+      "startArgsWorkspacePath": "ssh://<user>@127.0.0.1:2222<remote home>/muse-proofs/m4-07-muwdmtak?muse=/nonexistent/muse",
+      "startOk": false,
+      "ms": 1026,
+      "error": "\"Muse was not found at /nonexistent/muse on 127.0.0.1. Install it there, or change the remote Muse path in Settings.\"",
+      "banner": "This conversation could not be started. — Muse was not found at /nonexistent/muse on 127.0.0.1. Install it there, or change the remote Muse path in Settings.",
+      "restartOffered": [],
+      "matchesExpected": true,
+      "knownHostsBefore": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsAfter": {
+        "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+        "bytes": 2610
+      },
+      "knownHostsByteIdentical": true,
+      "appSshLinksAfter": 1
+    }
+  ],
+  "knownHostsAfter": {
+    "sha256": "f927e423883cfb384fef6e785356f4942f29f02161585c38b4e421400323b6aa",
+    "bytes": 2610,
+    "localhostKnown": false
+  },
+  "consoleErrors": [],
+  "beforeClose": {
+    "appSshLinks": 1,
+    "serves": {
+      "ours": [
+        {
+          "pid": 3077,
+          "cwd": "<remote home>/muse-proofs/m4-07-muwdmtak",
+          "env": "MUSE_LOGIN=0 MUSE_NO_AUTO_UPDATE=1",
+          "cmd": "<remote home>/.local/bin/muse-bin-1.3.0-R3401.1 serve --sandbox-network restricted --trust-workspace"
+        }
+      ],
+      "othersOnHost": 0
+    }
+  },
+  "appClose": {
+    "method": "taskkill /PID without /F (WM_CLOSE to the window); /F only if still alive after 20 s",
+    "graceful": true,
+    "exited": true
+  },
+  "afterClose": {
+    "sshLinks": 0,
+    "serves": {
+      "ours": [],
+      "othersOnHost": 0
+    },
+    "pgrep": {
+      "command": "pgrep -af 'muse-bin.*serve'",
+      "exitCode": 1,
+      "output": ""
+    }
+  },
+  "remoteFolderDeleted": true,
+  "verdict": {
+    "0 isolated test instance": true,
+    "1 target saved from the form": true,
+    "1 new conversation started on the ssh:// key": true,
+    "1 app drove the system OpenSSH as its child": true,
+    "1 handshake: engine 1.3.0 on linux": true,
+    "2 live turn completed": true,
+    "2 file written on the remote host": true,
+    "3 Changes/Terminal/Files unavailable": true,
+    "3 native git/terminal/files refuse": true,
+    "3 worktree actions disabled": true,
+    "4 honest disconnected state": true,
+    "4 reconnect resumes the same session over a new link": true,
+    "4 history read back from the host": true,
+    "4 second code recalled with no tool call": true,
+    "5 errors honest": true,
+    "5 host key never accepted": true,
+    "6 closed gracefully": true,
+    "6 no orphan after close": true,
+    "liveTurns": 2,
+    "consoleErrors": 0
+  }
+}

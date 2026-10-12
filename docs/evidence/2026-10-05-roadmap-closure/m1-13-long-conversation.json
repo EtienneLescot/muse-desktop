@@ -1,0 +1,279 @@
+{
+  "schema": "muse-desktop.m1-13-long-conversation.v1",
+  "ticket": "M1-13",
+  "date": "2026-10-05",
+  "commit": "52f50cd",
+  "build": "debug build with embedded frontend, the fixes of this commit included (StreamView untouched)",
+  "platform": "Windows 11 (26200), WebView2 over CDP",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1) sidecar; no model turn",
+  "target": "the test conversation of this campaign, its 6-entry log replaced by 2,000 synthetic entries, then restored byte-identical",
+  "harness": {
+    "finderJump": "node scripts/cdp-finder-jump.mjs --out <file>",
+    "window": "node scripts/cdp-long-transcript.mjs",
+    "renderCost": "node scripts/cdp-perf.mjs"
+  },
+  "finderJump": {
+    "schema": "muse-desktop.cdp-finder-jump.v2",
+    "needleIndex": 137,
+    "entries": 2000,
+    "runs": [
+      {
+        "motion": "no-preference",
+        "matchMedia": false,
+        "before": {
+          "entryCount": 2000,
+          "windowStart": 1840,
+          "windowEnd": 2000,
+          "mountedArticles": 160,
+          "mountedNodes": 1366,
+          "firstPosinset": 1841,
+          "needleInWindow": false,
+          "searchFieldPresent": false,
+          "searchFieldValue": null,
+          "findStatus": null,
+          "findStatusRole": null,
+          "bodyHasNeedleText": false
+        },
+        "typed": {
+          "typed": true
+        },
+        "hits": [
+          "ASSISTANT FINDER-NEEDLE-137 unique marker placed outside the"
+        ],
+        "selected": "conversation-search-hit-0",
+        "after": {
+          "entryCount": 2000,
+          "windowStart": 125,
+          "windowEnd": 285,
+          "mountedArticles": 160,
+          "mountedNodes": 1377,
+          "firstPosinset": 126,
+          "needleInWindow": true,
+          "searchFieldPresent": true,
+          "searchFieldValue": "FINDER-NEEDLE-137",
+          "findStatus": "1 match · assistant, message 138 of 2000",
+          "findStatusRole": "status",
+          "bodyHasNeedleText": true
+        },
+        "scroll": {
+          "requestedBehavior": [
+            "smooth"
+          ],
+          "targetEntryIndex": [
+            "137"
+          ],
+          "framesSampled": 566,
+          "distinctScrollPositions": 54,
+          "intermediatePositions": 52
+        }
+      },
+      {
+        "motion": "reduce",
+        "matchMedia": true,
+        "before": {
+          "entryCount": 2000,
+          "windowStart": 1840,
+          "windowEnd": 2000,
+          "mountedArticles": 160,
+          "mountedNodes": 1366,
+          "firstPosinset": 1841,
+          "needleInWindow": false,
+          "searchFieldPresent": false,
+          "searchFieldValue": null,
+          "findStatus": null,
+          "findStatusRole": null,
+          "bodyHasNeedleText": false
+        },
+        "typed": {
+          "typed": true
+        },
+        "hits": [
+          "ASSISTANT FINDER-NEEDLE-137 unique marker placed outside the"
+        ],
+        "selected": "conversation-search-hit-0",
+        "after": {
+          "entryCount": 2000,
+          "windowStart": 125,
+          "windowEnd": 285,
+          "mountedArticles": 160,
+          "mountedNodes": 1377,
+          "firstPosinset": 126,
+          "needleInWindow": true,
+          "searchFieldPresent": true,
+          "searchFieldValue": "FINDER-NEEDLE-137",
+          "findStatus": "1 match · assistant, message 138 of 2000",
+          "findStatusRole": "status",
+          "bodyHasNeedleText": true
+        },
+        "scroll": {
+          "requestedBehavior": [
+            "auto"
+          ],
+          "targetEntryIndex": [
+            "137"
+          ],
+          "framesSampled": 691,
+          "distinctScrollPositions": 2,
+          "intermediatePositions": 0
+        }
+      }
+    ],
+    "target": {
+      "originalBytes": 1757
+    },
+    "initial": {
+      "entryCount": 2000,
+      "windowStart": 1720,
+      "windowEnd": 1880,
+      "mountedArticles": 160,
+      "mountedNodes": 1368,
+      "firstPosinset": 1721,
+      "needleInWindow": false,
+      "searchFieldPresent": false,
+      "searchFieldValue": null,
+      "findStatus": null,
+      "findStatusRole": null,
+      "bodyHasNeedleText": false
+    },
+    "verdict": {
+      "jumpedOutsideWindow": true,
+      "statusAnnounced": true,
+      "smoothWithoutPreference": true,
+      "instantWhenReduced": true,
+      "domBound": 160
+    },
+    "restored": {
+      "bytes": 1757,
+      "identical": true,
+      "hasNeedle": false
+    }
+  },
+  "window": {
+    "schema": "muse-desktop.cdp-long-transcript.v1",
+    "requestedEntries": 2000,
+    "steps": {},
+    "original": {
+      "bytes": 1757,
+      "entries": 6
+    },
+    "written": {
+      "entries": 2000,
+      "bytes": 347671,
+      "seedUsed": true
+    },
+    "open": {
+      "found": true
+    },
+    "afterReload": {
+      "transcriptFound": true,
+      "dataEntryCount": "2000",
+      "dataWindowStart": "0",
+      "dataWindowEnd": "160",
+      "ariaLabel": "Conversation messages",
+      "ariaKeyshortcuts": "Home End PageUp PageDown",
+      "mountedArticles": 160,
+      "mountedNodes": 1364,
+      "setsizeSample": "2000",
+      "posinsetSample": "1",
+      "hasLoadOlder": false,
+      "hasLatest": true,
+      "hasFinder": true
+    },
+    "restored": {
+      "bytes": 1757
+    }
+  },
+  "renderCost": {
+    "schema": "muse-desktop.cdp-perf.v1",
+    "entries": 2000,
+    "baselineMetrics": {
+      "Documents": 1,
+      "Nodes": 1990,
+      "LayoutCount": 0,
+      "RecalcStyleCount": 0,
+      "LayoutDuration": 0,
+      "RecalcStyleDuration": 0,
+      "ScriptDuration": 0,
+      "TaskDuration": 0,
+      "JSHeapUsedSize": "9470 KiB",
+      "JSHeapTotalSize": "17640 KiB",
+      "DomContentLoaded": 25887.006
+    },
+    "baselineDom": {
+      "transcriptFound": true,
+      "dataEntryCount": 6,
+      "mountedArticles": 2,
+      "domNodesInTranscript": 24,
+      "totalDomNodes": 1386,
+      "scrollHeight": 288
+    },
+    "baselineNavigation": {
+      "domContentLoadedMs": 140,
+      "loadEventMs": 140,
+      "firstContentfulPaintMs": 52,
+      "domInteractiveMs": 26
+    },
+    "target": {
+      "originalBytes": 1757
+    },
+    "written": {
+      "entries": 2000,
+      "bytes": 373671
+    },
+    "wallClockToSettledMs": 14006,
+    "loadedMetrics": {
+      "Documents": 1,
+      "Nodes": 3814,
+      "LayoutCount": 12,
+      "RecalcStyleCount": 17,
+      "LayoutDuration": 0.015,
+      "RecalcStyleDuration": 0.021,
+      "ScriptDuration": 0.721,
+      "TaskDuration": 0.954,
+      "JSHeapUsedSize": "9270 KiB",
+      "JSHeapTotalSize": "21224 KiB",
+      "DomContentLoaded": 25897.201
+    },
+    "loadedDom": {
+      "transcriptFound": true,
+      "dataEntryCount": 2000,
+      "mountedArticles": 160,
+      "domNodesInTranscript": 1368,
+      "totalDomNodes": 2730,
+      "scrollHeight": 162461
+    },
+    "loadedNavigation": {
+      "domContentLoadedMs": 107,
+      "loadEventMs": 108,
+      "firstContentfulPaintMs": 48,
+      "domInteractiveMs": 21
+    },
+    "incrementalPage": {
+      "domAfter": {
+        "transcriptFound": true,
+        "dataEntryCount": 2000,
+        "mountedArticles": 160,
+        "domNodesInTranscript": 1368,
+        "totalDomNodes": 2730,
+        "scrollHeight": 152621
+      },
+      "layoutDelta": 0.0010000000000000009,
+      "styleDelta": 0.0019999999999999983,
+      "scriptDelta": 0.08700000000000008
+    },
+    "restored": {
+      "bytes": 1757,
+      "hasSynthetic": false
+    }
+  },
+  "verdict": {
+    "jumpOutsideDomWindow": true,
+    "statusLineAnnouncesPosition": true,
+    "statusLine": "1 match · assistant, message 138 of 2000",
+    "smoothScrollWithoutPreference": true,
+    "instantScrollWhenReducedMotion": true,
+    "domBoundArticles": 160,
+    "finderMountsInThisBuild": true,
+    "logsRestored": true
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "schema": "muse-desktop.msp-host-stop.v1",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "waitAfterTheRunMs": 1500,
+  "runs": [
+    {
+      "mode": "kill",
+      "runReportedToTheClient": true,
+      "beforeStop": {
+        "resultInJournal": false,
+        "lastRecord": "task",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": false
+      },
+      "stop": {
+        "killed": true
+      },
+      "afterStop": {
+        "resultInJournal": false,
+        "lastRecord": "task",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": false
+      },
+      "viewAfterNextResume": "unavailable",
+      "nextHostEvents": []
+    },
+    {
+      "mode": "close",
+      "runReportedToTheClient": true,
+      "beforeStop": {
+        "resultInJournal": true,
+        "lastRecord": "user_shell_result",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": true
+      },
+      "stop": {
+        "exitedOnItsOwn": true,
+        "ms": 89
+      },
+      "afterStop": {
+        "resultInJournal": true,
+        "lastRecord": "session_end",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": true
+      },
+      "viewAfterNextResume": "healthy",
+      "nextHostEvents": [
+        "item/started:userShell",
+        "item/completed:userShell"
+      ]
+    },
+    {
+      "mode": "kill",
+      "runReportedToTheClient": true,
+      "beforeStop": {
+        "resultInJournal": false,
+        "lastRecord": "task",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": false
+      },
+      "stop": {
+        "killed": true
+      },
+      "afterStop": {
+        "resultInJournal": false,
+        "lastRecord": "task",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": false
+      },
+      "viewAfterNextResume": "unavailable",
+      "nextHostEvents": []
+    },
+    {
+      "mode": "close",
+      "runReportedToTheClient": true,
+      "beforeStop": {
+        "resultInJournal": false,
+        "lastRecord": "task",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": false
+      },
+      "stop": {
+        "exitedOnItsOwn": true,
+        "ms": 78
+      },
+      "afterStop": {
+        "resultInJournal": true,
+        "lastRecord": "session_end",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": true
+      },
+      "viewAfterNextResume": "healthy",
+      "nextHostEvents": [
+        "item/started:userShell",
+        "item/completed:userShell"
+      ]
+    },
+    {
+      "mode": "kill",
+      "runReportedToTheClient": true,
+      "beforeStop": {
+        "resultInJournal": true,
+        "lastRecord": "user_shell_result",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": true
+      },
+      "stop": {
+        "killed": true
+      },
+      "afterStop": {
+        "resultInJournal": true,
+        "lastRecord": "user_shell_result",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": true
+      },
+      "viewAfterNextResume": "healthy",
+      "nextHostEvents": [
+        "item/started:userShell",
+        "item/completed:userShell"
+      ]
+    },
+    {
+      "mode": "close",
+      "runReportedToTheClient": true,
+      "beforeStop": {
+        "resultInJournal": false,
+        "lastRecord": "task",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": false
+      },
+      "stop": {
+        "exitedOnItsOwn": true,
+        "ms": 90
+      },
+      "afterStop": {
+        "resultInJournal": true,
+        "lastRecord": "session_end",
+        "viewStatus": "healthy",
+        "viewRecordInJournal": true
+      },
+      "viewAfterNextResume": "healthy",
+      "nextHostEvents": [
+        "item/started:userShell",
+        "item/completed:userShell"
+      ]
+    }
+  ],
+  "tally": {
+    "kill": {
+      "runs": 3,
+      "resultKept": 1,
+      "viewUnavailableAfterNextResume": 2,
+      "nextHostStillStreams": 1
+    },
+    "close": {
+      "runs": 3,
+      "resultKept": 3,
+      "viewUnavailableAfterNextResume": 0,
+      "nextHostStillStreams": 3
+    }
+  },
+  "reading": [
+    "kill (what the app did on every host stop): the run was reported to the client (item/completed) but its result record was not yet in the session journal 1.5 s later in 2 of 3 runs; killed then, the host lost it, the next resume found the view ahead of the journal and set it \"unavailable\", and the next host sent no item event of this conversation at all.",
+    "close (stdin closed): the host exited on its own in 78 to 90 ms, wrote the missing records and session_end, the view stayed healthy and the next host streamed.",
+    "The app now stops hosts this way (MspClient::stop: stdin closed, killed only after 3 s), for a reload, Restart host, a full-host recycle and the app exit."
+  ],
+  "ticket": "M0-13",
+  "date": "2026-10-06",
+  "platform": "Windows 11 (26200)",
+  "script": "scripts/msp-host-stop.mjs",
+  "engineRole": "the native engine every local host of the M0-13 instance runs (MUSE_DESKTOP_TEST_SIDECAR)",
+  "store": "the engine keeps sessions under ~/.local/share/muse/sessions (journal) and its .msp-view-v1 folder (views); test mode does not isolate it (ADR 0003)"
+}

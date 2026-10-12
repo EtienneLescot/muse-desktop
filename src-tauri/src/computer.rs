@@ -42,7 +42,7 @@ use serde_json::{json, Value};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -60,13 +60,31 @@ pub const SOCKET_NAME: &str = "muse-desktop-computer.sock";
 
 /// The endpoint string handed to `--socket`.
 pub fn endpoint() -> String {
+    // `cargo test` runs where the driver may be installed and the user's own
+    // service live: on their endpoint, `disable` in a test revoked and stopped it.
+    #[cfg(test)]
+    let test_dir = Some(std::env::temp_dir().join("muse-desktop-unit-tests"));
+    #[cfg(not(test))]
+    let test_dir = crate::test_mode::data_dir();
+    endpoint_for(test_dir.as_deref())
+}
+
+/// A test instance (ADR 0003) runs beside the user's app: on the shared pipe
+/// its level change or revoke would stop and replace the user's own service.
+/// It gets an endpoint of its own, named after its data folder so the relay
+/// the engine starts finds the same one.
+fn endpoint_for(test_dir: Option<&Path>) -> String {
+    let suffix = test_dir
+        .map(|dir| format!("-test-{:016x}", fnv1a(dir.to_string_lossy().as_bytes())))
+        .unwrap_or_default();
     #[cfg(windows)]
     {
-        PIPE.to_string()
+        format!("{PIPE}{suffix}")
     }
     #[cfg(not(windows))]
     {
-        std::env::temp_dir().join(SOCKET_NAME).display().to_string()
+        let name = SOCKET_NAME.replace(".sock", &format!("{suffix}.sock"));
+        std::env::temp_dir().join(name).display().to_string()
     }
 }
 
@@ -388,12 +406,21 @@ pub fn run_relay() -> i32 {
     child.wait().ok().and_then(|status| status.code()).unwrap_or(0)
 }
 
-/// Where the relay finds the recorded level: the same directory the app uses
-/// (`app_data_dir/computer-use`), reconstructed from the environment because
-/// the relay runs without a Tauri app handle. The identifier mirrors
-/// `tauri.conf.json`; a miss means no ceiling, and the driver's own policy
-/// still applies.
+/// The level on record, read once by the relay. A miss means no ceiling, and
+/// the driver's own policy still applies.
 fn relay_level() -> Option<&'static str> {
+    recorded_level(&read_manifest(&relay_dir(crate::test_mode::data_dir())?)?)
+}
+
+/// Where the relay finds the recorded level: the same directory the app uses
+/// (`computer_data_dir` in main.rs), reconstructed from the environment
+/// because the relay runs without a Tauri app handle. A test instance's is in
+/// its own data folder, whose variable the engine passes on to the relay. The
+/// identifier mirrors `tauri.conf.json`.
+fn relay_dir(test_dir: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(dir) = test_dir {
+        return Some(dir.join("computer-use"));
+    }
     #[cfg(windows)]
     let base = std::env::var_os("APPDATA").map(PathBuf::from)?;
     #[cfg(target_os = "macos")]
@@ -403,8 +430,7 @@ fn relay_level() -> Option<&'static str> {
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))?;
-    let dir = base.join("com.muse.desktop").join("computer-use");
-    recorded_level(&read_manifest(&dir)?)
+    Some(base.join("com.muse.desktop").join("computer-use"))
 }
 
 /// The relay's level ceiling (M4-03). With the browser attached the driver
@@ -541,27 +567,33 @@ fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Probe, String
     let mut child = command
         .spawn()
         .map_err(|error| format!("cannot run {}: {error}", program.display()))?;
+    // Read while waiting: a child that fills a pipe would block until the timeout.
+    let stdout = child.stdout.take().map(drain);
+    let stderr = child.stderr.take().map(drain);
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) if started.elapsed() < timeout => thread::sleep(Duration::from_millis(25)),
             Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
                 break None;
             }
             Err(error) => return Err(format!("waiting for {} failed: {error}", program.display())),
         }
     };
-    let stdout = child.stdout.take().map(drain);
-    let stderr = child.stderr.take().map(drain);
+    // What the child started can keep its pipes open after it ended: read
+    // what came, never past this bound.
+    let read_until = Instant::now() + Duration::from_secs(2);
+    let collect = |reader: Option<mpsc::Receiver<Vec<u8>>>| {
+        reader
+            .and_then(|rx| rx.recv_timeout(read_until.saturating_duration_since(Instant::now())).ok())
+            .unwrap_or_default()
+    };
     let mut text = String::new();
-    if let Some(reader) = stdout {
-        text.push_str(&String::from_utf8_lossy(&reader.join().unwrap_or_default()));
-    }
-    if let Some(reader) = stderr {
-        let extra = String::from_utf8_lossy(&reader.join().unwrap_or_default()).to_string();
+    text.push_str(&String::from_utf8_lossy(&collect(stdout)));
+    {
+        let extra = String::from_utf8_lossy(&collect(stderr)).to_string();
         if !extra.trim().is_empty() {
             if !text.is_empty() && !text.ends_with('\n') {
                 text.push('\n');
@@ -582,12 +614,34 @@ fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Probe, String
     }
 }
 
-fn drain<R: Read + Send + 'static>(mut reader: R) -> thread::JoinHandle<Vec<u8>> {
+fn drain<R: Read + Send + 'static>(mut reader: R) -> mpsc::Receiver<Vec<u8>> {
+    let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let mut bytes = Vec::new();
         let _ = reader.read_to_end(&mut bytes);
-        bytes
-    })
+        let _ = tx.send(bytes);
+    });
+    rx
+}
+
+/// Kill the child and what it started. A driver `status` runs a second
+/// `status`; killed alone, the parent left it holding the pipes, and with a
+/// pipe nobody answered the call hung for good, its timeout notwithstanding
+/// (M0-13 forced failure, 06/10/2026).
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        let mut taskkill = Command::new("taskkill");
+        taskkill
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        hidden_window(&mut taskkill);
+        let _ = taskkill.status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// The driver's own tool list, one name per line.
@@ -755,15 +809,18 @@ pub fn set_attach(dir: &Path, attach: bool) -> Result<Value, String> {
 /// exact bytes they approved. This mirrors the sha256 the driver reports, but is
 /// computed here so it exists even when the service is down.
 fn manifest_digest(manifest: &Value) -> String {
-    let canonical = serde_json::to_string(manifest).unwrap_or_default();
     // FNV-1a over the canonical JSON: this is a display fingerprint, not a
     // security boundary — the driver holds the real sha256.
+    format!("{:016x}", fnv1a(serde_json::to_string(manifest).unwrap_or_default().as_bytes()))
+}
+
+fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in canonical.as_bytes() {
+    for byte in bytes {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
-    format!("{hash:016x}")
+    hash
 }
 
 /// Everything the UI needs to describe the feature honestly.
@@ -829,7 +886,9 @@ fn level_counts(available: &[String]) -> Value {
 /// * `attach=false` — the manifest carries the level: `bounded` + capability
 ///   manifest for "observe", `--dangerously-bypass-approvals` for "act"
 ///   (LEVELS explains why act cannot be bounded). The manifest's time bounds
-///   hold.
+///   hold. The record of "act" is never handed over: served as a bounded
+///   capability manifest, the driver refused it and act never started
+///   (measured 06/10/2026, "the computer-use service did not start").
 /// * `attach=true` — `standard --grant existing-profile` and **no manifest**.
 ///   The driver refuses `--grant` outside standard ("--grant is valid only in
 ///   standard permission mode"), and every capability manifest makes windows
@@ -839,7 +898,7 @@ fn level_counts(available: &[String]) -> Value {
 ///   mode keeps its own driver-side ceiling (measured: `kill_app` refused,
 ///   `foreign_process_termination_denied`); the observe/act tool ceiling moves
 ///   to the relay, which reads the recorded level.
-pub fn serve_argv(endpoint: &str, manifest_path: Option<&str>, attach: bool) -> Vec<String> {
+pub fn serve_argv(endpoint: &str, manifest: &Value, manifest_path: &str, attach: bool) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "serve".to_string(),
         "--socket".to_string(),
@@ -854,17 +913,18 @@ pub fn serve_argv(endpoint: &str, manifest_path: Option<&str>, attach: bool) -> 
         ]);
         return args;
     }
-    match manifest_path {
-        Some(path) => args.extend([
+    if manifest["mode"] == "bounded" {
+        args.extend([
             "--permission-mode".to_string(),
             "bounded".to_string(),
             "--capability-manifest".to_string(),
-            path.to_string(),
+            manifest_path.to_string(),
             "--approve-capability-manifest".to_string(),
-        ]),
+        ]);
+    } else {
         // The user consented to "act" in Settings; LEVELS says why it cannot
         // be bounded.
-        None => args.extend(["--dangerously-bypass-approvals".to_string()]),
+        args.push("--dangerously-bypass-approvals".to_string());
     }
     args
 }
@@ -892,11 +952,10 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
 
     let endpoint = endpoint();
     let attach = read_attach(dir).unwrap_or(false);
-    let manifest_path = (!attach).then(|| path.display().to_string());
-    // With the browser attached the manifest is still written — it is the
-    // level record the relay and `resume` read — but it is not handed to the
-    // driver (`serve_argv` explains why it cannot be).
-    let args = serve_argv(&endpoint, manifest_path.as_deref(), attach);
+    // The manifest is always written — it is the level record the relay and
+    // `resume` read — but only a bounded one is handed to the driver
+    // (`serve_argv` explains why).
+    let args = serve_argv(&endpoint, &manifest, &path.display().to_string(), attach);
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let mut command = service_command(&driver, &args);
     command
@@ -994,6 +1053,18 @@ pub fn resume(dir: &Path) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// M0-13 forced failure (06/10/2026): a timed-out child whose own child
+    /// kept the pipes open hung `run` (and a level change) for good.
+    #[cfg(windows)]
+    #[test]
+    fn a_timed_out_child_and_what_it_started_never_hang_the_call() {
+        let started = Instant::now();
+        // cmd waits for ping, which inherits the pipes and outlives a plain kill of cmd.
+        let result = run(Path::new("cmd"), &["/C", "ping -n 30 127.0.0.1"], Duration::from_secs(1));
+        assert!(result.is_err(), "timed out");
+        assert!(started.elapsed() < Duration::from_secs(10), "returned after {:?}", started.elapsed());
+    }
 
     /// The exact list `cua-driver 0.28.2` reports through `list-tools`.
     const V0282: [&str; 57] = [
@@ -1342,13 +1413,39 @@ mod tests {
         assert_eq!(surface_browser_ids(&plain.to_string()), None);
     }
 
+    /// M0-13: a test instance's level change or revoke must never reach the
+    /// user's own service, so its pipe differs, and stays the same for the
+    /// relay that runs in another process with the same data folder. That
+    /// relay reads its level ceiling from the test folder, not the user's.
+    #[cfg(windows)]
+    #[test]
+    fn a_test_instance_keeps_to_its_own_pipe_and_grant() {
+        let dir = Path::new(r"G:\proofs\appdata-1");
+        assert_eq!(endpoint_for(None), PIPE);
+        let one = endpoint_for(Some(dir));
+        assert_ne!(one, PIPE);
+        assert!(one.starts_with(PIPE));
+        assert_eq!(one, endpoint_for(Some(Path::new(r"G:\proofs\appdata-1"))));
+        assert_ne!(one, endpoint_for(Some(Path::new(r"G:\proofs\appdata-2"))));
+        assert_eq!(relay_dir(Some(dir.to_path_buf())), Some(dir.join("computer-use")));
+    }
+
+    /// The tests here call `disable` and probe the service: with the driver
+    /// installed, on the user's endpoint they revoked and stopped their grant.
+    #[test]
+    fn unit_tests_never_reach_the_users_endpoint() {
+        assert_ne!(endpoint(), endpoint_for(None));
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn the_unix_endpoint_is_a_private_short_socket() {
-        let endpoint = endpoint();
-        assert!(endpoint.ends_with(SOCKET_NAME));
-        assert!(endpoint.len() < 104, "sun_path limit: {endpoint}");
-        assert!(std::path::Path::new(&endpoint).is_absolute());
+        let shipped = endpoint_for(None);
+        assert!(shipped.ends_with(SOCKET_NAME));
+        for endpoint in [shipped, endpoint()] {
+            assert!(endpoint.len() < 104, "sun_path limit: {endpoint}");
+            assert!(std::path::Path::new(&endpoint).is_absolute());
+        }
     }
 
     /// A grant that has lapsed must not be handed to the host: the service is
@@ -1367,28 +1464,30 @@ mod tests {
     #[test]
     fn the_serve_argv_matrix_matches_the_measured_driver_rules() {
         let endpoint = "\\\\.\\pipe\\muse-test";
-        let manifest = Some("C:\\data\\computer-manifest.json");
+        let path = "C:\\data\\computer-manifest.json";
+        let record = |level| manifest(level, &fixture()).unwrap();
 
         // observe, browser detached: the bounded manifest carries the level.
-        let observe = serve_argv(endpoint, manifest, false);
+        let observe = serve_argv(endpoint, &record("observe"), path, false);
         assert_eq!(
             observe,
             [
                 "serve", "--socket", endpoint, "--permission-mode", "bounded",
-                "--capability-manifest", manifest.unwrap(), "--approve-capability-manifest",
+                "--capability-manifest", path, "--approve-capability-manifest",
             ]
         );
 
-        // act, browser detached: unrestricted, no manifest handed over.
-        let act = serve_argv(endpoint, None, false);
+        // act, browser detached: unrestricted, its record never handed over
+        // (served as a bounded manifest, act never started: 06/10/2026).
+        let act = serve_argv(endpoint, &record("act"), path, false);
         assert!(act.contains(&"--dangerously-bypass-approvals".to_string()));
-        assert!(!act.iter().any(|arg| arg == "--permission-mode"));
+        assert!(!act.iter().any(|arg| arg == "--permission-mode" || arg == path));
 
         // Browser attached, either level: standard + grant, and no manifest —
         // the driver refuses `--grant` outside standard, and every manifest
         // makes the user's live windows invisible unless each pid is named.
         for level in LEVELS {
-            let attached = serve_argv(endpoint, manifest, true);
+            let attached = serve_argv(endpoint, &record(level), path, true);
             assert_eq!(
                 attached,
                 [

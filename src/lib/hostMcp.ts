@@ -87,7 +87,17 @@ export function buildHostMcpServers(
   remoteSessions: Record<string, RemoteMcpSession> = {},
   computerUseServer: HostMcpStdioServer | null = null,
 ): HostMcpServer[] {
+  return hostMcpConfig(entries, remoteSessions, computerUseServer).servers;
+}
+
+/** The host config, and the remote connectors whose bearer it hands to the conversation. */
+export function hostMcpConfig(
+  entries: ConnectorEntry[],
+  remoteSessions: Record<string, RemoteMcpSession> = {},
+  computerUseServer: HostMcpStdioServer | null = null,
+): { servers: HostMcpServer[]; remoteIds: string[] } {
   const result: HostMcpServer[] = [];
+  const owners: (string | null)[] = [];
   const seen = new Set<string>();
   if (computerUseServer !== null) {
     const tokens = [computerUseServer.command, ...(computerUseServer.args ?? [])];
@@ -120,6 +130,7 @@ export function buildHostMcpServers(
     if (seen.has(key)) continue;
     seen.add(key);
     const token = session.token.trim();
+    owners[result.length] = entry.id;
     result.push({
       transport: "streamableHttp",
       url,
@@ -127,5 +138,33 @@ export function buildHostMcpServers(
       mode: "optional",
     });
   }
-  return result.slice(0, 32);
+  return {
+    servers: result.slice(0, 32),
+    remoteIds: owners.slice(0, 32).filter((id): id is string => typeof id === "string"),
+  };
+}
+
+/**
+ * M3-02: the open conversations whose host was handed this remote connector's
+ * bearer (Use in Muse). Forget token, Disconnect, Disable, Remove or Use in
+ * Muse off cannot take it back from them.
+ */
+export function conversationsHoldingRemote(
+  handed: Record<string, readonly string[]>,
+  connected: readonly string[],
+  connectorId: string,
+): string[] {
+  return connected.filter((sessionId) => handed[sessionId]?.includes(connectorId) === true);
+}
+
+/** What each of those conversations is told, in its transcript. */
+export function heldBearerLine(connectorName: string, action: string): string {
+  return `${connectorName}: ${action} in Extensions, but this conversation's Muse host still has its token: it keeps using it until you use "Reconnect with current connectors" or close the conversation, and a tool already allowed here keeps working without asking.`;
+}
+
+/** The connector panel's word on them, or null when none holds the token. */
+export function heldBearerNotice(count: number): string | null {
+  return count === 0
+    ? null
+    : `${count} open conversation${count === 1 ? " still has" : "s still have"} its token: ${count === 1 ? "it keeps" : "they keep"} using it until you use "Reconnect with current connectors" on ${count === 1 ? "it" : "them"} or close ${count === 1 ? "it" : "them"}, and a tool already allowed there keeps working without asking.`;
 }

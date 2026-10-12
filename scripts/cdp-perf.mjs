@@ -135,7 +135,7 @@ async function main() {
       const active = localStorage.getItem("muse-desktop.active.v1");
       const id = active ? active.replace(/"/g, "") : null;
       const keys = Object.keys(localStorage).filter((k) => k.startsWith("muse-desktop.log.v1."));
-      const key = id && localStorage.getItem("muse-desktop.log.v1." + id) ? "muse-desktop.log.v1." + id : keys[0];
+      const key = id && localStorage.getItem("muse-desktop.log.v1." + id) ? "muse-desktop.log.v1." + id : null; // never fall back to another conversation
       return { key, original: key ? localStorage.getItem(key) : null };
     })()`);
     if (!picked.key) throw new Error("no transcript log key found");

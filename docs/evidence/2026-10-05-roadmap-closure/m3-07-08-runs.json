@@ -1,0 +1,2262 @@
+{
+  "schema": "muse-desktop.m3-07-08-runs.v1",
+  "tickets": [
+    "M3-08",
+    "M3-07"
+  ],
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "posture": "Approve on my behalf (host onRequest); text-only prompts, no tool call expected",
+  "phases": {
+    "setup": {
+      "build": "pre-fix (run summary counted hidden rows)",
+      "liveTurns": 0,
+      "userValuesSaved": true,
+      "posture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "defaultFolder": {
+        "clicked": true,
+        "stored": "<ws>",
+        "shown": "<ws>",
+        "setWorkspaceOk": true
+      },
+      "scheduler": {
+        "mode": "native",
+        "text": "Native scheduler active"
+      },
+      "wakeTask": {
+        "exists": true,
+        "startBoundary": "2027-03-28T03:30:00+02:00",
+        "startEpoch": 1806197400000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "consoleErrors": []
+    },
+    "new-prefix": {
+      "build": "pre-fix (run summary counted hidden rows)",
+      "capturedProjectFromActiveConversation": true,
+      "liveTurns": 1,
+      "schedule": {
+        "ok": true,
+        "scheduleId": "sched-muvbpyss-89qi8e",
+        "threadReuse": "new",
+        "targetIsRequested": true,
+        "authorizationMode": "workspace",
+        "projectId": "muv9rghn-80pvqo",
+        "workspace": "<ws>",
+        "triggerAt": 1791209280000,
+        "timeZone": "Europe/Paris",
+        "scheduledFor": 60272
+      },
+      "timeline": [
+        {
+          "at": 61555,
+          "status": "queued",
+          "turnId": null,
+          "sessionId": null,
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Queued",
+          "cardPreview": null
+        },
+        {
+          "at": 65525,
+          "status": "running",
+          "turnId": null,
+          "sessionId": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 67911,
+          "status": "running",
+          "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f",
+          "sessionId": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 99890,
+          "status": "completed",
+          "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f",
+          "sessionId": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "preview": "RUN-NEW-bpxub Next steps: archive this run",
+          "summary": "RUN-NEW-bpxub Next steps: archive this run",
+          "error": null,
+          "cardStatus": "Completed",
+          "cardPreview": "RUN-NEW-bpxub Next steps: archive this run"
+        }
+      ],
+      "run": {
+        "local": {
+          "id": "run-muvbrau4-4cqgxf",
+          "status": "completed",
+          "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f",
+          "sessionId": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209280000,
+          "createdAt": 1791209281180,
+          "startedAt": 1791209285045,
+          "finishedAt": 1791209319465,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-NEW-bpxub Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-bpxub Next steps: archive this run",
+            "totalItems": 6,
+            "assistantMessages": 2,
+            "toolEvents": 0,
+            "nextSteps": [
+              "archive this run"
+            ],
+            "issues": []
+          },
+          "error": null
+        },
+        "native": {
+          "id": "run-muvbrau4-4cqgxf",
+          "status": "completed",
+          "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f",
+          "sessionId": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209280000,
+          "createdAt": 1791209281180,
+          "startedAt": 1791209285045,
+          "finishedAt": 1791209319465,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-NEW-bpxub Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-bpxub Next steps: archive this run",
+            "totalItems": 6,
+            "assistantMessages": 2,
+            "toolEvents": 0,
+            "nextSteps": [
+              "archive this run"
+            ],
+            "issues": []
+          },
+          "error": null
+        },
+        "card": {
+          "status": "Completed",
+          "dataStatus": "completed",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "meta": "05/10/2026 16:08:01 · conversation started",
+          "preview": "RUN-NEW-bpxub Next steps: archive this run",
+          "summaryHeadline": "RUN-NEW-bpxub Next steps: archive this run",
+          "summaryFacts": "2 responses · 1 next step",
+          "nextStepsObserved": [
+            "archive this run"
+          ],
+          "error": null,
+          "details": {
+            "Target": "New conversation",
+            "Authorization": "Workspace",
+            "Model": "default",
+            "Timezone": "Europe/Paris",
+            "Attempt": "1 / 3",
+            "Occurrence": "05/10/2026 16:08:00",
+            "Started": "05/10/2026 16:08:05",
+            "Finished": "05/10/2026 16:08:39",
+            "Duration": "34s"
+          },
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Archive"
+          ]
+        }
+      },
+      "sendAck": {
+        "at": 1791209287469,
+        "ok": true,
+        "disposition": "started",
+        "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f"
+      },
+      "hostEvents": [
+        {
+          "at": 68411,
+          "seq": 3,
+          "sid": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "kind": "started",
+          "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 99736,
+          "seq": 27,
+          "sid": "01a10c64-9e6e-7c40-a8d2-709df136cd78",
+          "kind": "completed",
+          "turnId": "01a10c64-a5b4-731e-84cd-b130fbe6cb0f",
+          "terminal": "completed",
+          "keys": [
+            "durationMs",
+            "error",
+            "reason",
+            "terminal",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        }
+      ],
+      "verdict": {
+        "firedWithoutClick": true,
+        "newConversation": true,
+        "anchoredToAdmittedTurn": true,
+        "settledByItsOwnTerminal": true,
+        "noPreviewBeforeTerminal": true,
+        "completed": true,
+        "previewIsRunAnswer": true,
+        "summaryScoped": false,
+        "unreadAfterSettle": true,
+        "hostStructuredPreview": "none emitted by the host"
+      },
+      "consoleErrors": []
+    },
+    "new-blocked": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "schedule": {
+        "ok": true,
+        "scheduleId": "sched-muvbxli9-9qvwmx",
+        "threadReuse": "new",
+        "targetIsRequested": true,
+        "authorizationMode": "workspace",
+        "projectId": null,
+        "workspace": "<ws>",
+        "triggerAt": 1791209640000,
+        "timeZone": "Europe/Paris",
+        "scheduledFor": 64251
+      },
+      "timeline": [
+        {
+          "at": 65771,
+          "status": "failed",
+          "turnId": null,
+          "sessionId": null,
+          "preview": null,
+          "summary": null,
+          "error": "could not start target conversation",
+          "cardStatus": "Failed",
+          "cardPreview": null
+        }
+      ],
+      "run": {
+        "local": {
+          "id": "run-muvbz0mp-adsbhg",
+          "status": "failed",
+          "turnId": null,
+          "sessionId": null,
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209640000,
+          "createdAt": 1791209641201,
+          "startedAt": null,
+          "finishedAt": 1791209641226,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": "could not start target conversation"
+        },
+        "native": {
+          "id": "run-muvbz0mp-adsbhg",
+          "status": "failed",
+          "turnId": null,
+          "sessionId": null,
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209640000,
+          "createdAt": 1791209641201,
+          "startedAt": null,
+          "finishedAt": 1791209641226,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": "could not start target conversation"
+        },
+        "card": {
+          "status": "Failed",
+          "dataStatus": "failed",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "meta": "05/10/2026 16:14:01 · dispatching",
+          "preview": null,
+          "summaryHeadline": null,
+          "summaryFacts": null,
+          "nextStepsObserved": [],
+          "error": "could not start target conversation",
+          "details": {
+            "Target": "New conversation",
+            "Authorization": "Workspace",
+            "Model": "default",
+            "Timezone": "Europe/Paris",
+            "Attempt": "1 / 3",
+            "Occurrence": "05/10/2026 16:14:00",
+            "Finished": "05/10/2026 16:14:01"
+          },
+          "actions": [
+            "Open run",
+            "Mark read",
+            "Retry now",
+            "Archive"
+          ]
+        }
+      },
+      "sendAck": null,
+      "hostEvents": [],
+      "verdict": {
+        "firedWithoutClick": true,
+        "newConversation": false,
+        "anchoredToAdmittedTurn": false,
+        "settledByItsOwnTerminal": false,
+        "noPreviewBeforeTerminal": false,
+        "completed": false,
+        "previewIsRunAnswer": false,
+        "summaryScoped": false,
+        "unreadAfterSettle": true,
+        "hostStructuredPreview": null
+      },
+      "consoleErrors": [],
+      "note": "No turn: start_session for the run was refused because the <ws> host had been started (boot resume of the new-prefix conversation) with posture workspace. That conversation was attached to an unrelated project (the project of the conversation active when its schedule was created), so it resumed with the project posture; this project-less run asked for the global posture network. The banner read: workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network."
+    },
+    "setup-ws2": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "userValuesSaved": true,
+      "posture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "defaultFolder": {
+        "clicked": true,
+        "stored": "<ws2>",
+        "shown": "<ws2>",
+        "setWorkspaceOk": true
+      },
+      "scheduler": {
+        "mode": "native",
+        "text": "Native scheduler active"
+      },
+      "wakeTask": {
+        "exists": true,
+        "startBoundary": "2027-03-28T03:30:00+02:00",
+        "startEpoch": 1806197400000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "consoleErrors": []
+    },
+    "new": {
+      "build": "fixed",
+      "liveTurns": 1,
+      "schedule": {
+        "ok": true,
+        "scheduleId": "sched-muvc1r0h-a3kny",
+        "threadReuse": "new",
+        "targetIsRequested": true,
+        "authorizationMode": "workspace",
+        "projectId": null,
+        "workspace": "<ws2>",
+        "triggerAt": 1791209820000,
+        "timeZone": "Europe/Paris",
+        "scheduledFor": 50483
+      },
+      "timeline": [
+        {
+          "at": 50829,
+          "status": "queued",
+          "turnId": null,
+          "sessionId": null,
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Queued",
+          "cardPreview": null
+        },
+        {
+          "at": 53202,
+          "status": "running",
+          "turnId": null,
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 53453,
+          "status": "running",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 71448,
+          "status": "completed",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "preview": "RUN-NEW-c1pfh Next steps: archive this run",
+          "summary": "RUN-NEW-c1pfh Next steps: archive this run",
+          "error": null,
+          "cardStatus": "Completed",
+          "cardPreview": "RUN-NEW-c1pfh Next steps: archive this run"
+        }
+      ],
+      "run": {
+        "local": {
+          "id": "run-muvc2upw-9ttoq",
+          "status": "completed",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209820000,
+          "createdAt": 1791209820164,
+          "startedAt": 1791209822612,
+          "finishedAt": 1791209840794,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-NEW-c1pfh Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-c1pfh Next steps: archive this run",
+            "totalItems": 2,
+            "assistantMessages": 1,
+            "toolEvents": 0,
+            "nextSteps": [
+              "archive this run"
+            ],
+            "issues": []
+          },
+          "error": null
+        },
+        "native": {
+          "id": "run-muvc2upw-9ttoq",
+          "status": "completed",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209820000,
+          "createdAt": 1791209820164,
+          "startedAt": 1791209822612,
+          "finishedAt": 1791209840794,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-NEW-c1pfh Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-c1pfh Next steps: archive this run",
+            "totalItems": 2,
+            "assistantMessages": 1,
+            "toolEvents": 0,
+            "nextSteps": [
+              "archive this run"
+            ],
+            "issues": []
+          },
+          "error": null
+        },
+        "card": {
+          "status": "Completed",
+          "dataStatus": "completed",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "meta": "05/10/2026 16:17:00 · conversation started",
+          "preview": "RUN-NEW-c1pfh Next steps: archive this run",
+          "summaryHeadline": "RUN-NEW-c1pfh Next steps: archive this run",
+          "summaryFacts": "1 response · 1 next step",
+          "nextStepsObserved": [
+            "archive this run"
+          ],
+          "error": null,
+          "details": {
+            "Target": "New conversation",
+            "Authorization": "Workspace",
+            "Model": "default",
+            "Timezone": "Europe/Paris",
+            "Attempt": "1 / 3",
+            "Occurrence": "05/10/2026 16:17:00",
+            "Started": "05/10/2026 16:17:02",
+            "Finished": "05/10/2026 16:17:20",
+            "Duration": "18s"
+          },
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Archive"
+          ]
+        }
+      },
+      "sendAck": {
+        "at": 1791209822796,
+        "ok": true,
+        "disposition": "started",
+        "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097"
+      },
+      "hostEvents": [
+        {
+          "at": 53502,
+          "seq": 2,
+          "sid": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "kind": "started",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 71276,
+          "seq": 26,
+          "sid": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "kind": "completed",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "terminal": "completed",
+          "keys": [
+            "durationMs",
+            "error",
+            "reason",
+            "terminal",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        }
+      ],
+      "verdict": {
+        "firedWithoutClick": true,
+        "newConversation": true,
+        "anchoredToAdmittedTurn": true,
+        "settledByItsOwnTerminal": true,
+        "noPreviewBeforeTerminal": true,
+        "completed": true,
+        "previewIsRunAnswer": true,
+        "summaryScoped": true,
+        "unreadAfterSettle": true,
+        "hostStructuredPreview": "none emitted by the host"
+      },
+      "consoleErrors": []
+    },
+    "busy": {
+      "build": "fixed",
+      "liveTurns": 2,
+      "conversation": {
+        "workspacePath": "<ws2>",
+        "authorizationMode": "workspace"
+      },
+      "turnA": {
+        "ack": {
+          "at": 1791209847984,
+          "ok": true,
+          "disposition": "started",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030"
+        },
+        "startedEventAt": 1670,
+        "terminal": {
+          "at": 130608,
+          "seq": 2288,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "completed",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "terminal": "completed",
+          "keys": [
+            "durationMs",
+            "error",
+            "reason",
+            "terminal",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        }
+      },
+      "schedules": {
+        "R": {
+          "ok": true,
+          "scheduleId": "sched-muvc3hck-1gjxpf",
+          "threadReuse": "session",
+          "targetIsRequested": true,
+          "authorizationMode": "workspace",
+          "projectId": null,
+          "workspace": "<ws2>",
+          "triggerAt": 1791296220000,
+          "timeZone": "Europe/Paris"
+        },
+        "Q": {
+          "ok": true,
+          "scheduleId": "sched-muvc3j3r-dhxscq",
+          "threadReuse": "session",
+          "targetIsRequested": true,
+          "authorizationMode": "workspace",
+          "projectId": null,
+          "workspace": "<ws2>",
+          "triggerAt": 1791296220000,
+          "timeZone": "Europe/Paris"
+        }
+      },
+      "runClicks": {
+        "R": {
+          "clicked": true,
+          "matches": 1
+        },
+        "Q": {
+          "clicked": true,
+          "matches": 1
+        }
+      },
+      "acks": {
+        "R": {
+          "at": 4740,
+          "ok": true,
+          "disposition": "queued",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3"
+        },
+        "Q": {
+          "at": 6394,
+          "ok": true,
+          "disposition": "queued",
+          "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7"
+        }
+      },
+      "aStillRunningWhenDispatched": true,
+      "afterDispatch": {
+        "R": {
+          "local": {
+            "id": "run-muvc3hz4-1nzow4",
+            "status": "running",
+            "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": null,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209850304,
+            "createdAt": 1791209850304,
+            "startedAt": 1791209850304,
+            "finishedAt": null,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "native": {
+            "id": "run-muvc3hz4-1nzow4",
+            "status": "running",
+            "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": null,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209850304,
+            "createdAt": 1791209850304,
+            "startedAt": 1791209850304,
+            "finishedAt": null,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "card": {
+            "status": "Running",
+            "dataStatus": "running",
+            "newBadge": false,
+            "reviewNeeded": false,
+            "meta": "05/10/2026 16:17:30 · conversation started",
+            "preview": null,
+            "summaryHeadline": null,
+            "summaryFacts": null,
+            "nextStepsObserved": [],
+            "error": null,
+            "details": {
+              "Target": "Write a 2000-word story about a lighthouse…",
+              "Authorization": "Workspace",
+              "Model": "default",
+              "Timezone": "Europe/Paris",
+              "Attempt": "1 / 3",
+              "Occurrence": "05/10/2026 16:17:30",
+              "Started": "05/10/2026 16:17:30",
+              "Duration": "2s"
+            },
+            "actions": [
+              "Open conversation",
+              "Archive"
+            ]
+          }
+        },
+        "Q": {
+          "local": {
+            "id": "run-muvc3jqb-cfrkdb",
+            "status": "running",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": null,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209852579,
+            "createdAt": 1791209852579,
+            "startedAt": 1791209852580,
+            "finishedAt": null,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "native": {
+            "id": "run-muvc3jqb-cfrkdb",
+            "status": "running",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": null,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209852579,
+            "createdAt": 1791209852579,
+            "startedAt": 1791209852580,
+            "finishedAt": null,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "card": {
+            "status": "Running",
+            "dataStatus": "running",
+            "newBadge": false,
+            "reviewNeeded": false,
+            "meta": "05/10/2026 16:17:32 · conversation started",
+            "preview": null,
+            "summaryHeadline": null,
+            "summaryFacts": null,
+            "nextStepsObserved": [],
+            "error": null,
+            "details": {
+              "Target": "Write a 2000-word story about a lighthouse…",
+              "Authorization": "Workspace",
+              "Model": "default",
+              "Timezone": "Europe/Paris",
+              "Attempt": "1 / 3",
+              "Occurrence": "05/10/2026 16:17:32",
+              "Started": "05/10/2026 16:17:32",
+              "Duration": "under 1s"
+            },
+            "actions": [
+              "Open conversation",
+              "Archive"
+            ]
+          }
+        }
+      },
+      "unqueue": {
+        "openedVia": "sidebar",
+        "queuePanel": [
+          "Reply with exactly this line and nothing else: RUN-BUSY-c3exh",
+          "Reply with exactly this line and nothing else: RUN-UNQUEUE-c3exh"
+        ],
+        "removeClick": {
+          "clicked": true
+        },
+        "call": {
+          "ok": true,
+          "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7"
+        },
+        "event": {
+          "at": 6747,
+          "seq": 32,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "turn/unqueued",
+          "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "sessionId",
+            "sourceRange",
+            "turnId",
+            "viewCursor"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        "qTimeline": [
+          {
+            "at": 6540,
+            "status": "running",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "preview": null,
+            "summary": null,
+            "error": null,
+            "cardStatus": null,
+            "cardPreview": null
+          },
+          {
+            "at": 6794,
+            "status": "cancelled",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "preview": null,
+            "summary": null,
+            "error": null,
+            "cardStatus": null,
+            "cardPreview": null
+          }
+        ]
+      },
+      "rWatchAfterA": [
+        {
+          "at": 130655,
+          "status": "running",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "preview": null,
+          "finishedAt": null,
+          "cardStatus": "Running",
+          "cardPreview": null,
+          "rStarted": false
+        },
+        {
+          "at": 131983,
+          "status": "running",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "preview": null,
+          "finishedAt": null,
+          "cardStatus": "Running",
+          "cardPreview": null,
+          "rStarted": true
+        },
+        {
+          "at": 208781,
+          "status": "completed",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "preview": "RUN-BUSY-c3exh",
+          "finishedAt": 1791210054953,
+          "cardStatus": "Completed",
+          "cardPreview": "RUN-BUSY-c3exh",
+          "rStarted": true
+        }
+      ],
+      "final": {
+        "R": {
+          "local": {
+            "id": "run-muvc3hz4-1nzow4",
+            "status": "completed",
+            "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": true,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209850304,
+            "createdAt": 1791209850304,
+            "startedAt": 1791209850304,
+            "finishedAt": 1791210054953,
+            "nextRetryAt": null,
+            "resultPreview": "RUN-BUSY-c3exh",
+            "summary": {
+              "headline": "RUN-BUSY-c3exh",
+              "totalItems": 6,
+              "assistantMessages": 1,
+              "toolEvents": 0,
+              "nextSteps": [],
+              "issues": []
+            },
+            "error": null
+          },
+          "native": {
+            "id": "run-muvc3hz4-1nzow4",
+            "status": "completed",
+            "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": true,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209850304,
+            "createdAt": 1791209850304,
+            "startedAt": 1791209850304,
+            "finishedAt": 1791210054953,
+            "nextRetryAt": null,
+            "resultPreview": "RUN-BUSY-c3exh",
+            "summary": {
+              "headline": "RUN-BUSY-c3exh",
+              "totalItems": 6,
+              "assistantMessages": 1,
+              "toolEvents": 0,
+              "nextSteps": [],
+              "issues": []
+            },
+            "error": null
+          },
+          "card": {
+            "status": "Completed",
+            "dataStatus": "completed",
+            "newBadge": true,
+            "reviewNeeded": false,
+            "meta": "05/10/2026 16:17:30 · conversation started",
+            "preview": "RUN-BUSY-c3exh",
+            "summaryHeadline": "RUN-BUSY-c3exh",
+            "summaryFacts": "1 response",
+            "nextStepsObserved": [],
+            "error": null,
+            "details": {
+              "Target": "Write a 2000-word story about a lighthouse…",
+              "Authorization": "Workspace",
+              "Model": "default",
+              "Timezone": "Europe/Paris",
+              "Attempt": "1 / 3",
+              "Occurrence": "05/10/2026 16:17:30",
+              "Started": "05/10/2026 16:17:30",
+              "Finished": "05/10/2026 16:20:54",
+              "Duration": "3m 25s"
+            },
+            "actions": [
+              "Open conversation",
+              "Mark read",
+              "Archive"
+            ]
+          }
+        },
+        "Q": {
+          "local": {
+            "id": "run-muvc3jqb-cfrkdb",
+            "status": "cancelled",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": true,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209852579,
+            "createdAt": 1791209852579,
+            "startedAt": 1791209852580,
+            "finishedAt": 1791209853105,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "native": {
+            "id": "run-muvc3jqb-cfrkdb",
+            "status": "cancelled",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": true,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209852579,
+            "createdAt": 1791209852579,
+            "startedAt": 1791209852580,
+            "finishedAt": 1791209853105,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "card": {
+            "status": "Cancelled",
+            "dataStatus": "cancelled",
+            "newBadge": true,
+            "reviewNeeded": false,
+            "meta": "05/10/2026 16:17:32 · conversation started",
+            "preview": null,
+            "summaryHeadline": null,
+            "summaryFacts": null,
+            "nextStepsObserved": [],
+            "error": null,
+            "details": {
+              "Target": "Write a 2000-word story about a lighthouse…",
+              "Authorization": "Workspace",
+              "Model": "default",
+              "Timezone": "Europe/Paris",
+              "Attempt": "1 / 3",
+              "Occurrence": "05/10/2026 16:17:32",
+              "Started": "05/10/2026 16:17:32",
+              "Finished": "05/10/2026 16:17:33",
+              "Duration": "under 1s"
+            },
+            "actions": [
+              "Open conversation",
+              "Mark read",
+              "Archive"
+            ]
+          }
+        }
+      },
+      "hostEvents": [
+        {
+          "at": 1670,
+          "seq": 27,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "started",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 6747,
+          "seq": 32,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "turn/unqueued",
+          "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "sessionId",
+            "sourceRange",
+            "turnId",
+            "viewCursor"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 130608,
+          "seq": 2288,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "completed",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "terminal": "completed",
+          "keys": [
+            "durationMs",
+            "error",
+            "reason",
+            "terminal",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 131781,
+          "seq": 2289,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "started",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 208595,
+          "seq": 2312,
+          "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "kind": "completed",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "terminal": "completed",
+          "keys": [
+            "durationMs",
+            "error",
+            "reason",
+            "terminal",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        }
+      ],
+      "conversationRowsSinceR": [
+        {
+          "role": "user",
+          "turnId": null,
+          "text": "Reply with exactly this line and nothing else: RUN-BUSY-c3ex"
+        },
+        {
+          "role": "assistant",
+          "turnId": null,
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": ""
+        },
+        {
+          "role": "system",
+          "turnId": null,
+          "text": "Turn queued — it will start after the current turn finishes."
+        },
+        {
+          "role": "user",
+          "turnId": null,
+          "text": "Reply with exactly this line and nothing else: RUN-UNQUEUE-c"
+        },
+        {
+          "role": "assistant",
+          "turnId": null,
+          "text": ""
+        },
+        {
+          "role": "system",
+          "turnId": null,
+          "text": "Turn queued — it will start after the current turn finishes."
+        },
+        {
+          "role": "system",
+          "turnId": null,
+          "text": "Queued turn removed."
+        },
+        {
+          "role": "thinking",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "text": "Checking abstract output constraints for a long-form prose g"
+        },
+        {
+          "role": "assistant",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "text": "The lighthouse stood on a grey point of rock where the sea m"
+        },
+        {
+          "role": "subagent",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "thinking",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "text": "Checking an abstract interface constraint.Extending the pros"
+        },
+        {
+          "role": "assistant",
+          "turnId": "01a10c6d-3c06-7d98-8822-3748f2b46030",
+          "text": "The lighthouse stood on a grey point of rock where the sea m"
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+          "text": "RUN-BUSY-c3exh"
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "turnId": null,
+          "text": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "precondition_bothQueuedBehindA": true,
+        "r_anchoredToItsQueuedTurn": true,
+        "r_notSettledByA": true,
+        "r_settledByItsOwnTurn": true,
+        "r_previewIsItsOwn": true,
+        "r_summaryScoped": true,
+        "q_unqueuedCancelled": true,
+        "q_noPreview": true,
+        "q_neverStarted": true
+      },
+      "consoleErrors": []
+    },
+    "stop": {
+      "build": "fixed",
+      "liveTurns": 1,
+      "schedule": {
+        "ok": true,
+        "scheduleId": "sched-muvc8kko-ddvdk9",
+        "threadReuse": "session",
+        "targetIsRequested": true,
+        "authorizationMode": "workspace",
+        "projectId": null,
+        "workspace": "<ws2>",
+        "triggerAt": 1791296460000,
+        "timeZone": "Europe/Paris"
+      },
+      "runClick": {
+        "clicked": true,
+        "matches": 1
+      },
+      "ack": {
+        "at": 2469,
+        "ok": true,
+        "disposition": "started",
+        "turnId": "01a10c70-e557-7510-8525-32b811937493"
+      },
+      "startedEventAt": 3054,
+      "whileRunning": {
+        "local": {
+          "id": "run-muvc8l77-eabm2p",
+          "status": "running",
+          "turnId": "01a10c70-e557-7510-8525-32b811937493",
+          "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "threadReuse": "session",
+          "attempt": 1,
+          "unread": null,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791210087763,
+          "createdAt": 1791210087763,
+          "startedAt": 1791210087763,
+          "finishedAt": null,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "native": {
+          "id": "run-muvc8l77-eabm2p",
+          "status": "running",
+          "turnId": "01a10c70-e557-7510-8525-32b811937493",
+          "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "threadReuse": "session",
+          "attempt": 1,
+          "unread": null,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791210087763,
+          "createdAt": 1791210087763,
+          "startedAt": 1791210087763,
+          "finishedAt": null,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "card": {
+          "status": "Running",
+          "dataStatus": "running",
+          "newBadge": false,
+          "reviewNeeded": false,
+          "meta": "05/10/2026 16:21:27 · conversation started",
+          "preview": null,
+          "summaryHeadline": null,
+          "summaryFacts": null,
+          "nextStepsObserved": [],
+          "error": null,
+          "details": {
+            "Target": "Write a 2000-word story about a lighthouse…",
+            "Authorization": "Workspace",
+            "Model": "default",
+            "Timezone": "Europe/Paris",
+            "Attempt": "1 / 3",
+            "Occurrence": "05/10/2026 16:21:27",
+            "Started": "05/10/2026 16:21:27",
+            "Duration": "under 1s"
+          },
+          "actions": [
+            "Open conversation",
+            "Archive"
+          ]
+        }
+      },
+      "stopButton": {
+        "title": "Stop the current turn"
+      },
+      "stopClick": {
+        "clicked": true,
+        "at": 5720
+      },
+      "cancelCall": {
+        "ok": true,
+        "carriedTurnId": true
+      },
+      "terminal": {
+        "at": 6198,
+        "seq": 2321,
+        "sid": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+        "kind": "cancelled",
+        "turnId": "01a10c70-e557-7510-8525-32b811937493",
+        "terminal": "cancelled",
+        "keys": [
+          "durationMs",
+          "error",
+          "reason",
+          "terminal",
+          "turnId"
+        ],
+        "hasError": false,
+        "previewKeys": []
+      },
+      "final": {
+        "local": {
+          "id": "run-muvc8l77-eabm2p",
+          "status": "cancelled",
+          "turnId": "01a10c70-e557-7510-8525-32b811937493",
+          "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "threadReuse": "session",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791210087763,
+          "createdAt": 1791210087763,
+          "startedAt": 1791210087763,
+          "finishedAt": 1791210091686,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "native": {
+          "id": "run-muvc8l77-eabm2p",
+          "status": "cancelled",
+          "turnId": "01a10c70-e557-7510-8525-32b811937493",
+          "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "threadReuse": "session",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791210087763,
+          "createdAt": 1791210087763,
+          "startedAt": 1791210087763,
+          "finishedAt": 1791210091686,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "card": {
+          "status": "Cancelled",
+          "dataStatus": "cancelled",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "meta": "05/10/2026 16:21:27 · conversation started",
+          "preview": null,
+          "summaryHeadline": null,
+          "summaryFacts": null,
+          "nextStepsObserved": [],
+          "error": null,
+          "details": {
+            "Target": "Write a 2000-word story about a lighthouse…",
+            "Authorization": "Workspace",
+            "Model": "default",
+            "Timezone": "Europe/Paris",
+            "Attempt": "1 / 3",
+            "Occurrence": "05/10/2026 16:21:27",
+            "Started": "05/10/2026 16:21:27",
+            "Finished": "05/10/2026 16:21:31",
+            "Duration": "4s"
+          },
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Archive"
+          ]
+        }
+      },
+      "verdict": {
+        "anchoredToItsTurn": true,
+        "stoppedFromComposer": true,
+        "cancelled": true,
+        "noResultOnCancel": true,
+        "finishedAfterStop": true
+      },
+      "consoleErrors": []
+    },
+    "retry": {
+      "build": "fixed",
+      "liveTurns": 1,
+      "defaultFolder": {
+        "picked": true,
+        "restoredToWs": true
+      },
+      "schedule": {
+        "ok": true,
+        "scheduleId": "sched-muvc8zyk-3a1mh0",
+        "threadReuse": "new",
+        "targetIsRequested": true,
+        "authorizationMode": "workspace",
+        "projectId": null,
+        "workspace": "<retry>",
+        "triggerAt": 1791296460000,
+        "timeZone": "Europe/Paris"
+      },
+      "runClick": {
+        "clicked": true,
+        "matches": 1
+      },
+      "retryClick": true,
+      "afterRetryClick": {
+        "id": "run-muvc90l6-9w7u2c",
+        "status": "queued",
+        "turnId": null,
+        "sessionId": null,
+        "threadReuse": "new",
+        "attempt": 1,
+        "unread": false,
+        "archived": false,
+        "recovery": null,
+        "occurrenceAt": 1791210107706,
+        "createdAt": 1791210107706,
+        "startedAt": null,
+        "finishedAt": null,
+        "nextRetryAt": 1791210108198,
+        "resultPreview": null,
+        "summary": null,
+        "error": null
+      },
+      "timeline": [
+        {
+          "at": 521,
+          "status": "queued",
+          "turnId": null,
+          "sessionId": null,
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Queued",
+          "cardPreview": null
+        },
+        {
+          "at": 3165,
+          "status": "running",
+          "turnId": null,
+          "sessionId": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 3428,
+          "status": "running",
+          "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba",
+          "sessionId": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "preview": null,
+          "summary": null,
+          "error": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 16660,
+          "status": "completed",
+          "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba",
+          "sessionId": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "preview": "RUN-RETRY-c8xcy",
+          "summary": "RUN-RETRY-c8xcy",
+          "error": null,
+          "cardStatus": "Completed",
+          "cardPreview": "RUN-RETRY-c8xcy"
+        }
+      ],
+      "final": {
+        "local": {
+          "id": "run-muvc90l6-9w7u2c",
+          "status": "completed",
+          "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba",
+          "sessionId": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": false,
+          "recovery": null,
+          "occurrenceAt": 1791210107706,
+          "createdAt": 1791210107706,
+          "startedAt": 1791210110787,
+          "finishedAt": 1791210124321,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-RETRY-c8xcy",
+          "summary": {
+            "headline": "RUN-RETRY-c8xcy",
+            "totalItems": 2,
+            "assistantMessages": 1,
+            "toolEvents": 0,
+            "nextSteps": [],
+            "issues": []
+          },
+          "error": null
+        },
+        "native": {
+          "id": "run-muvc90l6-9w7u2c",
+          "status": "completed",
+          "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba",
+          "sessionId": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": false,
+          "recovery": null,
+          "occurrenceAt": 1791210107706,
+          "createdAt": 1791210107706,
+          "startedAt": 1791210110787,
+          "finishedAt": 1791210124321,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-RETRY-c8xcy",
+          "summary": {
+            "headline": "RUN-RETRY-c8xcy",
+            "totalItems": 2,
+            "assistantMessages": 1,
+            "toolEvents": 0,
+            "nextSteps": [],
+            "issues": []
+          },
+          "error": null
+        },
+        "card": {
+          "status": "Completed",
+          "dataStatus": "completed",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "meta": "05/10/2026 16:21:47 · conversation started",
+          "preview": "RUN-RETRY-c8xcy",
+          "summaryHeadline": "RUN-RETRY-c8xcy",
+          "summaryFacts": "1 response",
+          "nextStepsObserved": [],
+          "error": null,
+          "details": {
+            "Target": "New conversation",
+            "Authorization": "Workspace",
+            "Model": "default",
+            "Timezone": "Europe/Paris",
+            "Attempt": "1 / 3",
+            "Occurrence": "05/10/2026 16:21:47",
+            "Started": "05/10/2026 16:21:50",
+            "Finished": "05/10/2026 16:22:04",
+            "Duration": "14s"
+          },
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Archive"
+          ]
+        }
+      },
+      "sendAck": {
+        "at": 1791210110990,
+        "ok": true,
+        "disposition": "started",
+        "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba"
+      },
+      "hostEvents": [
+        {
+          "at": 3368,
+          "seq": 2323,
+          "sid": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "kind": "started",
+          "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba",
+          "terminal": null,
+          "keys": [
+            "commandId",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        },
+        {
+          "at": 16616,
+          "seq": 2346,
+          "sid": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "kind": "completed",
+          "turnId": "01a10c71-3f43-709e-89ed-9298c4c317ba",
+          "terminal": "completed",
+          "keys": [
+            "durationMs",
+            "error",
+            "reason",
+            "terminal",
+            "turnId"
+          ],
+          "hasError": false,
+          "previewKeys": []
+        }
+      ],
+      "verdict": {
+        "failedWithReason": true,
+        "retryRequeued": true,
+        "retryCompleted": true,
+        "retryIsSameRun": true,
+        "retryAnchored": true,
+        "previewIsRunAnswer": true
+      },
+      "consoleErrors": [],
+      "failedAttempt": {
+        "timeline": [
+          {
+            "at": 14,
+            "status": "queued",
+            "turnId": null,
+            "sessionId": null,
+            "preview": null,
+            "summary": null,
+            "error": null,
+            "cardStatus": "Queued",
+            "cardPreview": null
+          },
+          {
+            "at": 277,
+            "status": "failed",
+            "turnId": null,
+            "sessionId": null,
+            "preview": null,
+            "summary": null,
+            "error": "could not start target conversation",
+            "cardStatus": "Failed",
+            "cardPreview": null
+          }
+        ],
+        "run": {
+          "local": {
+            "id": "run-muvc90l6-9w7u2c",
+            "status": "failed",
+            "turnId": null,
+            "sessionId": null,
+            "threadReuse": "new",
+            "attempt": 1,
+            "unread": true,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791210107706,
+            "createdAt": 1791210107706,
+            "startedAt": null,
+            "finishedAt": 1791210107719,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": "could not start target conversation"
+          },
+          "native": {
+            "id": "run-muvc90l6-9w7u2c",
+            "status": "failed",
+            "turnId": null,
+            "sessionId": null,
+            "threadReuse": "new",
+            "attempt": 1,
+            "unread": true,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791210107706,
+            "createdAt": 1791210107706,
+            "startedAt": null,
+            "finishedAt": 1791210107719,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": "could not start target conversation"
+          },
+          "card": {
+            "status": "Failed",
+            "dataStatus": "failed",
+            "newBadge": true,
+            "reviewNeeded": false,
+            "meta": "05/10/2026 16:21:47 · dispatching",
+            "preview": null,
+            "summaryHeadline": null,
+            "summaryFacts": null,
+            "nextStepsObserved": [],
+            "error": "could not start target conversation",
+            "details": {
+              "Target": "New conversation",
+              "Authorization": "Workspace",
+              "Model": "default",
+              "Timezone": "Europe/Paris",
+              "Attempt": "1 / 3",
+              "Occurrence": "05/10/2026 16:21:47",
+              "Finished": "05/10/2026 16:21:47"
+            },
+            "actions": [
+              "Open run",
+              "Mark read",
+              "Retry now",
+              "Archive"
+            ]
+          }
+        },
+        "startSession": {
+          "ok": false,
+          "error": "\"workspace is not a directory: <retry>\""
+        }
+      }
+    },
+    "review": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "open": {
+        "N": {
+          "clicked": true,
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "activeIsRunSession": true,
+          "page": "task"
+        },
+        "R": {
+          "clicked": true,
+          "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "activeIsRunSession": true,
+          "page": "task"
+        },
+        "T": {
+          "clicked": true,
+          "sessionId": "01a10c71-3c73-7e11-b763-7a7b6f3212bd",
+          "activeIsRunSession": true,
+          "page": "task"
+        }
+      },
+      "markRead": {
+        "clicked": true,
+        "R": {
+          "local": {
+            "id": "run-muvc3hz4-1nzow4",
+            "status": "completed",
+            "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": false,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209850304,
+            "createdAt": 1791209850304,
+            "startedAt": 1791209850304,
+            "finishedAt": 1791210054953,
+            "nextRetryAt": null,
+            "resultPreview": "RUN-BUSY-c3exh",
+            "summary": {
+              "headline": "RUN-BUSY-c3exh",
+              "totalItems": 6,
+              "assistantMessages": 1,
+              "toolEvents": 0,
+              "nextSteps": [],
+              "issues": []
+            },
+            "error": null
+          },
+          "native": {
+            "id": "run-muvc3hz4-1nzow4",
+            "status": "completed",
+            "turnId": "01a10c6d-45c4-7704-8011-0dfbd09c7cc3",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": false,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791209850304,
+            "createdAt": 1791209850304,
+            "startedAt": 1791209850304,
+            "finishedAt": 1791210054953,
+            "nextRetryAt": null,
+            "resultPreview": "RUN-BUSY-c3exh",
+            "summary": {
+              "headline": "RUN-BUSY-c3exh",
+              "totalItems": 6,
+              "assistantMessages": 1,
+              "toolEvents": 0,
+              "nextSteps": [],
+              "issues": []
+            },
+            "error": null
+          },
+          "card": {
+            "status": "Completed",
+            "dataStatus": "completed",
+            "newBadge": false,
+            "reviewNeeded": false,
+            "meta": "05/10/2026 16:17:30 · conversation started",
+            "preview": "RUN-BUSY-c3exh",
+            "summaryHeadline": "RUN-BUSY-c3exh",
+            "summaryFacts": "1 response",
+            "nextStepsObserved": [],
+            "error": null,
+            "details": {
+              "Target": "Write a 2000-word story about a lighthouse…",
+              "Authorization": "Workspace",
+              "Model": "default",
+              "Timezone": "Europe/Paris",
+              "Attempt": "1 / 3",
+              "Occurrence": "05/10/2026 16:17:30",
+              "Started": "05/10/2026 16:17:30",
+              "Finished": "05/10/2026 16:20:54",
+              "Duration": "3m 25s"
+            },
+            "actions": [
+              "Open conversation",
+              "Archive"
+            ]
+          }
+        },
+        "N": {
+          "id": "run-muvc2upw-9ttoq",
+          "status": "completed",
+          "turnId": "01a10c6c-d994-7b10-84ec-4f15c679e097",
+          "sessionId": "01a10c6c-d71d-7532-a04e-a9e00fb63d76",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791209820000,
+          "createdAt": 1791209820164,
+          "startedAt": 1791209822612,
+          "finishedAt": 1791209840794,
+          "nextRetryAt": null,
+          "resultPreview": "RUN-NEW-c1pfh Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-c1pfh Next steps: archive this run",
+            "totalItems": 2,
+            "assistantMessages": 1,
+            "toolEvents": 0,
+            "nextSteps": [
+              "archive this run"
+            ],
+            "issues": []
+          },
+          "error": null
+        },
+        "unreadFilterHasR": false
+      },
+      "archive": {
+        "clicked": true,
+        "Q": {
+          "local": {
+            "id": "run-muvc3jqb-cfrkdb",
+            "status": "cancelled",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": true,
+            "archived": true,
+            "recovery": null,
+            "occurrenceAt": 1791209852579,
+            "createdAt": 1791209852579,
+            "startedAt": 1791209852580,
+            "finishedAt": 1791209853105,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "native": {
+            "id": "run-muvc3jqb-cfrkdb",
+            "status": "cancelled",
+            "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+            "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+            "threadReuse": "session",
+            "attempt": 1,
+            "unread": true,
+            "archived": true,
+            "recovery": null,
+            "occurrenceAt": 1791209852579,
+            "createdAt": 1791209852579,
+            "startedAt": 1791209852580,
+            "finishedAt": 1791209853105,
+            "nextRetryAt": null,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "card": null
+        },
+        "inActive": false,
+        "inArchived": {
+          "status": "Cancelled",
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Restore"
+          ]
+        }
+      },
+      "restore": {
+        "clicked": true,
+        "Q": {
+          "id": "run-muvc3jqb-cfrkdb",
+          "status": "cancelled",
+          "turnId": "01a10c6d-4ea6-7a68-831b-c973f8906db7",
+          "sessionId": "01a10c6d-38f6-73d3-94fb-e5e32aa0d135",
+          "threadReuse": "session",
+          "attempt": 1,
+          "unread": true,
+          "archived": false,
+          "recovery": null,
+          "occurrenceAt": 1791209852579,
+          "createdAt": 1791209852579,
+          "startedAt": 1791209852580,
+          "finishedAt": 1791209853105,
+          "nextRetryAt": null,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "inActive": true
+      },
+      "verdict": {
+        "openConversation": true,
+        "markRead": true,
+        "archive": true,
+        "restore": true
+      },
+      "consoleErrors": []
+    },
+    "restart": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "close": {
+        "exitedFromWindowControl": true
+      },
+      "comparison": {
+        "N": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "completed",
+          "recovery": null
+        },
+        "R": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "completed",
+          "recovery": null
+        },
+        "Q": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "cancelled",
+          "recovery": null
+        },
+        "T": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "completed",
+          "recovery": null
+        },
+        "S": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "cancelled",
+          "recovery": null
+        }
+      },
+      "cardAfterRestart": {
+        "status": "Completed",
+        "dataStatus": "completed",
+        "newBadge": true,
+        "reviewNeeded": false,
+        "meta": "05/10/2026 16:17:00 · conversation started",
+        "preview": "RUN-NEW-c1pfh Next steps: archive this run",
+        "summaryHeadline": "RUN-NEW-c1pfh Next steps: archive this run",
+        "summaryFacts": "1 response · 1 next step",
+        "nextStepsObserved": [
+          "archive this run"
+        ],
+        "error": null,
+        "details": {
+          "Target": "New conversation",
+          "Authorization": "Workspace",
+          "Model": "default",
+          "Timezone": "Europe/Paris",
+          "Attempt": "1 / 3",
+          "Occurrence": "05/10/2026 16:17:00",
+          "Started": "05/10/2026 16:17:02",
+          "Finished": "05/10/2026 16:17:20",
+          "Duration": "18s"
+        },
+        "actions": [
+          "Open conversation",
+          "Mark read",
+          "Archive"
+        ]
+      },
+      "openAfterRestart": {
+        "clicked": true,
+        "activeIsRunSession": true
+      },
+      "consoleErrors": [],
+      "verdict": {
+        "durableHistory": true,
+        "cardRebuilt": true,
+        "rightSessionOpened": true
+      }
+    },
+    "wake": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "before": {
+        "exists": true,
+        "startBoundary": "2027-03-28T03:30:00+02:00",
+        "startEpoch": 1806197400000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "otherPendingSchedules": [
+        {
+          "name": "Qualif M3 DST gap"
+        },
+        {
+          "name": "Qualif M3 DST dup"
+        }
+      ],
+      "schedule": {
+        "ok": true,
+        "scheduleId": "sched-muvcamlq-a72m7e",
+        "threadReuse": "new",
+        "targetIsRequested": true,
+        "authorizationMode": "workspace",
+        "projectId": null,
+        "workspace": "<ws2>",
+        "triggerAt": 1791270000000,
+        "timeZone": "Europe/Paris"
+      },
+      "afterCreate": {
+        "exists": true,
+        "startBoundary": "2026-10-06T09:00:00+02:00",
+        "startEpoch": 1791270000000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "disabled": [
+        {
+          "name": "Qualif M3 DST gap",
+          "disabled": true
+        },
+        {
+          "name": "Qualif M3 DST dup",
+          "disabled": true
+        }
+      ],
+      "afterDisable": {
+        "exists": true,
+        "startBoundary": "2026-10-06T09:00:00+02:00",
+        "startEpoch": 1791270000000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "lastPendingBeforeDelete": [
+        "M3-07 wake calmj"
+      ],
+      "delete": {
+        "clicked": true,
+        "stillStored": false,
+        "pendingLeft": 0
+      },
+      "afterDelete": {
+        "exists": false,
+        "exitCode": 1
+      },
+      "uiStatusAfterDelete": {
+        "installed": "false",
+        "message": "Native wake-up cleared; no enabled automation is scheduled."
+      },
+      "reenabled": [
+        {
+          "name": "Qualif M3 DST gap",
+          "enabled": true
+        },
+        {
+          "name": "Qualif M3 DST dup",
+          "enabled": true
+        }
+      ],
+      "afterRestore": {
+        "exists": true,
+        "startBoundary": "2027-03-28T03:30:00+02:00",
+        "startEpoch": 1806197400000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "syncCalls": [
+        {
+          "wakeAt": 1791270000000,
+          "ok": true
+        },
+        {
+          "wakeAt": 1791270000000,
+          "ok": true
+        },
+        {
+          "wakeAt": 1791270000000,
+          "ok": true
+        },
+        {
+          "wakeAt": null,
+          "ok": true
+        },
+        {
+          "wakeAt": 1806197400000,
+          "ok": true
+        }
+      ],
+      "verdict": {
+        "createReplacesTrigger": true,
+        "deleteLastRemovesTask": true,
+        "restoredAsBefore": true
+      },
+      "consoleErrors": []
+    },
+    "teardown": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "postureRestored": true,
+      "defaultFolderRestored": true,
+      "wakeTask": {
+        "exists": true,
+        "startBoundary": "2027-03-28T03:30:00+02:00",
+        "startEpoch": 1806197400000,
+        "wakeupArgument": true,
+        "commandIsMuseDesktop": true
+      },
+      "consoleErrors": []
+    }
+  },
+  "commit": "2626c4d",
+  "buildTreeDirty": [
+    "src-tauri/src/main.rs",
+    "src/components/ApprovalPanel.tsx",
+    "src/hooks/useMuseSessions.ts",
+    "src/lib/approvalResolution.ts",
+    "src/lib/runSummary.ts",
+    "test/approvalResolution.test.ts",
+    "test/runSummary.test.ts"
+  ],
+  "date": "2026-10-05",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 6,
+  "criteria": {
+    "M3-08 (1) Once automation -> new conversation, run-scoped card": {
+      "verdict": "pass",
+      "facts": "run run-muvc2upw-9ttoq fired by the scheduler (occurrenceAt = trigger, no Run click); new session ...b63d76; turn ...79e097 = send_input ack = turn/completed; queued -> running (read every 250 ms, transitions recorded: no preview appeared before the terminal) -> completed at +71448 ms (host terminal at +71276 ms); completed in storage, native mirror and card; preview and headline \"RUN-NEW-c1pfh Next steps: archive this run\"; card \"1 response · 1 next step\". Pre-fix build (new-prefix): same flow, but the card read \"2 responses\" for one answer."
+    },
+    "M3-08 (2) busy existing thread: another turn completing does not settle the run": {
+      "verdict": "pass",
+      "facts": "A ...b46030 running; R and Q admitted as queued (...9c7cc3, ...906db7) and anchored to those turns; A completed at +130608 ms; R read Running with no preview (storage and card) at +130655 and +131983 ms; R started at +131781 ms and completed at +208595 ms; R preview \"RUN-BUSY-c3exh\" (not the story of A); card \"1 response\"."
+    },
+    "M3-08 (3) stopping the run's turn marks the run Cancelled": {
+      "verdict": "pass",
+      "facts": "run run-muvc8l77-eabm2p, turn ...937493 running; composer Stop at +5720 ms; cancel_session carried the turn id; host terminal \"cancelled\" for that turn at +6198 ms; cancelled in storage, native mirror and card; no preview, no error."
+    },
+    "M3-08 (4) a queued run removed from the host queue becomes Cancelled": {
+      "verdict": "pass",
+      "facts": "\"Remove from queue\" -> unqueue_turn ok for ...906db7; host turn/unqueued with that turnId at +6747 ms; Q cancelled at +6794 ms in storage, then Cancelled in the native mirror and on the card; Q never started."
+    },
+    "M3-08 (5) review actions": {
+      "verdict": "pass",
+      "facts": "Open conversation activated each run's own session (N, R, T: three distinct sessions, answer on screen); Mark read cleared R's unread flag in storage, native mirror and card (N still unread, R out of the Unread filter); Archive hid Q from Active and listed it under Archived with Restore, and Restore brought it back; Retry now: run T failed (folder gone, start_session refused 'workspace is not a directory'), the folder came back, the same run id was re-queued, dispatched and completed on its own turn."
+    },
+    "M3-08 plan: no result presented before termination": {
+      "verdict": "pass",
+      "facts": "runs N, R and T were read every 250 ms (storage and card) with every change recorded, and S was read while running: no preview appeared while a run was queued or running, including R after the other turn of its conversation ended; a cancelled run (S, Q) never gets one."
+    },
+    "M3-08 plan: durable history": {
+      "verdict": "pass",
+      "facts": "after closing the app from its window control and relaunching it, the five runs (N, R, Q, S, T) were field-identical (status, turnId, sessionId, attempt, unread, archived, finishedAt, preview, error) in localStorage and in the native mirror, with no recovery marker."
+    },
+    "M3-08 plan: the right session opened after a restart": {
+      "verdict": "pass",
+      "facts": "after the relaunch, N's card was rebuilt (Completed, its own preview) and Open conversation activated N's session with its answer on screen."
+    },
+    "M3-08: the host structured preview wins over the local excerpt": {
+      "verdict": "blocked",
+      "facts": "not reachable natively: every 1.4.2 turn/completed measured carried only durationMs, error, reason, terminal and turnId (no result, resultPreview, output, summary or text). The precedence stays covered by unit tests only."
+    },
+    "M3-07: deleting the last schedule removes Muse-Desktop\\AutomationWake": {
+      "verdict": "pass",
+      "facts": "before: trigger 2027-03-28T03:30:00+02:00; schedule W created -> trigger replaced by 2026-10-06T09:00:00+02:00; the two older pending schedules disabled (trigger unchanged); W deleted (last enabled schedule with an occurrence) -> scheduler_wakeup_sync(null), schtasks /query exit 1 (task absent), panel \"Native wake-up cleared; no enabled automation is scheduled.\"; the two schedules enabled again -> trigger back at 2027-03-28T03:30:00+02:00. No clock change, no sleep."
+    }
+  },
+  "defects": [
+    {
+      "status": "fixed (src/lib/runSummary.ts + test)",
+      "summary": "The run summary counted rows the stream hides: a reasoning item closed without text and the host-internal reminder children. A one-answer run read \"2 responses\" (new-prefix). Re-proved on the fixed build: \"1 response\" for N, R and T."
+    },
+    {
+      "status": "recorded, not fixed (product decision)",
+      "summary": "A schedule captures the project of whichever conversation is active, but takes its workspace from the default folder. new-prefix was created while a conversation of another proof's project was active: its new conversation was attached to that project although it runs in the default folder. On the next boot that conversation resumed with the project posture (workspace: network not allowed), the folder's host kept that posture, and the next project-less scheduled run in the same folder was refused at start (new-blocked): \"workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network\". Every project-less conversation in that folder is refused the same way until the host restarts."
+    },
+    {
+      "status": "observation",
+      "summary": "The run item count (Inspect run, items) takes every row without a turn id written during the run's window: R counts 6 items for its prompt and answer, because the other run's prompt and the queue notes fall in that window. Responses, preview, headline, next steps and issues are scoped."
+    },
+    {
+      "status": "observation",
+      "summary": "Retry now does not advance the attempt counter: T read \"Attempt 1 / 3\" after its second dispatch, and Retry now stays offered after each non-retryable failure."
+    }
+  ],
+  "sideEffects": "Six live turns. Test conversations left in place in <proof> folders. The first run's conversation stays attached to the parallel M0-05 proof's project B (the capture defect above). The user's posture, default folder and the two 27/09 schedules were restored; the AutomationWake trigger is back at its original time."
+}

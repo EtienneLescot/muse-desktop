@@ -40,6 +40,11 @@ export interface StoredSession {
   /** Host-reported persistence posture; absent in older local rows. */
   session_durability?: string;
   /**
+   * M2-05: set once the conversation moved between Local and a worktree. The
+   * host session lives (and resumes) here; `workspace` is where turns run.
+   */
+  host_workspace?: string;
+  /**
    * US-5: archived threads leave the main sidebar list for the collapsible
    * archived section. Persisted like the rest; absent = active (V1 data).
    */
@@ -106,6 +111,8 @@ export interface LogEntry {
   clientMessageId?: string;
   /** M0-07: structured terminal failure details, when a turn failed. */
   engineError?: EngineErrorDetails;
+  /** M0-13: the host closed this tool or shell item as `failed` (refused). */
+  failed?: boolean;
 }
 
 const SESSIONS_KEY = "muse-desktop.sessions.v1";
@@ -193,6 +200,7 @@ function isValidSession(s: unknown): s is StoredSession {
     (r.branch === undefined || (typeof r.branch === "string" && r.branch.trim().length > 0)) &&
     (r.session_durability === undefined ||
       (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
+    (r.host_workspace === undefined || typeof r.host_workspace === "string") &&
     (r.archived === undefined || typeof r.archived === "boolean") &&
     (r.pinned === undefined || typeof r.pinned === "boolean") &&
     (r.unread === undefined || typeof r.unread === "boolean") &&
@@ -331,6 +339,27 @@ export function dropLog(sessionId: string): void {
   removeStorageKey(logKey(sessionId));
 }
 
+const PENDING_CARD_KEYS = {
+  approval: "muse-desktop.pending-approvals.v1",
+  input: "muse-desktop.pending-inputs.v1",
+} as const;
+
+/**
+ * Conversations that had an approval or question card open, read back at the
+ * next boot. The card's engine ends with the app that owns it (the engine
+ * cancels an open approval on stdin EOF, measured on 1.4.2), so the next app
+ * can only report it. Written in the same tick as the "... requested" log
+ * entry, so it is as durable.
+ */
+export function loadPendingCardSessions(kind: keyof typeof PENDING_CARD_KEYS): string[] {
+  const raw = read<unknown>(PENDING_CARD_KEYS[kind], []);
+  return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
+}
+
+export function savePendingCardSessions(kind: keyof typeof PENDING_CARD_KEYS, sessionIds: string[]): void {
+  write(PENDING_CARD_KEYS[kind], [...new Set(sessionIds)]);
+}
+
 export function loadWorkspace(): string | null {
   const w = read<unknown>(WORKSPACE_KEY, null);
   return typeof w === "string" && w.length > 0 ? w : null;
@@ -353,52 +382,9 @@ export function saveActiveId(id: string | null): void {
   }
 }
 
-/**
- * US-15 allowlist: persistent approval rules (extends this module's scope).
- * One rule memoizes a command pattern + scope with an allow/prompt/forbidden
- * decision. Stored under a dedicated localStorage key so it survives restarts
- * like sessions and logs; writes are best-effort like everything else here.
- */
-export type AllowDecision = "allow" | "prompt" | "forbidden";
-
-export interface AllowRule {
-  id: string;
-  /** Command pattern: substring or `*` glob, matched case-insensitively. */
-  pattern: string;
-  /** Host scope the rule was memorized from (command scope or network/domain). */
-  scope: string;
-  decision: AllowDecision;
-  createdAt: number;
-}
-
-const ALLOWLIST_KEY = "muse-desktop.allowlist.v1";
-
-/** Cap stored rules so a runaway memorizer stays bounded (cf. 2000/500 caps). */
-export const MAX_ALLOWLIST_RULES = 200;
-
-function isValidAllowRule(r: unknown): r is AllowRule {
-  if (typeof r !== "object" || r === null) return false;
-  const o = r as Record<string, unknown>;
-  return (
-    typeof o.id === "string" &&
-    o.id.length > 0 &&
-    typeof o.pattern === "string" &&
-    o.pattern.length > 0 &&
-    typeof o.scope === "string" &&
-    (o.decision === "allow" || o.decision === "prompt" || o.decision === "forbidden") &&
-    typeof o.createdAt === "number"
-  );
-}
-
-export function loadAllowlist(): AllowRule[] {
-  const raw = read<unknown>(ALLOWLIST_KEY, []);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(isValidAllowRule).slice(-MAX_ALLOWLIST_RULES);
-}
-
-export function saveAllowlist(rules: AllowRule[]): void {
-  write(ALLOWLIST_KEY, rules.slice(-MAX_ALLOWLIST_RULES));
-}
+// `muse-desktop.allowlist.v1` held the client's own approval rules (US-15),
+// which nothing enforced once the host alone decided what prompts (05/10).
+// Old installs keep the key, unread; never reuse the name.
 
 export function newId(): string {
   try {
@@ -416,7 +402,14 @@ export function newId(): string {
  */
 const PROJECTS_KEY = "muse-desktop.projects.v1";
 const THREAD_PROJECTS_KEY = "muse-desktop.thread-projects.v1";
-const GLOBAL_SETTINGS_KEY = "muse-desktop.settings.v1";
+/**
+ * Until 06/10/2026 the project defaults were written to the Isolation
+ * setting's key (`SETTINGS_KEY`, muse-desktop.settings.v1): each save of one
+ * erased the other. That key stays Isolation's; it is read here only until the
+ * defaults have their own copy.
+ */
+const GLOBAL_SETTINGS_KEY = "muse-desktop.project-defaults.v1";
+const SHARED_SETTINGS_KEY = "muse-desktop.settings.v1";
 const WORKTREES_KEY = "muse-desktop.worktrees.v1";
 
 function isValidProjectRow(p: unknown): p is Project {
@@ -497,7 +490,8 @@ function isValidGlobalSettings(s: unknown): s is ProjectSettings {
 export function loadGlobalSettings(
   fallback: ProjectSettings,
 ): ProjectSettings {
-  const raw = read<unknown>(GLOBAL_SETTINGS_KEY, null);
+  // One-time migration: defaults left in the shared key by an older build.
+  const raw = read<unknown>(GLOBAL_SETTINGS_KEY, null) ?? read<unknown>(SHARED_SETTINGS_KEY, null);
   if (!isValidGlobalSettings(raw)) return fallback;
   return {
     ...fallback,

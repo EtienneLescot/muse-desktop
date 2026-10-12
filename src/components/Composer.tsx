@@ -55,11 +55,13 @@ import {
   writeStorageString,
 } from "../lib/storage.ts";
 import {
+  abortVoiceRecognition,
   appendVoiceTranscript,
   getVoiceRecognitionFactory,
   requestVoicePermission,
   transcriptFromVoiceEvent,
   voiceErrorMessage,
+  VOICE_SERVICE_NOTE,
   type VoiceRecognition,
 } from "../lib/voice";
 
@@ -68,6 +70,8 @@ interface Props {
   draftKey: string;
   modelControl?: ReactNode;
   disabled: boolean;
+  /** Why the composer is disabled, shown in place of the generic hint. */
+  disabledReason?: string;
   running: boolean;
   /** A stop request was accepted and the host has not confirmed it yet. */
   stopping?: boolean;
@@ -160,6 +164,7 @@ export function Composer({
   draftKey,
   modelControl,
   disabled,
+  disabledReason,
   running,
   stopping = false,
   workspace,
@@ -225,6 +230,9 @@ export function Composer({
   const replaceAttachmentId = useRef<string | null>(null);
   const voiceRecognitionRef = useRef<VoiceRecognition | null>(null);
   const voiceBaseTextRef = useRef("");
+  // Bumped by every abort: a permission prompt that resolves after a send or
+  // an unmount must not start recognition on a draft it no longer owns.
+  const voiceSessionRef = useRef(0);
   useEffect(() => {
     textRef.current = text;
   }, [text]);
@@ -232,7 +240,8 @@ export function Composer({
     attachmentsRef.current = attachments;
   }, [attachments]);
   useEffect(() => () => {
-    voiceRecognitionRef.current?.abort();
+    voiceSessionRef.current += 1;
+    abortVoiceRecognition(voiceRecognitionRef.current);
     voiceRecognitionRef.current = null;
   }, []);
   useEffect(() => {
@@ -465,12 +474,21 @@ export function Composer({
       setVoiceStatus("Voice input is unavailable in this browser build.");
       return;
     }
+    const session = voiceSessionRef.current;
     setVoicePermissionPending(true);
     setVoiceStatus("Requesting microphone access…");
     const permission = await requestVoicePermission();
     setVoicePermissionPending(false);
+    if (session !== voiceSessionRef.current) {
+      setVoiceStatus(null);
+      return;
+    }
     if (permission === "denied") {
       setVoiceStatus("Microphone access was denied. You can type the message instead.");
+      return;
+    }
+    if (permission === "no-microphone") {
+      setVoiceStatus("No microphone is available. You can type the message instead.");
       return;
     }
     try {
@@ -498,7 +516,7 @@ export function Composer({
         setVoiceStatus((current) => current === "Finishing transcription…" ? "Transcript ready to edit." : current);
       };
       voiceRecognitionRef.current = recognition;
-      setVoiceStatus("Listening… edit the transcript before sending.");
+      setVoiceStatus(`Listening… ${VOICE_SERVICE_NOTE}`);
       setVoiceListening(true);
       recognition.start();
     } catch {
@@ -506,6 +524,16 @@ export function Composer({
       setVoiceListening(false);
       setVoiceStatus("Voice input could not start. You can type the message instead.");
     }
+  }
+
+  // Sending consumes the draft: a late recognition result must not re-fill it.
+  function abortVoice(): void {
+    voiceSessionRef.current += 1;
+    if (voiceRecognitionRef.current === null) return;
+    abortVoiceRecognition(voiceRecognitionRef.current);
+    voiceRecognitionRef.current = null;
+    setVoiceListening(false);
+    setVoiceStatus(null);
   }
 
   async function send(): Promise<void> {
@@ -517,6 +545,7 @@ export function Composer({
       );
       return;
     }
+    abortVoice();
     const draftAtSend = text;
     const attachmentsAtSend = attachmentsRef.current;
     const attachmentsAtSendKey = attachmentKey(attachmentsAtSend);
@@ -667,6 +696,7 @@ export function Composer({
       );
       return;
     }
+    abortVoice();
     const draftAtSend = text;
     const attachmentsAtSend = attachmentsRef.current;
     const attachmentsAtSendKey = attachmentKey(attachmentsAtSend);
@@ -1004,7 +1034,7 @@ export function Composer({
             rows={3}
             placeholder={
               disabled
-                ? "Open the desktop app to continue."
+                ? disabledReason ?? "Open the desktop app to continue."
                 : "Ask Muse to continue…"
             }
             aria-label="Message Muse"
@@ -1045,7 +1075,7 @@ export function Composer({
               disabled={disabled || sending || checking || voicePermissionPending}
               aria-pressed={voiceListening}
               aria-label={voiceListening ? "Stop voice input" : "Start voice input"}
-              title={voiceSupported ? "Transcribe speech into the draft; audio is not stored" : "Voice input unavailable in this browser build"}
+              title={voiceSupported ? `Transcribe speech into the draft. ${VOICE_SERVICE_NOTE}` : "Voice input unavailable in this browser build"}
             >
               {voiceListening ? "Stop voice" : "Voice"}
             </button>

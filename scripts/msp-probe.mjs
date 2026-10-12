@@ -17,6 +17,7 @@
  *   node scripts/msp-probe.mjs --no-live
  *   node scripts/msp-probe.mjs --interrupt --live
  *   node scripts/msp-probe.mjs --approval --live
+ *   node scripts/msp-probe.mjs --approval --live --approval-mode onRequest --decide abort --stale
  *   node scripts/msp-probe.mjs --user-shell
  *   node scripts/msp-probe.mjs --all --live
  *
@@ -35,6 +36,7 @@ const REPO = resolve(HERE, "..");
 const DEFAULT_BINARY = join(REPO, "src-tauri", "binaries", "muse-x86_64-pc-windows-msvc.exe");
 const REQUEST_TIMEOUT_MS = 20_000;
 const NOTIFICATION_WINDOW_MS = 25_000;
+const MAX_APPROVAL_STAGES = 4;
 
 const argv = process.argv.slice(2);
 export const has = (name) => argv.includes(name);
@@ -57,9 +59,13 @@ function reason(error) {
 }
 
 /** Minimal MSP client over newline JSON-RPC on a real child process. */
-function createHost(binary, workspace) {
-  const child = spawn(binary, ["serve", "--no-session-log"], {
+export function createHost(binary, workspace, extraArgs = [], baseArgs = ["serve", "--sandbox-network", "restricted", "--trust-workspace"]) {
+  // The app's own argv (main.rs HostSandboxPolicy, workspace mode unless
+  // `baseArgs` names another), so the probe measures the host the desktop
+  // actually runs. The launcher self-updates unless told not to.
+  const child = spawn(binary, [...baseArgs, ...extraArgs], {
     cwd: workspace,
+    env: { ...process.env, MUSE_NO_AUTO_UPDATE: "1" },
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -90,7 +96,18 @@ function createHost(binary, workspace) {
         continue;
       }
       if (typeof frame.method === "string") {
-        notifications.push({ method: frame.method, params: frame.params, at: Date.now() });
+        // A frame carrying both `method` and `id` is a server request, which
+        // blocks the host until answered. `approval/request` gets an empty
+        // result (the decision itself goes through `approval/decide`);
+        // anything else is refused the way the SDK does without a handler.
+        const serverRequest = frame.id !== undefined && frame.id !== null;
+        if (serverRequest && !closed) {
+          const reply = frame.method === "approval/request"
+            ? { jsonrpc: "2.0", id: frame.id, result: {} }
+            : { jsonrpc: "2.0", id: frame.id, error: { code: -32601, message: `method not found: ${frame.method}`, data: { kind: "methodNotFound" } } };
+          child.stdin.write(`${JSON.stringify(reply)}\n`);
+        }
+        notifications.push({ method: frame.method, params: frame.params, at: Date.now(), serverRequest });
         if (notifications.length > 500) notifications.shift();
         continue;
       }
@@ -165,7 +182,7 @@ export const uuidv7 = () => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 
-async function connect(host, capabilities) {
+export async function connect(host, capabilities) {
   const initialized = await host.request("initialize", {
     clientInfo: { name: "msp_probe", version: "1.0.0" },
     ...(capabilities ? { capabilities } : {}),
@@ -174,7 +191,7 @@ async function connect(host, capabilities) {
   return initialized;
 }
 
-async function startSession(host, workspaceRoot) {
+export async function startSession(host, workspaceRoot) {
   const commandId = uuidv7();
   const result = await host.request("session/start", { commandId, workspaceRoot });
   const session = result?.session;
@@ -228,43 +245,127 @@ async function probeInterrupt(host, sessionId, live) {
   };
 }
 
+/** Path-free projection of `approval/request(ed)` params or a listPending row. */
+function describeApproval(params) {
+  return {
+    approvalId: bounded(params?.approvalId),
+    currentRequirementId: bounded(JSON.stringify(params?.currentRequirementId)),
+    toolName: bounded(params?.toolName),
+    subjectKind: bounded(params?.subject?.kind),
+    choices: Array.isArray(params?.availableChoices)
+      ? params.availableChoices.map((choice) => ({
+        choiceId: bounded(choice?.choiceId),
+        decision: bounded(choice?.decision?.kind ?? choice?.decision),
+        scope: bounded(choice?.scope),
+      }))
+      : null,
+  };
+}
+
+/**
+ * The next stage of a compound approval: the same approvalId re-issued with a
+ * requirement token that has not been decided yet. Metadata-only updates carry
+ * no token and are skipped (main.rs keeps the last token for those too).
+ */
+export function nextApprovalStage(entries, approvalId, decided) {
+  return entries.find((entry) =>
+    ["approval/updated", "approval/request", "approval/requested"].includes(entry.method) &&
+    entry.params?.approvalId === approvalId &&
+    entry.params?.currentRequirementId != null &&
+    !decided.has(JSON.stringify(entry.params.currentRequirementId)));
+}
+
 /** Classify what a host does with an approval-gated turn. */
-async function probeApproval(host, sessionId, live) {
+async function probeApproval(host, sessionId, live, workspace) {
   if (!live) return { skipped: "requires --live" };
+  const approvalMode = value("--approval-mode") ?? "onRequest";
+  const modeSet = await host
+    .request("session/setApprovalMode", { sessionId, commandId: uuidv7(), mode: approvalMode })
+    .then((result) => ({ applyOutcome: bounded(result?.applyOutcome), effectiveMode: bounded(result?.effectiveMode?.mode) }))
+    .catch((error) => ({ rejected: reason(error), code: error?.code, kind: error?.kind }));
+
+  // `echo` is on the onRequest read-only allowlist and never prompts. A write
+  // whose argument is a variable cannot be resolved statically, so it must.
   const mark = host.mark();
   const sent = await host
     .request("turn/start", {
       sessionId,
       commandId: uuidv7(),
       turnId: uuidv7(),
-      input: [{ type: "text", text: "run the shell command: echo probe-approval-marker" }],
+      input: [{
+        type: "text",
+        text: "Run exactly this PowerShell command in the workspace, unchanged: $m = 'm05'; Set-Content -Path probe.txt -Value $m",
+      }],
       ifBusy: "queue",
     })
     .catch((error) => ({ error: reason(error) }));
-  if (sent?.error) return { sent: "rejected", detail: sent.error };
+  if (sent?.error) return { approvalMode, modeSet, sent: "rejected", detail: sent.error };
 
+  const ofSession = (method) => host
+    .since(mark)
+    .find((entry) => entry.method === method && entry.params?.sessionId === sessionId);
   const deadline = Date.now() + NOTIFICATION_WINDOW_MS;
   let request = null;
   while (Date.now() < deadline && !request) {
-    request = host
-      .since(mark)
-      .find((entry) => entry.method === "approval/requested" && entry.params?.sessionId === sessionId);
+    request = ofSession("approval/requested") ?? ofSession("approval/request");
     if (!request) await new Promise((done) => setTimeout(done, 400));
   }
   if (!request) {
-    return { sent: "accepted", approvalRequested: false, observedNotifications: host.since(mark).map((e) => e.method) };
+    return { approvalMode, modeSet, sent: "accepted", approvalRequested: false, observedNotifications: host.since(mark).map((e) => e.method) };
   }
 
-  const requirementId = request.params?.requirementId ?? request.params?.id;
-  const approved = await host
-    .request("approval/decide", {
-      sessionId,
-      requirementId,
-      decision: "accept",
-      commandId: uuidv7(),
-    })
-    .then(() => "accepted")
-    .catch((error) => `rejected: ${reason(error)}`);
+  const pendingRows = await host
+    .request("approval/listPending", { sessionId })
+    .then((result) => (Array.isArray(result?.approvals) ? result.approvals.map(describeApproval) : null))
+    .catch((error) => `error: ${reason(error)}`);
+
+  // approval/decide (schema 1.4.2): a server-minted choiceId from
+  // availableChoices, and the current requirement token echoed verbatim. A
+  // compound command keeps one approvalId across stages: `terminal: false`
+  // leaves it pending and the host re-issues it with a new token and new
+  // choices, so each stage is decided until one is terminal.
+  const wanted = value("--decide") ?? "allow_once";
+  const approvalId = request.params?.approvalId;
+  // Replay a retired token under a fresh commandId: -32053 when the stage
+  // advanced; once terminal the host may answer approvalAlreadyResolved, so
+  // the actual code and kind are recorded rather than assumed.
+  const replay = (params) => host
+    .request("approval/decide", { ...params, commandId: uuidv7() })
+    .then((result) => ({ accepted: true, status: bounded(result?.status), expectedCode: -32053 }))
+    .catch((error) => ({ code: error?.code, kind: error?.kind, expectedCode: -32053, matched: error?.code === -32053 }));
+  const decided = new Set();
+  const decisions = [];
+  let stale;
+  let lastDecided;
+  let stage = request;
+  while (stage && decisions.length < MAX_APPROVAL_STAGES) {
+    const requirementId = stage.params?.currentRequirementId;
+    decided.add(JSON.stringify(requirementId));
+    const offered = Array.isArray(stage.params?.availableChoices) &&
+      stage.params.availableChoices.some((candidate) => candidate?.choiceId === wanted);
+    if (!offered) {
+      decisions.push({ choiceId: bounded(wanted, 40), skipped: `choice ${bounded(wanted, 40)} not offered` });
+      break;
+    }
+    lastDecided = { sessionId, approvalId, choiceId: wanted, requirementId };
+    const decide = await host
+      .request("approval/decide", { ...lastDecided, commandId: uuidv7() })
+      .then((result) => ({ status: bounded(result?.status), terminal: result?.terminal ?? null }))
+      .catch((error) => ({ rejected: reason(error), code: error?.code, kind: error?.kind }));
+    decisions.push({ requirementId: bounded(JSON.stringify(requirementId)), choiceId: bounded(wanted, 40), ...decide });
+    // main.rs approval_terminal: only an explicit `false` keeps it pending.
+    if (decide.terminal !== false) break;
+    stage = null;
+    const stageDeadline = Date.now() + NOTIFICATION_WINDOW_MS;
+    while (Date.now() < stageDeadline && !stage) {
+      stage = nextApprovalStage(host.since(mark), approvalId, decided);
+      if (!stage) await new Promise((done) => setTimeout(done, 400));
+    }
+    if (stage && has("--stale") && !stale) stale = await replay(lastDecided);
+  }
+  if (has("--stale") && !stale && lastDecided) stale = await replay(lastDecided);
+  const last = decisions.at(-1);
+  const decidedTerminally = Boolean(last && !last.skipped && !last.rejected && last.terminal !== false);
 
   const resumedDeadline = Date.now() + NOTIFICATION_WINDOW_MS;
   let terminal = null;
@@ -276,11 +377,23 @@ async function probeApproval(host, sessionId, live) {
         (!entry.params?.sessionId || entry.params.sessionId === sessionId));
     if (!terminal) await new Promise((done) => setTimeout(done, 400));
   }
+  const requested = ofSession("approval/requested");
+  const hostRequest = ofSession("approval/request");
   return {
+    approvalMode,
+    modeSet,
     sent: "accepted",
-    approvalRequested: true,
-    decision: approved,
-    resumedToTerminal: terminal ? terminal.method : "unsupported",
+    approvalRequested: requested ? describeApproval(requested.params) : false,
+    serverRequest: hostRequest
+      ? { ...describeApproval(hostRequest.params), answeredWithEmptyResult: hostRequest.serverRequest }
+      : false,
+    pendingRows,
+    decisions,
+    ...(stale ? { stale } : {}),
+    // "unsupported" is a host finding only when every stage was decided
+    // terminally; otherwise the turn is still waiting on the probe.
+    resumedToTerminal: terminal ? terminal.method : decidedTerminally ? "unsupported" : "approval not decided terminally",
+    probeFileWritten: existsSync(join(workspace, "probe.txt")),
   };
 }
 
@@ -402,7 +515,7 @@ async function main() {
       report.checks.interrupt = await probeInterrupt(host, sessionId, has("--live"));
     }
     if (mode("approval") || MODE_ALL) {
-      report.checks.approval = await probeApproval(host, sessionId, has("--live"));
+      report.checks.approval = await probeApproval(host, sessionId, has("--live"), workspace);
     }
     report.notificationMethods = host.methods();
   } catch (error) {

@@ -1,16 +1,16 @@
-import { isMacPlatform } from "../lib/platform";
+import { hostPlatform, isMacPlatform } from "../lib/platform";
 /**
  * w-settings (US-16 sandbox + US-31 providers): settings panel UI.
  *
- * Settings: environment check, default folder, authorization, reasoning
- * effort, isolation, Muse authentication and local data. The model is chosen
- * in the composer, not here.
+ * Settings: environment check, default folder, remote engine, authorization,
+ * reasoning effort, isolation, Muse authentication and local data. The model
+ * is chosen in the composer, not here.
  */
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WorkspacePicker } from "./WorkspacePicker";
 import { describeAuth, canOfferSignIn, type AuthStatusPayload } from "../lib/museAuth";
-import { isTauriRuntime } from "../lib/env";
+import { confirmAction, isTauriRuntime } from "../lib/env";
 import {
   startupCheckStatusLabel,
   startupProbeNeedsAttention,
@@ -30,6 +30,12 @@ import {
   type AuthorizationMode,
 } from "../lib/authorization";
 import { userFacingError } from "../lib/errorCopy";
+import {
+  DEFAULT_REMOTE_MUSE,
+  describeRemoteEngine,
+  validateRemoteEngine,
+  type RemoteEngineTarget,
+} from "../lib/remoteSsh";
 import {
   reasoningEffortChoices,
   reasoningEffortDescription,
@@ -77,31 +83,54 @@ interface Props {
    * desktop could authenticate against on its own.
    */
   onSignIn: () => void | Promise<unknown>;
+  /** M4-07: the host new conversations can run on through ssh; null when none. */
+  remoteEngine: RemoteEngineTarget | null;
+  onRemoteEngineChange: (next: RemoteEngineTarget | null) => void;
 }
 
+const REMOTE_FIELDS = [
+  ["user", "User", "Your ssh default"],
+  ["host", "Host", "build.example.com"],
+  ["port", "Port", "22"],
+  ["musePath", "Muse on that host", DEFAULT_REMOTE_MUSE],
+  ["workspacePath", "Folder on that host", "/home/you/project"],
+] as const;
+type RemoteForm = Record<(typeof REMOTE_FIELDS)[number][0], string>;
+
 /**
- * Isolation is what the engine's process may reach; authorization, above, is
- * who approves each action. Picking a level here is the permission — the
- * separate "saved permission" checkboxes said the same thing twice, and the
- * select fell back to workspace when they disagreed.
+ * Isolation is what the engine's process may reach. It does not decide what
+ * runs unprompted: on Windows with Muse 1.4.2, `onRequest` asked for every
+ * shell action of the verdict matrix, inside the root too. Picking a level
+ * here is the permission — the separate "saved permission" checkboxes said
+ * the same thing twice, and the select fell back to workspace when they
+ * disagreed.
  */
 const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "workspace",
     label: "Workspace only",
-    detail: "Muse reads and writes inside the conversation's folder, and nowhere else.",
+    // Measured on Windows with 1.4.2 (m0-06-junction-network-1.4.2.json): writes
+    // outside the root fail, junctions included, every connect is refused (DNS
+    // still answers, note below); reads outside the root succeed.
+    detail: "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
   },
   {
     mode: "network",
     label: "Workspace and network",
-    detail: "Adds outbound network access: package installs, API calls, downloads.",
+    // Measured on Windows with 1.4.2: connects and plain HTTP work, HTTPS fails (note below).
+    detail: "Also lets commands connect out.",
   },
   {
     mode: "elevated",
     label: "Elevated access",
-    detail: "Adds files and commands outside the folder. Grant it to a workspace you trust.",
+    detail: "Adds files and commands outside the folder. It reaches every project that does not restrict it.",
   },
 ];
+
+/** An Isolation level as Settings names it, never its stored key. */
+export function sandboxModeLabel(mode: SandboxMode): string {
+  return SANDBOX_MODES.find((level) => level.mode === mode)?.label ?? mode;
+}
 
 export function SettingsPanel({
   workspace,
@@ -117,7 +146,26 @@ export function SettingsPanel({
   startupProbe = null,
   onProbeStartup,
   onSignIn,
+  remoteEngine,
+  onRemoteEngineChange,
 }: Props) {
+  const [remoteForm, setRemoteForm] = useState<RemoteForm>(() => ({
+    user: remoteEngine?.user ?? "",
+    host: remoteEngine?.host ?? "",
+    port: String(remoteEngine?.port ?? 22),
+    musePath: remoteEngine?.musePath ?? DEFAULT_REMOTE_MUSE,
+    workspacePath: remoteEngine?.workspacePath ?? "",
+  }));
+  const [remoteStatus, setRemoteStatus] = useState<string | null>(null);
+  function saveRemote(): void {
+    const target = validateRemoteEngine({ ...remoteForm, port: Number(remoteForm.port) });
+    if (target === null) {
+      setRemoteStatus("Not saved: give a host, a port from 1 to 65535, and absolute paths without spaces or shell characters.");
+      return;
+    }
+    onRemoteEngineChange(target);
+    setRemoteStatus(`Saved. Pick "${describeRemoteEngine(target)}" as the project of a new conversation.`);
+  }
   const [restartingHost, setRestartingHost] = useState(false);
   const [restartStatus, setRestartStatus] = useState<string | null>(null);  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -178,9 +226,9 @@ export function SettingsPanel({
 
   async function restartWorkspaceHost(): Promise<void> {
     if (onRestartHost === undefined || restartingHost) return;
-    if (!window.confirm(
+    if (!(await confirmAction(
       "Restart the workspace host now? Active conversations will disconnect and keep their local transcript; reconnect them after the new host starts.",
-    )) return;
+    ))) return;
     setRestartingHost(true);
     setRestartStatus(null);
     try {
@@ -367,6 +415,56 @@ export function SettingsPanel({
         </p>
         <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
       </div>
+
+      <div className="settings-group">
+        <h3>Remote engine</h3>
+        <p className="settings-note">
+          Run a conversation on another machine: Muse starts there through your
+          system ssh, with your ssh agent's keys, and never asks for a password.
+          Connect once from a terminal first to accept the host key. Changes,
+          Terminal and Files stay local and are unavailable there.
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveRemote();
+          }}
+        >
+          {REMOTE_FIELDS.map(([field, label, placeholder]) => (
+            <div key={field}>
+              <label className="settings-label" htmlFor={`settings-remote-${field}`}>
+                {label}
+              </label>
+              <div className="settings-row">
+                <input
+                  id={`settings-remote-${field}`}
+                  value={remoteForm[field]}
+                  placeholder={placeholder}
+                  spellCheck={false}
+                  onChange={(event) => setRemoteForm((form) => ({ ...form, [field]: event.target.value }))}
+                />
+              </div>
+            </div>
+          ))}
+          <div className="settings-row">
+            <button type="submit">Save</button>
+            {remoteEngine !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRemoteEngineChange(null);
+                  setRemoteStatus("Removed. Conversations already started there keep their host.");
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </form>
+        {remoteStatus !== null && (
+          <p className="settings-note" role="status">{remoteStatus}</p>
+        )}
+      </div>
       <div className="settings-group">
         <h3>Authorization</h3>
         <p className="settings-note">
@@ -429,9 +527,21 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Isolation</h3>
         <p className="settings-note">
-          How far Muse's engine can reach — separate from Authorization above,
-          which decides who approves each action. Applied when a new engine
-          starts: a running conversation keeps its own until it is restarted.
+          How far Muse's engine can reach. Applied when a new engine starts: a
+          running conversation keeps its own until it is restarted. A project
+          follows this level unless its own preferences restrict it.
+          {hostPlatform() === "windows" && (
+            // Decision D1 (05/10/2026): keep the default and state the limit,
+            // as measured in docs/evidence/2026-10-05-roadmap-closure/
+            // m0-05-06-approvals.json, then stage by stage (06/10) in
+            // m0-06-junction-network-1.4.2.json and m0-06-policy-in-force.json.
+            <> On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on
+            relative paths (Set-Content -Path notes.txt), while absolute paths
+            and Muse's own file tools work. Under Workspace only, names still
+            resolve. Under Workspace and network, HTTPS fails in Windows' TLS
+            layer (PowerShell, curl.exe); plain HTTP works. Elevated access
+            reaches HTTPS.</>
+          )}
         </p>
         <div className="authorization-mode-list" role="radiogroup" aria-label="Isolation">
           {SANDBOX_MODES.map(({ mode, label, detail }) => (
@@ -454,7 +564,7 @@ export function SettingsPanel({
           ))}
         </div>
         <p className="settings-note authorization-status" role="status">
-          Current isolation: <strong>{effective}</strong>
+          Current isolation: <strong>{sandboxModeLabel(effective)}</strong>
         </p>
         {onRestartHost !== undefined && workspace !== null && (
           <div className="settings-host-restart">

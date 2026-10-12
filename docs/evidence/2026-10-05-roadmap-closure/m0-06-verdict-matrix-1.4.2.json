@@ -1,0 +1,790 @@
+{
+  "schema": "muse-desktop.msp-verdict-matrix.v1",
+  "ticket": "M0-06",
+  "live": true,
+  "turnBudgetMs": 90000,
+  "decisionPolicy": "actions 1-5: allow_once on every stage; action 6: abort",
+  "runs": [
+    {
+      "posture": "workspace",
+      "hostArgs": [
+        "serve",
+        "--sandbox-network",
+        "restricted",
+        "--trust-workspace"
+      ],
+      "modes": [
+        {
+          "mode": "promptUnmatched",
+          "cells": [
+            {
+              "n": 1,
+              "action": "writeInsideRoot",
+              "command": "$p = 'inside-ca60f2-1.txt'; Set-Content -Path $p -Value 'm06'",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "failed",
+                  "output": "Set-Content : Un objet � l'emplacement sp�cifi� inside-ca60f2-1.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 29 + $p = 'inside-ca60f2-1.txt'; Set-Content -Path $p -Value 'm06' + ~~~~~…",
+                  "failureReason": "process exited with code 1"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command ran once as requested.",
+              "elapsedMs": 25055
+            },
+            {
+              "n": 2,
+              "action": "writeOutsideRoot",
+              "command": "$p = Join-Path $env:TEMP 'muse-matrix-ca60f2-2.txt'; Set-Content -Path $p -Value 'm06'; Write-Output $p",
+              "approvalRequested": true,
+              "stages": 3,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "Set-Content : L'acc�s au chemin d'acc�s '<temp>\\muse-matrix-ca60f2-2.txt' est refus�. Au caract�re Ligne:1 : 54 + ... 'muse-matrix-ca60f2-2.txt'; Set-Content -Path $p -Value 'm06'; Write- ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + CategoryIn…"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command ran once as requested.",
+              "elapsedMs": 13016
+            },
+            {
+              "n": 3,
+              "action": "readOutsideRoot",
+              "command": "$p = '<outside>\\read.txt'; Get-Content -Path $p",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "outside-ca60f2"
+                }
+              ],
+              "outcome": "completed",
+              "sideEffect": true,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command ran once as requested.",
+              "elapsedMs": 13591
+            },
+            {
+              "n": 4,
+              "action": "readThroughJunction",
+              "command": "$p = Join-Path 'link' 'junction.txt'; Get-Content -Path $p",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "junction-ca60f2"
+                }
+              ],
+              "outcome": "completed",
+              "sideEffect": true,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command ran once as requested.",
+              "elapsedMs": 12798
+            },
+            {
+              "n": 5,
+              "action": "network",
+              "command": "$u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode",
+              "approvalRequested": true,
+              "stages": 3,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "allow_local_prefix",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "failed",
+                  "output": "Invoke-WebRequest : Impossible de se connecter au serveur distant Au caract�re Ligne:1 : 29 + ... ps://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Selec ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + CategoryInfo : Invali…",
+                  "failureReason": "process exited with code 1"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command ran once as requested.",
+              "elapsedMs": 17569
+            },
+            {
+              "n": 6,
+              "action": "refusedCommand",
+              "command": "$p = Join-Path $env:TEMP 'muse-matrix-ca60f2-6.txt'; Set-Content -Path $p -Value 'm06'",
+              "approvalRequested": true,
+              "stages": 1,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "abort",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "abort",
+              "toolCalls": [],
+              "outcome": "denied",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command not approved, so not executed.",
+              "elapsedMs": 13057
+            }
+          ],
+          "junction": "created",
+          "serverVersion": "1.4.2",
+          "modeSet": {
+            "applyOutcome": "completed",
+            "effectiveMode": "promptUnmatched"
+          }
+        },
+        {
+          "mode": "onRequest",
+          "cells": [
+            {
+              "n": 1,
+              "action": "writeInsideRoot",
+              "command": "$p = 'inside-ba57a9-1.txt'; Set-Content -Path $p -Value 'm06'",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "failed",
+                  "output": "Set-Content : Un objet � l'emplacement sp�cifi� inside-ba57a9-1.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 29 + $p = 'inside-ba57a9-1.txt'; Set-Content -Path $p -Value 'm06' + ~~~~~…",
+                  "failureReason": "process exited with code 1"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command failed, file not created.",
+              "elapsedMs": 21889
+            },
+            {
+              "n": 2,
+              "action": "writeOutsideRoot",
+              "command": "$p = Join-Path $env:TEMP 'muse-matrix-ba57a9-2.txt'; Set-Content -Path $p -Value 'm06'; Write-Output $p",
+              "approvalRequested": true,
+              "stages": 3,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "Set-Content : L'acc�s au chemin d'acc�s '<temp>\\muse-matrix-ba57a9-2.txt' est refus�. Au caract�re Ligne:1 : 54 + ... 'muse-matrix-ba57a9-2.txt'; Set-Content -Path $p -Value 'm06'; Write- ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + CategoryIn…"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Access denied, path echoed.",
+              "elapsedMs": 12297
+            },
+            {
+              "n": 3,
+              "action": "readOutsideRoot",
+              "command": "$p = '<outside>\\read.txt'; Get-Content -Path $p",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "outside-ba57a9"
+                }
+              ],
+              "outcome": "completed",
+              "sideEffect": true,
+              "terminal": "turn/completed:completed",
+              "agentText": "Content is outside-ba57a9.",
+              "elapsedMs": 14079
+            },
+            {
+              "n": 4,
+              "action": "readThroughJunction",
+              "command": "$p = Join-Path 'link' 'junction.txt'; Get-Content -Path $p",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "junction-ba57a9"
+                }
+              ],
+              "outcome": "completed",
+              "sideEffect": true,
+              "terminal": "turn/completed:completed",
+              "agentText": "Content is junction-ba57a9.",
+              "elapsedMs": 11083
+            },
+            {
+              "n": 5,
+              "action": "network",
+              "command": "$u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "failed",
+                  "output": "Invoke-WebRequest : Impossible de se connecter au serveur distant Au caract�re Ligne:1 : 29 + ... ps://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Selec ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + CategoryInfo : Invali…",
+                  "failureReason": "process exited with code 1"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Request failed, no status.",
+              "elapsedMs": 11047
+            },
+            {
+              "n": 6,
+              "action": "refusedCommand",
+              "command": "$p = Join-Path $env:TEMP 'muse-matrix-ba57a9-6.txt'; Set-Content -Path $p -Value 'm06'",
+              "approvalRequested": true,
+              "stages": 1,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "abort",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "abort",
+              "toolCalls": [],
+              "outcome": "denied",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Blocked, command not run.",
+              "elapsedMs": 12885
+            }
+          ],
+          "junction": "created",
+          "serverVersion": "1.4.2",
+          "modeSet": {
+            "applyOutcome": "noop",
+            "effectiveMode": "onRequest"
+          }
+        },
+        {
+          "mode": "allowAll",
+          "cells": [
+            {
+              "n": 2,
+              "action": "writeOutsideRoot",
+              "command": "$p = Join-Path $env:TEMP 'muse-matrix-605ad0-2.txt'; Set-Content -Path $p -Value 'm06'; Write-Output $p",
+              "approvalRequested": false,
+              "stages": 0,
+              "approvals": [],
+              "decision": "none",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "Set-Content : L'acc�s au chemin d'acc�s '<temp>\\muse-matrix-605ad0-2.txt' est refus�. Au caract�re Ligne:1 : 54 + ... 'muse-matrix-605ad0-2.txt'; Set-Content -Path $p -Value 'm06'; Write- ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + CategoryIn…"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command executed.",
+              "elapsedMs": 32371
+            },
+            {
+              "n": 5,
+              "action": "network",
+              "command": "$u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode",
+              "approvalRequested": false,
+              "stages": 0,
+              "approvals": [],
+              "decision": "none",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "failed",
+                  "output": "Invoke-WebRequest : Impossible de se connecter au serveur distant Au caract�re Ligne:1 : 29 + ... ps://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Selec ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + CategoryInfo : Invali…",
+                  "failureReason": "process exited with code 1"
+                }
+              ],
+              "outcome": "failed",
+              "sideEffect": false,
+              "terminal": "turn/completed:completed",
+              "agentText": "Command executed.",
+              "elapsedMs": 31992
+            }
+          ],
+          "junction": "created",
+          "serverVersion": "1.4.2",
+          "modeSet": {
+            "applyOutcome": "completed",
+            "effectiveMode": "allowAll"
+          }
+        }
+      ]
+    },
+    {
+      "posture": "elevated",
+      "hostArgs": [
+        "serve",
+        "--sandbox-network",
+        "restricted",
+        "--trust-workspace",
+        "--disable-sandbox",
+        "--sandbox-network",
+        "enabled"
+      ],
+      "modes": [
+        {
+          "mode": "onRequest",
+          "cells": [
+            {
+              "n": 1,
+              "action": "writeInsideRoot",
+              "command": "$p = 'inside-c3b99f-1.txt'; Set-Content -Path $p -Value 'm06'",
+              "approvalRequested": true,
+              "stages": 2,
+              "approvals": [
+                {
+                  "toolName": "powershell",
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": false
+                },
+                {
+                  "subjectKind": "shell",
+                  "choices": [
+                    "allow_once",
+                    "abort"
+                  ],
+                  "choiceId": "allow_once",
+                  "status": "accepted",
+                  "terminal": true
+                }
+              ],
+              "decision": "allow_once",
+              "toolCalls": [
+                {
+                  "tool": "powershell",
+                  "status": "completed",
+                  "output": "{ \"chunk_id\": \"exec-1-1\", \"command\": \"$p = 'inside-c3b99f-1.txt'; Set-Content -Path $p -Value 'm06'\", \"description\": \"Write marker file content\", \"exit_code\": 0, \"terminal_status\": \"completed\", \"output\": \"\", \"original_output_bytes\": 0, \"ori…"
+                }
+              ],
+              "outcome": "completed",
+              "sideEffect": true,
+              "terminal": "turn/completed:completed",
+              "agentText": "Done.",
+              "elapsedMs": 23426
+            }
+          ],
+          "junction": "created",
+          "serverVersion": "1.4.2",
+          "modeSet": {
+            "applyOutcome": "noop",
+            "effectiveMode": "onRequest"
+          }
+        }
+      ]
+    }
+  ],
+  "liveTurns": 15,
+  "notes": [
+    "Refused cells were reclassified noTool -> denied after the run: an aborted approval emits no toolCall item on 1.4.2 (classifier fixed in the script).",
+    "promptUnmatched and onRequest behaved identically: every cell, including the in-root write and both reads, raised a shell approval (2-3 stages per compound command).",
+    "Workspace posture: approved in-root and out-of-root writes and network fail inside the sandbox; out-of-root reads and a junction read succeed. allowAll never asks but the same sandbox failures remain.",
+    "Elevated spot check (--disable-sandbox): the in-root write succeeds, so the in-root failure is the workspace sandbox, not the approval path.",
+    "One extra live turn (onRequest, in-root write, workspace posture) was spent as a shape sentinel before this report and matches the cell above; total live turns 16."
+  ],
+  "workspaceOutsideProfile": {
+    "why": "Rule out a profile-ACL artefact: workspace and outside folder on a non-system NTFS drive (<root>, <outside>), not under the user profile.",
+    "posture": "workspace",
+    "hostArgs": [
+      "serve",
+      "--sandbox-network",
+      "restricted",
+      "--trust-workspace"
+    ],
+    "serverVersion": "1.4.2",
+    "liveTurns": 5,
+    "cells": [
+      {
+        "mode": "promptUnmatched",
+        "cell": {
+          "n": 1,
+          "action": "writeInsideRoot",
+          "approvalRequested": true,
+          "stages": 2,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "promptUnmatched",
+        "cell": {
+          "n": 5,
+          "action": "network",
+          "approvalRequested": true,
+          "stages": 3,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "onRequest",
+        "cell": {
+          "n": 1,
+          "action": "writeInsideRoot",
+          "approvalRequested": true,
+          "stages": 2,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "onRequest",
+        "cell": {
+          "n": 5,
+          "action": "network",
+          "approvalRequested": true,
+          "stages": 2,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "allowAll",
+        "modeSet": {
+          "applyOutcome": "completed",
+          "effectiveMode": "allowAll"
+        },
+        "cell": {
+          "n": 1,
+          "action": "writeInsideRoot",
+          "command": "$p = 'inside-5d94e9-1.txt'; Set-Content -Path $p -Value 'm06'",
+          "approvalRequested": false,
+          "stages": 0,
+          "approvals": [],
+          "decision": "none",
+          "toolCalls": [
+            {
+              "tool": "powershell",
+              "status": "failed",
+              "output": "Set-Content : Un objet � l'emplacement sp�cifi� inside-5d94e9-1.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 29 + $p = 'inside-5d94e9-1.txt'; Set-Content -Path $p -Value 'm06' + ~~~~~…",
+              "failureReason": "process exited with code 1"
+            }
+          ],
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed",
+          "agentText": "Commande exécutée, code 1.",
+          "elapsedMs": 21706
+        }
+      }
+    ],
+    "notes": [
+      "The first four cells are summaries from the progress log: their full JSON was lost to a report-write bug (mkdir on a drive root, EPERM), fixed in the script afterwards.",
+      "The in-root write fails identically off the profile in all three modes, with the same PowerShell error, so it is not a profile-ACL artefact."
+    ]
+  }
+}

@@ -89,3 +89,10 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
 /** Host error codes our UI interprets (kinds per the SDK error registry). */
 export const MSP_ERROR_APPROVAL_REQUIREMENT_STALE = -32053;
 export const MSP_ERROR_USER_INPUT_ANSWER_INVALID = -32057;
+export const MSP_ERROR_SESSION_NOT_LOADED = -32024;
+
+/** The host code in a bridge error ("MSP error -32053: …"), or null. */
+export function mspErrorCode(error: unknown): number | null {
+  const match = /\bMSP error (-\d+)\b/.exec(error instanceof Error ? error.message : String(error));
+  return match === null ? null : Number(match[1]);
+}

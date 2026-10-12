@@ -3,19 +3,15 @@ import assert from "node:assert/strict";
 import {
   AUTHORIZATION_MODE_KEY,
   DEFAULT_AUTHORIZATION_MODE,
-  automaticApprovalChoice,
   authorizationModeDescription,
   authorizationModeLabel,
   connectorCallRequiresApproval,
   hostApprovalMode,
-  hostModeMatches,
   parseAuthorizationMode,
   productAuthorizationMode,
+  projectApprovalMode,
+  type AuthorizationMode,
 } from "../src/lib/authorization.ts";
-
-const local = { choiceId: "allow-local", decision: "allow", scope: "localPersistent" };
-const network = { choiceId: "allow-network", decision: "allow", scope: "network" };
-const denied = { choiceId: "deny", decision: "denied", scope: "local" };
 
 describe("global authorization posture", () => {
   it("falls back to ask and keeps a namespaced storage key", () => {
@@ -26,41 +22,49 @@ describe("global authorization posture", () => {
 
   it("exposes calm, product-facing labels", () => {
     assert.equal(authorizationModeLabel("yolo"), "YOLO");
-    assert.match(authorizationModeDescription("workspace"), /network/i);
+    // The app approves nothing itself: the label says what the engine does.
+    assert.equal(authorizationModeLabel("workspace"), "Ask only for more access");
+    // Measured on Windows 1.4.2: `promptUnmatched` and `onRequest` asked for
+    // every shell action, none ran unprompted, and `allowAll` never asked
+    // while the sandbox still applied. No text may promise more.
+    const middle = authorizationModeDescription("workspace");
+    assert.equal(middle, "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands.");
+    for (const mode of ["ask", "workspace", "yolo"] as const) {
+      assert.doesNotMatch(authorizationModeDescription(mode), /without asking|runs what|\bmost\b|its rules/i);
+    }
+    assert.match(authorizationModeDescription("ask"), /asks before any action the engine's own rules do not allow/);
+    assert.match(authorizationModeDescription("yolo"), /Isolation setting still limits/);
   });
 
-  it("never auto-approves in ask mode", () => {
-    assert.equal(automaticApprovalChoice("ask", [local]), null);
-  });
-
-  it("auto-approves local actions but keeps risky scopes explicit", () => {
-    assert.deepEqual(automaticApprovalChoice("workspace", [local]), local);
-    assert.equal(automaticApprovalChoice("workspace", [network]), null);
-  });
-
-  it("YOLO chooses the first non-denied host choice", () => {
-    assert.deepEqual(automaticApprovalChoice("yolo", [denied, network]), network);
-    assert.equal(automaticApprovalChoice("yolo", [denied]), null);
-  });
-
-  it("maps product postures to the closed MSP modes", () => {
-    assert.equal(hostApprovalMode("ask"), "onRequest");
-    assert.equal(hostApprovalMode("workspace"), "promptUnmatched");
+  it("maps product postures to the host's own mode semantics", () => {
+    assert.equal(hostApprovalMode("ask"), "promptUnmatched");
+    assert.equal(hostApprovalMode("workspace"), "onRequest");
     assert.equal(hostApprovalMode("yolo"), "allowAll");
   });
 
   it("maps the host projection back without inventing a product mode", () => {
-    assert.equal(productAuthorizationMode("onRequest"), "ask");
-    assert.equal(productAuthorizationMode("promptUnmatched"), "workspace");
+    assert.equal(productAuthorizationMode("promptUnmatched"), "ask");
+    assert.equal(productAuthorizationMode("onRequest"), "workspace");
     assert.equal(productAuthorizationMode("allowAll"), "yolo");
     assert.equal(productAuthorizationMode("denyUnmatched"), null);
   });
 
-  it("fails closed when a host has not confirmed a requested posture", () => {
-    assert.equal(hostModeMatches("workspace", "promptUnmatched"), true);
-    assert.equal(hostModeMatches("yolo", "promptUnmatched"), false);
-    assert.equal(hostModeMatches("yolo", null), false);
-    assert.equal(hostModeMatches("yolo", undefined), true);
+  it("re-projects a posture picked while the host call was in flight", async () => {
+    let selector: AuthorizationMode = "yolo";
+    const sent: AuthorizationMode[] = [];
+    await projectApprovalMode(() => selector, async (mode) => {
+      sent.push(mode);
+      if (sent.length === 1) selector = "ask";
+      return { status: "accepted", effectiveMode: { mode: hostApprovalMode(mode) } };
+    }, "onRequest");
+    assert.deepEqual(sent, ["yolo", "ask"]);
+  });
+
+  it("reports a host that keeps another posture", async () => {
+    await assert.rejects(projectApprovalMode(() => "ask", async () => ({
+      status: "accepted",
+      effectiveMode: { mode: "onRequest" },
+    })));
   });
 
   it("keeps connector calls aligned with the global posture", () => {

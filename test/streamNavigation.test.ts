@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { streamNavigationTarget } from "../src/lib/streamNavigation.ts";
+import { streamNavigationTarget, streamScrollBehavior } from "../src/lib/streamNavigation.ts";
 
 describe("conversation keyboard navigation", () => {
   it("jumps to the first and last scroll positions", () => {
@@ -17,5 +17,10 @@ describe("conversation keyboard navigation", () => {
   it("rejects unrelated keys and invalid positions safely", () => {
     assert.equal(streamNavigationTarget("ArrowDown", 800, 100, 2400), null);
     assert.equal(streamNavigationTarget("PageDown", Number.NaN, Number.NaN, Number.NaN), 0);
+  });
+
+  it("does not animate a jump when the user asked for reduced motion", () => {
+    assert.equal(streamScrollBehavior(true), "auto");
+    assert.equal(streamScrollBehavior(false), "smooth");
   });
 });

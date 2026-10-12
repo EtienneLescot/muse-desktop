@@ -1,4 +1,4 @@
-import { redactDiagnostic } from "./diagnostics.ts";
+import { redactDiagnostic, safeSlice } from "./diagnostics.ts";
 
 type ErrorPattern = readonly [RegExp, string];
 
@@ -35,6 +35,16 @@ const FRIENDLY_PATTERNS: ErrorPattern[] = [
   [/^git (?:status|diff|stage|restore|commit|push|create_pr).*failed\b/i, "The Git action could not be completed."],
 ];
 
+/**
+ * M0-13: the failures the Extensions connector actions raise. The banner is
+ * one slot for every surface, so a new connector action clears these and
+ * leaves another surface's failure in place.
+ */
+export function isConnectorError(error: string | null): boolean {
+  return error !== null &&
+    /^(?:local MCP|MCP bundle|unknown connector|cannot remove running MCP connector)\b/.test(error);
+}
+
 function asText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -49,6 +59,15 @@ export function reconnectErrorMessage(error: unknown): string {
     return "Reconnect unavailable: this host cannot resume saved conversations. Your saved messages are still available locally.";
   }
   return `Reconnect failed: ${detail || "the host did not respond"}. Your saved messages are still available.`;
+}
+
+/**
+ * M0-08 connection pill and notice: the last (re)connect failure, masked and
+ * bounded without splitting an emoji into a lone surrogate (M0-07).
+ */
+export function connectionNoticeText(error: unknown): string {
+  const text = redactDiagnostic(asText(error)) ?? "";
+  return text.length > 220 ? `${safeSlice(text, 217)}…` : text;
 }
 
 /** Return calm, English, redacted copy for a user-facing error surface. */

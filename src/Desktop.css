@@ -605,7 +605,8 @@
   gap: 6px;
   flex-shrink: 0;
 }
-.terminal-actions button {
+.terminal-actions button,
+.terminal-empty button {
   min-width: 25px;
   height: 25px;
   padding: 0 7px;
@@ -695,6 +696,10 @@
 }
 .terminal-empty strong {
   color: var(--text);
+}
+.terminal-empty button {
+  justify-self: start;
+  padding-inline: 9px;
 }
 
 /* M1-07 real workspace browser. The preview is visibly marked as disk data

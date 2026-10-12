@@ -1,0 +1,20 @@
+{
+  "serverInfo": {
+    "name": "muse",
+    "version": "1.4.2"
+  },
+  "userAgent": "muse-build/1.4.2 (<platform>)",
+  "museHome": "<home>",
+  "platformFamily": "windows",
+  "platformOs": "windows",
+  "schema": {
+    "version": 1,
+    "fingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2"
+  },
+  "grantedCapabilities": [
+    "userShell",
+    "sessionMcp"
+  ],
+  "experimentalApi": false,
+  "sessionDurability": "durable"
+}

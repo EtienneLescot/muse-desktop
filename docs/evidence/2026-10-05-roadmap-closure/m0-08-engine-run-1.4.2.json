@@ -1,0 +1,151 @@
+{
+  "schema": "muse-desktop.m0-08-engine-run.v1",
+  "ticket": "M0-08",
+  "date": "2026-10-05",
+  "commit": "1e6b9c1",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "prompt": "Reply with just the word BASELINE and nothing else.",
+  "picker": {
+    "found": true,
+    "optionId": "muv876b3-dpbbpf:1",
+    "optionWorkspace": null,
+    "trigger": "baseline-m2-01 · root-b root-b",
+    "note": "Runs in root-b. The agent reads the rules of that folder."
+  },
+  "send": {
+    "clicked": true
+  },
+  "startSession": {
+    "workspacePath": "<root B>",
+    "ok": true,
+    "sessionDurability": "durable",
+    "ms": 7703
+  },
+  "turn": {
+    "replied": true,
+    "text": "BASELINE",
+    "entries": 6,
+    "roles": [
+      "user",
+      "assistant",
+      "subagent",
+      "assistant",
+      "subagent",
+      "subagent"
+    ],
+    "msFromStart": 37994,
+    "sendInput": {
+      "ok": true,
+      "result": "{\"commandId\":\"01a10c0a-98e4-7318-8b28-b29ddac81b7f\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a10c0a-98e4-7318-8b28-b29ddac81b7f\"}"
+    }
+  },
+  "ui": {
+    "health": null,
+    "alerts": []
+  },
+  "project": {
+    "attachedToProject": true,
+    "sessionWorkspace": "<root B>"
+  },
+  "diagnostics": {
+    "schema": "muse-desktop.native-diagnostics.v1",
+    "workspaceConfigured": true,
+    "hostCount": 2,
+    "sessionCount": 9,
+    "runningSessionCount": 0,
+    "pendingApprovalCount": 0,
+    "eventBufferCount": 25,
+    "hostEngines": [
+      {
+        "serverVersion": "1.4.2",
+        "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2"
+      },
+      {
+        "serverVersion": "1.4.2",
+        "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2"
+      }
+    ]
+  },
+  "fixtureFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+  "verdict": {
+    "pickerProjectRootIndex": true,
+    "sessionStartedInChosenRoot": true,
+    "attachedToProject": true,
+    "liveTurnCompleted": true,
+    "hostEngine142": true,
+    "fingerprintMatchesFixture": true,
+    "consoleErrors": 0,
+    "ignoredAdditiveNotifications": [
+      "session/started",
+      "session/statusChanged"
+    ]
+  },
+  "consoleErrors": [],
+  "echoTap": {
+    "provider": "echo",
+    "billed": false,
+    "serverVersion": "1.4.2",
+    "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+    "turnAccepted": true,
+    "terminal": "completed",
+    "methods": [
+      "item/completed",
+      "item/delta",
+      "item/started",
+      "session/branchChanged",
+      "session/statusChanged",
+      "session/tokenUsage",
+      "turn/completed",
+      "turn/started"
+    ],
+    "allMethodsSinceInitialize": [
+      "item/completed",
+      "item/delta",
+      "item/started",
+      "session/branchChanged",
+      "session/started",
+      "session/statusChanged",
+      "session/tokenUsage",
+      "turn/completed",
+      "turn/started"
+    ],
+    "routedByClient": [
+      "approval/requested",
+      "approval/resolved",
+      "approval/updated",
+      "item/completed",
+      "item/delta",
+      "item/started",
+      "item/updated",
+      "session/approvalModeChanged",
+      "session/branchChanged",
+      "session/contextUsage",
+      "session/tokenUsage",
+      "skill/changed",
+      "turn/completed",
+      "turn/retracted",
+      "turn/retryScheduled",
+      "turn/started",
+      "turn/stopped",
+      "turn/unqueued",
+      "userInput/requested",
+      "userInput/settled"
+    ],
+    "ignoredByClient": [
+      "session/started",
+      "session/statusChanged"
+    ]
+  },
+  "posture": {
+    "sandboxMode": "network (global setting; read from the profile after the run, the harness now records it from start_session)",
+    "authorizationMode": "yolo",
+    "knownHostDefect": "not touched: the 05/10 write defect is specific to the workspace isolation posture (--sandbox-network restricted) and this one-word turn ran no shell"
+  },
+  "limits": [
+    "Pre-1.3.0 engine builds are unobtainable: the version matrix is 1.3.0-R3401.1 and 1.4.2-R4684.1 (recorded initialize fixtures in src-tauri/tests/fixtures).",
+    "session/todoListChanged and session/goalChanged did not occur: not in the echo-provider turn, and the app drops unrouted notifications before the renderer, so their absence in the app turn cannot be observed. The Rust unit test unknown_additive_notifications_are_ignored_and_routing_continues covers them.",
+    "The notifications the 1.4.2 echo turn emits that the client does not route (session/started, session/statusChanged) are listed under echoTap.ignoredByClient; the app's live turn on the same binary completed with no console error."
+  ]
+}

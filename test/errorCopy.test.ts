@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { reconnectErrorMessage, userFacingError } from "../src/lib/errorCopy.ts";
+import { connectionNoticeText, reconnectErrorMessage, userFacingError } from "../src/lib/errorCopy.ts";
 
 describe("M0-11 generated error copy", () => {
   it("replaces protocol verbs with calm English while retaining bounded detail", () => {
@@ -47,5 +47,12 @@ describe("M0-11 generated error copy", () => {
       userFacingError(reconnectErrorMessage("session/read failed: method not found")),
       "Reconnect unavailable: this host cannot resume saved conversations. Your saved messages are still available locally.",
     );
+  });
+
+  it("M0-07: the connection notice is masked and bounded without a lone surrogate", () => {
+    // Unit 216 starts an emoji, as in the native stderr flood.
+    const notice = connectionNoticeText(`MSP handshake failed. token=SYNTH-SECRET ${"x".repeat(177)}😀😀 ${"y".repeat(8_000)}`);
+    assert.equal(notice, `MSP handshake failed. token=[redacted] ${"x".repeat(177)}…`);
+    assert.equal(connectionNoticeText(new Error("short reason")), "short reason");
   });
 });

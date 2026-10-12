@@ -14,6 +14,7 @@ import {
   loadGitTurnSnapshot,
   loadLog,
   loadOutbox,
+  loadPendingCardSessions,
   loadProjects,
   loadSessions,
   loadThreadProjects,
@@ -26,6 +27,7 @@ import {
   saveGitTurnSnapshot,
   saveLog,
   saveOutbox,
+  savePendingCardSessions,
   saveProjects,
   saveSessions,
   saveThreadProjects,
@@ -74,22 +76,6 @@ import {
   type InputAnswer,
   type InputRequest,
 } from "../lib/input";
-// US-15 persistent approval allowlist: matching + most-restrictive-wins
-// resolution live in ../lib/allowlist (dependency-free, unit-tested);
-// storage + rule types extend ../lib/persist.
-import {
-  addAllowRule,
-  defaultPatternFor,
-  loadAllowlist,
-  removeAllowRule,
-  resolveApproval,
-  saveAllowlist,
-  setAllowRuleDecision,
-  type AllowDecision,
-  type AllowRule,
-  type ResolvedApproval,
-} from "../lib/allowlist";
-export type { AllowDecision, AllowRule, ResolvedApproval } from "../lib/allowlist";
 // US-19 in-app browser + computer-use (scoped): pure helpers, unit-tested;
 // storage keys extend the muse-desktop.* localStorage namespace.
 import {
@@ -173,10 +159,11 @@ import {
   type EngineErrorDetails,
   type TurnCompletionDetails,
 } from "../lib/engineError";
-import { statusLogText } from "../lib/statusLog";
+import { hostExitNotices, statusLogText } from "../lib/statusLog";
 // Boot auto-resume candidate selection (pure, unit-tested): which stored
 // sessions need a silent `resume_session` after `restore_sessions` settles.
-import { selectResumeOnOpen } from "../lib/bootResume";
+import { connectedRestoredIds, selectResumeOnOpen } from "../lib/bootResume";
+import { MSP_ERROR_SESSION_NOT_LOADED, mspErrorCode } from "../lib/msp";
 import {
   parseRetryScheduled,
   resumeRecoveryDelay,
@@ -206,6 +193,7 @@ import {
   createProject as createProjectRow,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject as deleteProjectRow,
+  projectOfFolder,
   resolveProjectSettings,
   setProjectOverride as setProjectOverrideRow,
   updateProject as updateProjectRow,
@@ -218,6 +206,7 @@ import {
   type WorktreePlan,
   type WorktreeRecord,
 } from "../lib/worktrees";
+import { describeHandoffResult, describeWorkspaceFallback, type HandoffPreview } from "../lib/handoff";
 import {
   loadWorktreeCleanupIntents,
   saveWorktreeCleanupIntents,
@@ -263,7 +252,9 @@ export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/sc
 import {
   archiveRun,
   appendRun,
+  attachRunTurn,
   cancelRun,
+  cancelRunsForUnqueuedTurn,
   completeRun,
   createScheduleRun,
   isRetryableScheduleError,
@@ -291,7 +282,6 @@ import {
   syncNativeSchedulerWakeup,
   type SchedulerWakeupStatus,
 } from "../lib/schedulerWakeup";
-import { buildScheduleRunSummary, mergeScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
   INITIAL_SCHEDULER_RUNTIME_STATUS,
@@ -345,40 +335,43 @@ import {
 // (dependency-free, unit-tested); scope-guard client for the path probe.
 import {
   hostSandboxConfigForProject,
-  effectiveSandboxMode,
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
   parseProviderMap,
   parseSandboxSettings,
   providerForProject,
+  type HostRequest,
+  type HostSandboxConfig,
   type LiveModel,
   type SandboxSettings,
 } from "../lib/settings";
 import {
   AUTHORIZATION_MODE_KEY,
-  automaticApprovalChoice,
   authorizationModeLabel,
-  hostApprovalMode,
-  hostModeMatches,
   parseAuthorizationMode,
   productAuthorizationMode,
+  projectApprovalMode,
   type AuthorizationMode,
 } from "../lib/authorization";
 import {
+  STALE_APPROVAL_NOTICE,
+  isApprovalRequirementStale,
   isSelectedApprovalAccepted,
   parseApprovalResolution,
   shouldCloseApprovalLane,
 } from "../lib/approvalResolution";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
-import { reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
+import { connectionNoticeText, isConnectorError, reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
 import { forkFailureMessage, inheritedForkLog } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
+  allowTestRemoteMcpOrigin,
   findConnector,
   installConnector,
   listConnectorTools,
+  connectorReachable,
   loadConnectors,
   localConnectorIdForName,
   registerLocalConnector,
@@ -400,7 +393,14 @@ import {
   parseMcpbArchive,
   type ParsedMcpPackage,
 } from "../lib/mcpPackage.ts";
-import { buildHostMcpServers, type HostMcpStdioServer } from "../lib/hostMcp";
+import {
+  conversationsHoldingRemote,
+  heldBearerLine,
+  heldBearerNotice,
+  hostMcpConfig,
+  type HostMcpStdioServer,
+} from "../lib/hostMcp";
+import { isRemoteWorkspace } from "../lib/remoteSsh";
 import {
   parseComputerStatus,
   type ComputerLevel,
@@ -409,8 +409,14 @@ import {
 import {
   callRemoteMcp as callRemoteMcpTransport,
   isRemoteMcpAuthenticationError,
+  isRemoteMcpSessionExpired,
   probeRemoteMcp as probeRemoteMcpTransport,
+  bearerTokenProblem,
+  encodeStoredBearer,
   remoteMcpCredentialKey,
+  remoteMcpFailureMessage,
+  storedBearerFor,
+  type NoTokenReason,
   type RemoteMcpCallResult,
   type RemoteMcpProbeResult,
   type RemoteMcpSession,
@@ -797,6 +803,8 @@ export interface ApprovalRequest {
   summary: string;
   toolName: string;
   choices: ApprovalChoice[];
+  /** The stage token this card shows; a decision is pinned to it. */
+  requirementId?: unknown;
 }
 
 /** One bounded chunk returned by the host's lazy item output reader. */
@@ -860,8 +868,12 @@ interface UseMuseSessions {
   /** w-settings: sandbox settings (persisted) + whole-object setter. */
   sandbox: SandboxSettings;
   setSandbox: (next: SandboxSettings) => void;
-  /** M2-02: explicitly restart the workspace host after a posture change. */
-  restartHost: (workspacePath?: string | null) => Promise<boolean>;
+  /**
+   * M2-02: explicitly restart a workspace host after a posture change; the
+   * default folder, at the posture of the project that owns it (the global
+   * one otherwise), unless told otherwise.
+   */
+  restartHost: (workspacePath?: string | null, sandbox?: HostSandboxConfig) => Promise<boolean>;
   /** Global tool-authorization posture (persisted locally). */
   authorizationMode: AuthorizationMode;
   setAuthorizationMode: (mode: AuthorizationMode) => void;
@@ -910,7 +922,7 @@ interface UseMuseSessions {
   /** M1-09: create a server-side branch from completed conversation turns. */
   /** Fork at the latest completed turn, or at an explicit MSP turn anchor. */
   forkSession: (sessionId: string, lastTurnId?: string) => Promise<string | null>;
-  reconnectSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
+  reconnectSession: (id: string, options?: { silent?: boolean; reload?: boolean }) => Promise<void>;
   reconnectingId: string | null;
   /** M0-02: reconcile durable history and pending actions without a restart. */
   reconcileSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
@@ -918,6 +930,8 @@ interface UseMuseSessions {
   connectedIds: string[];
   /** M1-06: capability negotiated with each workspace host. */
   userShellAvailableForSession: (sessionId: string) => boolean;
+  /** M0-13: the posture this conversation's live host was started with; `undefined` = no live host known. */
+  hostSandboxForSession: (sessionId: string) => HostSandboxConfig | undefined;
   /** M1-06: whether the host has this conversation loaded; `undefined` = unreported. */
   sessionLoadedForSession: (sessionId: string) => boolean | undefined;
   /**
@@ -949,13 +963,6 @@ interface UseMuseSessions {
   /** Give up on a failed entry: drops it and its undelivered user entry. */
   discardSend: (clientMessageId: string) => void;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<boolean>;
-  /** US-15: persisted allowlist rules + effective decision per request. */
-  allowlist: AllowRule[];
-  allowDecisionFor: (approval: ApprovalRequest) => ResolvedApproval;
-  /** Approve, then memorize an allow rule (command pattern + choice scope). */
-  rememberApproval: (approval: ApprovalRequest, choiceId: string) => Promise<void>;
-  revokeAllowRule: (id: string) => void;
-  setAllowRuleDecision: (id: string, decision: AllowDecision) => void;
   answerInput: (sessionId: string, inputId: string, answers: InputAnswer[]) => Promise<void>;
   cancelInput: (sessionId: string, inputId: string) => Promise<void>;
   inputRequests: InputRequest[];
@@ -1054,6 +1061,13 @@ interface UseMuseSessions {
   runUserShell: (sessionId: string, command: string) => Promise<boolean>;
   resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
   closeTerminal: (sessionId: string) => Promise<void>;
+  /** M2-05: what moving this conversation's uncommitted work would do; null target = a new worktree. */
+  previewHandoff: (sessionId: string, target: string | null) => Promise<HandoffPreview | null>;
+  /**
+   * M2-05: move the work to Local or a worktree; the conversation follows on hosts that allow it.
+   * `newWorktree`: `target` was created for this move, and goes again if the move does not happen.
+   */
+  handoffConversation: (sessionId: string, target: string, newWorktree?: boolean) => Promise<HandoffPreview | null>;
   /** Add a bounded, attributed terminal snapshot to the next prompt. */
   prepareTerminalContext: (sessionId: string) => boolean;
   /** M1-07: session-scoped real filesystem listing and bounded preview. */
@@ -1299,6 +1313,8 @@ interface UseMuseSessions {
   /** M3-04: refresh bounded SKILL.md discovery for the selected workspace. */
   scanSkills: (workspacePath?: string | null) => Promise<SkillScanSummary | null>;
   error: string | null;
+  /** The start, reconnect or restart `error` came from, when one did. */
+  errorHost: HostRequest | null;
   /** Set a bounded user-facing orchestration error from a composite action. */
   setError: (message: string | null) => void;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
@@ -1330,6 +1346,12 @@ interface BackendSessionMeta {
   loaded?: boolean;
   /** Title the host keeps for this conversation, when it has one. */
   title?: string;
+  /** M2-05: the host's folder once the conversation moved (see StoredSession). */
+  host_workspace?: string;
+  /** M2-05, `resume_session` only: why the conversation left the folder it had moved to. */
+  workspace_notice?: string;
+  /** M0-13: the posture its host was started with, when one runs. */
+  sandbox?: HostSandboxConfig;
 }
 
 /** A placeholder title ("Session 01a0…" or none) gives way to the host title. */
@@ -1489,7 +1511,7 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
           ? obj.summary
           : (typeof obj.command === "string" && obj.command) ||
             (typeof obj.description === "string" && obj.description) ||
-            trimmed;
+            "";
       const toolName = typeof obj.toolName === "string" ? obj.toolName : "tool";
       const rawChoices = Array.isArray(obj.choices) ? obj.choices : [];
       const choices: ApprovalChoice[] = rawChoices
@@ -1515,7 +1537,8 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
           };
         })
         .filter((c) => c.choiceId.length > 0);
-      return { session_id: sessionId, request_id: requestId, summary, toolName, choices };
+      return { session_id: sessionId, request_id: requestId, summary, toolName, choices,
+        requirementId: obj.currentRequirementId ?? undefined };
     } catch {
       // fall through
     }
@@ -1573,6 +1596,12 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // M0-05: conversations whose card was open when the app last closed, read
+  // during render so the write-through below cannot clear it first.
+  const bootPendingCardsRef = useRef<Record<"approval" | "input", string[]> | null>(null);
+  if (bootPendingCardsRef.current === null) {
+    bootPendingCardsRef.current = { approval: loadPendingCardSessions("approval"), input: loadPendingCardSessions("input") };
+  }
   // M0-02: keep a live heartbeat separate from the transcript. Persisted
   // entries can be old after a restart and must never masquerade as current
   // host activity.
@@ -1641,13 +1670,12 @@ export function useMuseSessions(): UseMuseSessions {
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
     return parseAuthorizationMode(readStorageString(AUTHORIZATION_MODE_KEY));
   });
-  /** Effective host posture by session. `null` means a requested change was
-   * refused or the host returned an incomplete projection; in that state the
-   * local selector must never auto-approve a tool. */
-  const [hostApprovalModeBySession, setHostApprovalModeBySession] = useState<Record<string, string | null>>({});
-  // US-15 allowlist: restored once (survives restarts via localStorage),
-  // written through on every change.
-  const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
+  // Read after host calls that outlive a render (start, resume, fork,
+  // scheduled runs): a posture picked meanwhile must still reach the session.
+  const authorizationModeRef = useRef(authorizationMode);
+  authorizationModeRef.current = authorizationMode;
+  // Sessions a scheduled run moved off the global posture, by scheduled turn.
+  const scheduledPostureRef = useRef(new Map<string, string>());
   // US-9 automations: restored once (survive restarts via localStorage),
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
@@ -1707,8 +1735,18 @@ export function useMuseSessions(): UseMuseSessions {
   // store for an explicit reconnect; they never enter the registry or
   // localStorage.
   const remoteSessionsRef = useRef<Record<string, RemoteMcpSession>>({});
+  // M3-02: the remote connectors whose bearer each conversation's host was
+  // handed (Use in Muse), so Forget and the like can say who still has it.
+  // ponytail: a window reload forgets it while the hosts keep the tokens;
+  // persist it if that case matters.
+  const remoteHandedRef = useRef<Record<string, string[]>>({});
   const [remoteConnectedIds, setRemoteConnectedIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
+  useEffect(() => {
+    // ADR 0003: only a test instance names a loopback origin (M3-02 proof server).
+    if (!isTauriRuntime()) return;
+    invoke<string | null>("test_remote_mcp_origin").then(allowTestRemoteMcpOrigin, () => undefined);
+  }, []);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
   // Latest skills for the render-detached `/skill` path inside sendInput.
@@ -1773,6 +1811,16 @@ export function useMuseSessions(): UseMuseSessions {
   const connectorsRef = useRef<ConnectorEntry[]>(connectors);
   connectorsRef.current = connectors;
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
+  // M0-05: questions already in the transcript; the host delivers each twice.
+  const loggedInputsRef = useRef(new Set<string>());
+  // M0-05: questions answered or skipped, or being: one answer each. A second
+  // Ctrl+Enter, or a click before input_settled removes the card, would be
+  // refused by the host and raise a false error. Released when the host
+  // refuses the answer: the card stays for a corrected one.
+  const answeredInputsRef = useRef(new Set<string>());
+  // M0-05: conversations whose engine runs no turn of theirs: being resumed,
+  // or resumed idle until their next turn starts (see reconnectSession).
+  const noLiveTurnRef = useRef(new Set<string>());
   // US-19 browser: anchored comments + per-app computer-use permissions,
   // restored once (survive restarts via localStorage), written through below.
   const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() =>
@@ -1790,7 +1838,19 @@ export function useMuseSessions(): UseMuseSessions {
   const [providerMap] = useState<Record<string, string>>(() => {
     return parseProviderMap(readStorageJson<unknown>(PROVIDER_MAP_KEY, null));
   });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorMessage] = useState<string | null>(null);
+  // The host request a failure came from, set and cleared with it: a posture
+  // conflict restarts that host, not the default folder's (M4-07 ssh:// keys).
+  const [errorHost, setErrorHost] = useState<HostRequest | null>(null);
+  const setError = (message: string | null, host: HostRequest | null = null): void => {
+    setErrorMessage(message);
+    setErrorHost(host);
+  };
+  // M0-13: called first by every connector action, so a later probe or call
+  // no longer shows the previous one's failure. Connector errors carry no host.
+  const clearConnectorError = (): void => {
+    setErrorMessage((current) => (isConnectorError(current) ? null : current));
+  };
   // US-4: local thread summaries (mirror of localStorage) + composer prefill
   // after `newFromSummary`.
   const [summaries, setSummaries] = useState<Record<string, ThreadSummary>>({});
@@ -1870,10 +1930,17 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
+  const connectedIdsRef = useRef<string[]>([]);
+  connectedIdsRef.current = connectedIds;
   // M1-06: initialize grants are host facts. Keep them separate from the
   // authorization posture and from persisted session metadata.
   const [grantedCapabilitiesBySession, setGrantedCapabilitiesBySession] = useState<
     Record<string, string[] | undefined>
+  >({});
+  // M0-13: the posture each conversation's host was started with (a host
+  // fact, recorded by main.rs at spawn), not the project's current settings.
+  const [hostSandboxBySession, setHostSandboxBySession] = useState<
+    Record<string, HostSandboxConfig | undefined>
   >({});
   // M1-06: whether the host has each conversation loaded. `session/list` calls
   // every persisted session `notLoaded` after a restart, and `session/userShell`
@@ -2215,7 +2282,22 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const restored = await invoke<BackendSessionMeta[]>("restore_sessions");
         if (cancelled) return;
-        setConnectedIds(restored.map((s) => s.session_id));
+        // A card open when the app closed died with its host (the engine
+        // aborts an approval on stdin EOF): the transcript says so, once per
+        // kind of card. A window reload keeps the host, so its card comes
+        // back below instead.
+        const served = new Set(restored.map((s) => s.session_id));
+        for (const kind of ["approval", "input"] as const) {
+          for (const id of new Set(bootPendingCardsRef.current?.[kind] ?? [])) {
+            if (served.has(id) || tombstoned.current?.has(id) || !stored.some((s) => s.session_id === id)) continue;
+            const text = statusLogText(`${kind}_cancelled_by_restart`);
+            if (text !== null) pushLog(id, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+          }
+        }
+        // Listed is not loaded: a conversation the host has not loaded stays
+        // disconnected (no posture target) until resume-on-open loads it.
+        const connected = connectedRestoredIds(restored);
+        setConnectedIds(connected);
         setGrantedCapabilitiesBySession((cur) => {
           const next = { ...cur };
           for (const meta of restored) {
@@ -2223,6 +2305,10 @@ export function useMuseSessions(): UseMuseSessions {
           }
           return next;
         });
+        setHostSandboxBySession((cur) => ({
+          ...cur,
+          ...Object.fromEntries(restored.map((meta) => [meta.session_id, meta.sandbox])),
+        }));
         setSessionLoadedBySession((cur) => {
           const next = { ...cur };
           for (const meta of restored) {
@@ -2241,7 +2327,13 @@ export function useMuseSessions(): UseMuseSessions {
               next[i] = {
                 ...next[i],
                 title: withHostTitle(next[i].title, meta.title),
-                workspace: meta.workspace,
+                // M2-05: a host listing knows only its own folder; a moved row
+                // keeps its workspace until its resume re-applies the move.
+                ...(meta.host_workspace !== undefined
+                  ? { workspace: meta.workspace, host_workspace: meta.host_workspace }
+                  : next[i].host_workspace === undefined
+                    ? { workspace: meta.workspace }
+                    : {}),
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
                 // The host owns the model, so its value wins when present; a
@@ -2265,18 +2357,9 @@ export function useMuseSessions(): UseMuseSessions {
         });
         setConnectionBySession((cur) => {
           const next = { ...cur };
-          for (const meta of restored) {
-            if (!tombstoned.current?.has(meta.session_id)) {
-              next[meta.session_id] = "connected";
-            }
-          }
-          return next;
-        });
-        setHostApprovalModeBySession((cur) => {
-          const next = { ...cur };
-          for (const meta of restored) {
-            if (typeof meta.approval_mode === "string" && !tombstoned.current?.has(meta.session_id)) {
-              next[meta.session_id] = meta.approval_mode;
+          for (const id of connected) {
+            if (!tombstoned.current?.has(id)) {
+              next[id] = "connected";
             }
           }
           return next;
@@ -2291,6 +2374,22 @@ export function useMuseSessions(): UseMuseSessions {
           restored
             .filter((meta) => !tombstoned.current?.has(meta.session_id))
             .map((meta) => refreshHostSkills(meta.session_id)),
+        );
+        // A reloaded window polls from the head, so a request raised before
+        // the reload lives only in the host's pending fold. Without this read
+        // the card stayed hidden behind "Waiting for the desktop host" until
+        // the user pressed Sync now.
+        void Promise.allSettled(
+          restored
+            .filter((meta) => meta.running && !tombstoned.current?.has(meta.session_id))
+            .map(async ({ session_id: id }) => {
+              const pending = parsePendingSnapshot(
+                id,
+                await invoke<unknown>("list_pending_requests", { sessionId: id }),
+              );
+              setApprovals((cur) => [...cur.filter((a) => a.session_id !== id), ...pending.approvals]);
+              setInputRequests((cur) => [...cur.filter((r) => r.session_id !== id), ...pending.inputs]);
+            }),
         );
       } catch (e) {
         if (!cancelled) setError(`restore_sessions failed: ${String(e)}`);
@@ -2362,9 +2461,13 @@ export function useMuseSessions(): UseMuseSessions {
     saveActiveId(activeId);
   }, [activeId, historyReady]);
 
+  // M0-05: which conversations have a card open, for the next boot's notice.
   useEffect(() => {
-    saveAllowlist(allowlist);
-  }, [allowlist]);
+    savePendingCardSessions("approval", approvals.map((a) => a.session_id));
+  }, [approvals]);
+  useEffect(() => {
+    savePendingCardSessions("input", inputRequests.map((r) => r.session_id));
+  }, [inputRequests]);
 
   // US-3 + US-30 write-through persistence (best-effort, cf. persist.ts).
   // M0-02: same hydration guard as sessions above — the loaded value (which may
@@ -2805,7 +2908,14 @@ export function useMuseSessions(): UseMuseSessions {
   /** Append entries to a session log (state + disk), creating the session row if needed. */
   function pushLog(sessionId: string, entries: LogEntry[]): void {
     if (entries.length === 0) return;
-    setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), ...entries] }));
+    // Saved again once applied: an update queued before this one writes the
+    // whole log without these entries. M0-05: a question's "Input requested"
+    // line was lost when the window reloaded or the app closed while it waited.
+    setLogs((cur) => {
+      const next = [...(cur[sessionId] ?? []), ...entries];
+      saveLog(sessionId, next);
+      return { ...cur, [sessionId]: next };
+    });
     appendLog(sessionId, entries);
   }
 
@@ -3009,8 +3119,7 @@ export function useMuseSessions(): UseMuseSessions {
    */
   const recordConnectionFailure = useCallback(
     (sessionId: string, error: unknown): void => {
-      const raw = error instanceof Error ? error.message : String(error);
-      const reason = raw.length > 220 ? `${raw.slice(0, 217)}…` : raw;
+      const reason = connectionNoticeText(error);
       setConnectionNoticeBySession((cur) =>
         cur[sessionId] === reason ? cur : { ...cur, [sessionId]: reason },
       );
@@ -3040,7 +3149,7 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string): void {
+  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string, failed = false): void {
     setLogs((cur) => {
       const log = cur[sessionId];
       if (!log || !log.some((e) => e.open)) return cur;
@@ -3048,7 +3157,7 @@ export function useMuseSessions(): UseMuseSessions {
       // streaming into their own entries. Without one (turn end), close all.
       const next = log.map((e) =>
         e.open && (itemId === undefined || e.itemId === itemId)
-          ? { ...e, open: false, ...(turnId ? { turnId } : {}) }
+          ? { ...e, open: false, ...(turnId ? { turnId } : {}), ...(failed && e.role === "tool" ? { failed: true } : {}) }
           : e,
       );
       saveLog(sessionId, next);
@@ -3169,20 +3278,18 @@ export function useMuseSessions(): UseMuseSessions {
     outcome: Parameters<typeof settleRunsForSession>[2],
   ): void {
     const log = logsRef.current[sessionId] ?? [];
-    const lastAssistant = [...log].reverse().find((entry) =>
-      entry.role === "assistant" && entry.text.trim().length > 0,
-    );
-    const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
-    const resultSummary = outcome.status === "completed"
-      ? mergeScheduleRunSummary(buildScheduleRunSummary(sessionId, log), outcome.resultFacts)
-      : undefined;
-    setScheduleRuns((cur) => {
-      return settleRunsForSession(cur, sessionId, {
-        ...outcome,
-        ...(outcome.status === "completed" && preview ? { resultPreview: preview } : {}),
-        ...(resultSummary ? { resultSummary } : {}),
-      }, Date.now());
-    });
+    setScheduleRuns((cur) => settleRunsForSession(cur, sessionId, outcome, Date.now(), log));
+  }
+
+  /** M0-06: a scheduled run's posture lasts for its own turn only. Once that
+   * turn stops or leaves the queue, the conversation follows the selector
+   * again; an unknown turn id settles it too, never leaving it off-posture. */
+  function restoreScheduledPosture(sessionId: string, turnId: string | undefined): void {
+    const scheduled = scheduledPostureRef.current.get(sessionId);
+    if (scheduled === undefined || (turnId !== undefined && turnId !== scheduled)) return;
+    scheduledPostureRef.current.delete(sessionId);
+    void projectPosture(sessionId).catch(() =>
+      setError("Scheduled run finished, but the conversation kept its authorization posture."));
   }
 
   /** Update the ephemeral skill progress only when the event can belong to
@@ -3231,6 +3338,10 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    // M0-05: a question or an approval raised while no turn of this
+    // conversation runs belongs to a dead turn.
+    if (kind === "started") noLiveTurnRef.current.delete(sid);
+    if ((kind === "input_request" || kind === "tool_request") && noLiveTurnRef.current.has(sid)) return;
     if (kind === "workspace_changed") {
       let changedPaths: string[] = [];
       try {
@@ -3282,6 +3393,14 @@ export function useMuseSessions(): UseMuseSessions {
       setConnectionState(sid, "connected");
       setSessions((cur) => cur.map((session) => {
         if (session.session_id !== sid) return session;
+        // M2-05: a moved conversation's host still observes its own folder.
+        if (
+          session.host_workspace !== undefined &&
+          observation.workspaceRoot !== null &&
+          displayPath(observation.workspaceRoot) !== displayPath(session.workspace)
+        ) {
+          return session;
+        }
         const next = { ...session };
         if (observation.branch === null) delete next.branch;
         else next.branch = observation.branch;
@@ -3332,6 +3451,18 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "host_exited") {
       updateSkillInvocationFromHost(sid, "failed", payload, "Muse stopped before the skill invocation completed");
+      // M0-05: nothing stays pending on a host that is gone, so a card left on
+      // screen could only fail. ponytail: the notices read the last render, so
+      // a card raised in the same poll as the exit (never shown) gets none; a
+      // ref kept by the card handlers would cover it.
+      pushLog(sid, hostExitNotices(sid, approvals, inputRequests).map((text) => ({
+        id: newId(),
+        ts: Date.now(),
+        role: "system",
+        text,
+      })));
+      setApprovals((cur) => cur.filter((a) => a.session_id !== sid));
+      setInputRequests((cur) => cur.filter((r) => r.session_id !== sid));
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
       setGrantedCapabilitiesBySession((cur) => {
         if (!(sid in cur)) return cur;
@@ -3339,13 +3470,10 @@ export function useMuseSessions(): UseMuseSessions {
         delete next[sid];
         return next;
       });
+      // Its posture and the tokens it was handed went with the host.
+      setHostSandboxBySession((cur) => ({ ...cur, [sid]: undefined }));
+      delete remoteHandedRef.current[sid];
       setConnectionState(sid, "disconnected");
-      setHostApprovalModeBySession((cur) => {
-        if (!(sid in cur)) return cur;
-        const next = { ...cur };
-        delete next[sid];
-        return next;
-      });
       clearStopping(sid);
       clearRetryScheduled(sid);
       // A full host was replaced to make room (`HOST_RECYCLED_MESSAGE` in
@@ -3558,6 +3686,10 @@ export function useMuseSessions(): UseMuseSessions {
         }
         return [...cur, req];
       });
+      // One line per question: userInput/request and its userInput/requested twin both arrive.
+      const logged = `${sid}:${req.input_id}`;
+      if (loggedInputsRef.current.has(logged)) return;
+      loggedInputsRef.current.add(logged);
       pushLog(sid, [
         { id: newId(), ts: Date.now(), role: "tool", text: `Input requested: ${req.tool_name}` },
       ]);
@@ -3652,14 +3784,18 @@ export function useMuseSessions(): UseMuseSessions {
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
       let turnId: string | undefined;
+      let failed = false;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.itemId === "string" && obj.itemId.length > 0) itemId = obj.itemId;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
+        // M0-13: a refused item says so (`status: "failed"`, e.g. a write in
+        // a Read only project), instead of closing as an ordinary row.
+        failed = itemId !== undefined && obj.status === "failed";
       } catch {
         // unparseable payload: close all, as before
       }
-      closeOpenBlocks(sid, itemId, turnId);
+      closeOpenBlocks(sid, itemId, turnId, failed);
       // w-collab US-27: a turn end (item_done without item id) refreshes
       // the auto snapshot; per-item completions never do (no spam).
       if (itemId === undefined) refreshAutoShare(sid);
@@ -3732,7 +3868,13 @@ export function useMuseSessions(): UseMuseSessions {
       }
       if (!updated) {
         pushLog(sid, [
-          { id: newId(), ts: Date.now(), role: "tool", text: `Approval requested: ${req.summary}` },
+          {
+            id: newId(),
+            ts: Date.now(),
+            role: "tool",
+            // The summary is the subject alone; the card titles it with the tool.
+            text: `Approval requested: ${[req.toolName === "tool" ? "" : req.toolName, req.summary].filter(Boolean).join(": ") || "Tool action"}`,
+          },
         ]);
         // The first approval pauses the assistant lane. Later stage updates
         // must leave the resumed placeholder open while the next choice is
@@ -3796,15 +3938,11 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const hostMode = typeof obj.mode === "string" ? obj.mode : "";
-        const mapped = productAuthorizationMode(hostMode);
-        if (mapped === null) {
+        if (productAuthorizationMode(hostMode) === null) {
           setError(`The host reported an unsupported approval mode: ${hostMode || "unknown"}.`);
-          return;
         }
-        setHostApprovalModeBySession((cur) => ({ ...cur, [sid]: hostMode }));
-        // The notification is scoped to this session. Keep it as the host
-        // projection used by approval gating; never overwrite the global
-        // selector or its persisted value from a delayed sibling event.
+        // The notification is scoped to this session: never overwrite the
+        // global selector or its persisted value from a delayed sibling event.
       } catch {
         setError("The host reported an invalid approval mode update.");
       }
@@ -3864,7 +4002,10 @@ export function useMuseSessions(): UseMuseSessions {
         delete lastTerminalTurnIdsRef.current[sid];
       }
       // A user shell runs outside any turn; the model's tool call is its turn.
-      if (itemRole !== "tool" || modelToolCall) {
+      // M0-05: a resume that runs no turn is followed, on Muse 1.4.2, by the
+      // items the killed engine left in flight, after their turn's
+      // cancellation: history, not a turn ("Muse may still be working").
+      if ((itemRole !== "tool" || modelToolCall) && !noLiveTurnRef.current.has(sid)) {
         setSessions((cur) =>
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
@@ -3912,6 +4053,8 @@ export function useMuseSessions(): UseMuseSessions {
             if (next[sid].length === 0) delete next[sid];
             return next;
           });
+          setScheduleRuns((cur) => cancelRunsForUnqueuedTurn(cur, sid, queuedTurnId, Date.now()));
+          restoreScheduledPosture(sid, queuedTurnId);
         }
       } catch {
         // Keep the queue card until the explicit command result settles.
@@ -3989,22 +4132,28 @@ export function useMuseSessions(): UseMuseSessions {
         payload,
         failure?.message ?? "Muse completed the skill invocation",
       );
+      const terminalTurn = completion?.turnId ? { turnId: completion.turnId } : {};
+      // A host that exited has no posture to fix: resume re-projects it.
+      if (kind !== "host_exited") restoreScheduledPosture(sid, completion?.turnId);
       settleScheduleRunsForSession(sid, failure
-        ? { status: "failed", error: failure.message, retryable: failure.retryable }
+        ? { ...terminalTurn, status: "failed", error: failure.message, retryable: failure.retryable }
         : kind === "host_exited"
           ? { status: "failed", error: "host exited before the scheduled turn completed", retryable: false }
-          : {
-              status: "completed",
-              ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
-              ...(completion?.resultIssues || completion?.resultNextSteps
-                ? {
-                    resultFacts: {
-                      ...(completion.resultIssues ? { issues: completion.resultIssues } : {}),
-                      ...(completion.resultNextSteps ? { nextSteps: completion.resultNextSteps } : {}),
-                    },
-                  }
-                : {}),
-            });
+          : /cancel|interrupt|stop/i.test(completion?.terminal ?? kind)
+            ? { ...terminalTurn, status: "cancelled" }
+            : {
+                ...terminalTurn,
+                status: "completed",
+                ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
+                ...(completion?.resultIssues || completion?.resultNextSteps
+                  ? {
+                      resultFacts: {
+                        ...(completion.resultIssues ? { issues: completion.resultIssues } : {}),
+                        ...(completion.resultNextSteps ? { nextSteps: completion.resultNextSteps } : {}),
+                      },
+                    }
+                  : {}),
+              });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
@@ -4077,7 +4226,10 @@ export function useMuseSessions(): UseMuseSessions {
     setSandboxState(parseSandboxSettings(next));
   }, []);
 
-  const restartHost = useCallback(async (workspacePath?: string | null): Promise<boolean> => {
+  const restartHost = useCallback(async (
+    workspacePath?: string | null,
+    requested?: HostSandboxConfig,
+  ): Promise<boolean> => {
     if (!isTauriRuntime()) {
       setError("Restarting a Muse host is available in the desktop app.");
       return false;
@@ -4087,72 +4239,72 @@ export function useMuseSessions(): UseMuseSessions {
       setError("Pick a workspace folder before restarting the Muse host.");
       return false;
     }
+    // A folder a project owns restarts at that project's posture, not the global one.
+    const posture = requested ?? hostSandboxConfigForProject(sandbox, projectOfFolder(projects, target));
     try {
       setError(null);
       await invoke("restart_host", {
         workspacePath: target,
-        sandboxMode: effectiveSandboxMode(sandbox),
-        sandboxDisableWrite: false,
-        sandboxDisableShell: false,
+        sandboxMode: posture.mode,
+        sandboxDisableWrite: posture.disableWrite,
+        sandboxDisableShell: posture.disableShell,
       });
       return true;
     } catch (e) {
-      setError(`Host restart failed: ${e instanceof Error ? e.message : String(e)}`);
+      setError(
+        `Host restart failed: ${e instanceof Error ? e.message : String(e)}`,
+        { workspace: target, sandbox: posture },
+      );
       return false;
     }
-  }, [sandbox, workspace]);
+  }, [projects, sandbox, workspace]);
+
+  // A posture picked before the session joined connectedIds still lands.
+  const projectPosture = useCallback((sessionId: string, effective?: unknown) =>
+    projectApprovalMode(
+      () => authorizationModeRef.current,
+      (mode) => invoke<Record<string, unknown>>("set_approval_mode", { sessionId, mode }),
+      effective,
+    ), []);
 
   const setAuthorizationMode = useCallback((mode: AuthorizationMode) => {
     const next = parseAuthorizationMode(mode);
+    authorizationModeRef.current = next;
     setAuthorizationModeState(next);
     if (!isTauriRuntime()) return;
     const targets = sessions.filter((session) =>
       connectedIds.includes(session.session_id),
     );
     if (targets.length === 0) return;
-    // Until each host confirms the same closed MSP mode, suspend automatic
-    // decisions for these sessions. A local preference is never authority
-    // enough to bypass a host ceiling (for example promptUnmatched).
-    setHostApprovalModeBySession((cur) => targets.reduce(
-      (next, session) => ({ ...next, [session.session_id]: null }),
-      { ...cur },
-    ));
     // The host applies the new posture to subsequent actions. Pending
     // approvals remain race-guarded by their current requirement token.
     void Promise.allSettled(
-      targets.map(async (session) => {
-        const result = await invoke<Record<string, unknown>>("set_approval_mode", {
-          sessionId: session.session_id,
-          mode: next,
-        });
-        const effective = (result.effectiveMode as Record<string, unknown> | undefined)?.mode;
-        if (result.status !== "accepted" || effective !== hostApprovalMode(next)) {
-          throw new Error("host did not confirm the requested approval posture");
-        }
-        return session.session_id;
-      }),
+      targets.map((session) => projectPosture(session.session_id)),
     ).then((results) => {
-      const succeeded = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-      const failed = results.length - succeeded.length;
-      setHostApprovalModeBySession((cur) => {
-        const nextState = { ...cur };
-        for (const sessionId of succeeded) nextState[sessionId] = hostApprovalMode(next);
-        for (const session of targets) {
-          if (!succeeded.includes(session.session_id)) nextState[session.session_id] = null;
-        }
-        return nextState;
-      });
+      // -32024: the host has not loaded that conversation, so it is not
+      // connected. No failure either: resuming it projects the posture.
+      const notLoaded = (result: PromiseSettledResult<void>) =>
+        result.status === "rejected" && mspErrorCode(result.reason) === MSP_ERROR_SESSION_NOT_LOADED;
+      const unloaded = targets.filter((_, i) => notLoaded(results[i])).map((s) => s.session_id);
+      if (unloaded.length > 0) {
+        setConnectedIds((cur) => cur.filter((id) => !unloaded.includes(id)));
+        setSessionLoadedBySession((cur) => ({
+          ...cur,
+          ...Object.fromEntries(unloaded.map((id) => [id, false])),
+        }));
+        for (const id of unloaded) setConnectionState(id, "disconnected");
+      }
+      const rejections = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected" && !notLoaded(result),
+      );
+      const failed = rejections.length;
       if (failed > 0) {
-        const firstRejection = results.find((result) => result.status === "rejected");
-        const reason = firstRejection?.status === "rejected"
-          ? ` First reason: ${userFacingError(firstRejection.reason)}`
-          : "";
         setError(
-          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.${reason}`,
+          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host. First reason: ${userFacingError(rejections[0].reason)}`,
         );
       }
     });
-  }, [connectedIds, sessions]);
+  }, [connectedIds, projectPosture, sessions, setConnectionState]);
 
 
   // US-31: live host catalog. Null until the first successful load (the
@@ -4290,8 +4442,10 @@ export function useMuseSessions(): UseMuseSessions {
     async (
       workspaceOverride?: string,
       projectSettings?: ProjectSettings,
-      projectSandboxSettings?: ProjectSettings,
+      // The project itself: Isolation follows Settings unless its own preferences restrict it.
+      project?: Project,
     ): Promise<string | null> => {
+    let host: HostRequest | null = null;
     try {
       setError(null);
       // Live React state first: localStorage writes are best-effort and may
@@ -4302,15 +4456,23 @@ export function useMuseSessions(): UseMuseSessions {
         setError("Pick a workspace folder first.");
         return null;
       }
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, project);
+      host = { workspace: ws, sandbox: sandboxConfig, projectId: project?.id };
+      // Connectors and computer use live on this machine: a remote engine
+      // (M4-07) would launch them on its own host, where they do not exist.
+      const mcp = isRemoteWorkspace(ws)
+        ? null
+        : hostMcpConfig(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current);
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
-        authorizationMode,
+        authorizationMode: authorizationModeRef.current,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        mcpServers: mcp?.servers,
       });
+      remoteHandedRef.current[meta.session_id] = mcp?.remoteIds ?? [];
+      setHostSandboxBySession((cur) => ({ ...cur, [meta.session_id]: meta.sandbox }));
       const requestedModelId = projectSettings?.model.trim();
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -4329,9 +4491,6 @@ export function useMuseSessions(): UseMuseSessions {
       }));
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
-      if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
-        setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
-      }
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -4345,15 +4504,19 @@ export function useMuseSessions(): UseMuseSessions {
       if (projectSettings?.reasoningEffort !== undefined) {
         await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
       }
+      // A host ceiling makes `session/start` fall back to the host default,
+      // and the selector may have moved while it was in flight.
+      await projectPosture(meta.session_id, meta.approval_mode).catch(() =>
+        setError("Conversation started, but the host kept its default authorization posture."));
       void refreshHostSkills(meta.session_id);
       return meta.session_id;
     } catch (e) {
-      setError(`start_session failed: ${String(e)}`);
+      setError(`start_session failed: ${String(e)}`, host);
       return null;
     }
     },
     [
-      authorizationMode,
+      projectPosture,
       sandbox,
       refreshHostSkills,
       setConnectionState,
@@ -4473,7 +4636,13 @@ export function useMuseSessions(): UseMuseSessions {
     resumeReconcileTimersRef.current = {};
   }, [settleServerCompaction]);
 
-  const reconnectSession = useCallback(async (id: string, options?: { silent?: boolean }) => {
+  /**
+   * `reload`: the user asked for the current connectors and posture (Extensions,
+   * "Reconnect with current connectors"). A conversation its host has loaded
+   * keeps what it started with (1.4.2 refuses another MCP config on it), so
+   * the folder's host is replaced first (main.rs resume_session_inner).
+   */
+  const reconnectSession = useCallback(async (id: string, options?: { silent?: boolean; reload?: boolean }) => {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
     const silent = options?.silent === true;
@@ -4489,24 +4658,49 @@ export function useMuseSessions(): UseMuseSessions {
     if (!silent) setReconnectingId(id);
     setConnectionState(id, "connecting");
     if (!silent) setError(null);
+    // M0-05: a question or an approval waits inside a turn. What the engine
+    // re-issues during the resume is ignored, and stays ignored until the next
+    // turn starts when the resume says none runs: Muse 1.4.2 keeps a killed
+    // engine's question, re-issues it right after the resume, lists it as
+    // pending and refuses every answer to it.
+    noLiveTurnRef.current.add(id);
+    let host: HostRequest | null = null;
     try {
-      const projectSettings = threadProjects[id] !== undefined
-        ? settingsForThread(globalSettings, projects, threadProjects, id)
-        : undefined;
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
+      const sandboxConfig = hostSandboxConfigForProject(
+        sandbox,
+        projects.find((project) => project.id === threadProjects[id]),
+      );
+      // M2-05: a moved conversation resumes on its host's folder and names
+      // where its turns ran; the supervisor checks that folder again. The
+      // error banner's restart restarts the folder resumed, not the other.
+      const resumedFolder = session.host_workspace ?? session.workspace;
+      host = { workspace: resumedFolder, sandbox: sandboxConfig, projectId: threadProjects[id] };
+      const reload = options?.reload === true;
+      const mcp = isRemoteWorkspace(resumedFolder)
+        ? null
+        : hostMcpConfig(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current);
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
-        workspacePath: session.workspace,
+        workspacePath: resumedFolder,
+        effectiveWorkspace: session.host_workspace !== undefined ? session.workspace : undefined,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        mcpServers: mcp?.servers,
+        reload,
       });
       if (tombstoned.current?.has(id)) return;
+      if (meta.running) noLiveTurnRef.current.delete(id);
+      // A conversation its live host had already loaded kept what it was
+      // handed: without a reload, add to the record, never drop from it.
+      remoteHandedRef.current[id] = reload
+        ? mcp?.remoteIds ?? []
+        : [...new Set([...(remoteHandedRef.current[id] ?? []), ...(mcp?.remoteIds ?? [])])];
       setGrantedCapabilitiesBySession((cur) => ({
         ...cur,
         [id]: meta.granted_capabilities,
       }));
+      setHostSandboxBySession((cur) => ({ ...cur, [id]: meta.sandbox }));
       // `resume_session` is what loads a persisted conversation on the host, and
       // the terminal refuses "Run in Muse" while `loaded` is false. The restored
       // value is only a snapshot from boot, so the resumed one has to be written
@@ -4521,34 +4715,14 @@ export function useMuseSessions(): UseMuseSessions {
                 ...session,
                 title: withHostTitle(session.title, meta.title),
                 ...(meta.model_id ? { model_id: meta.model_id } : {}),
+                // The supervisor may have brought a moved conversation back.
+                ...(session.host_workspace !== undefined
+                  ? { workspace: meta.workspace, host_workspace: meta.host_workspace }
+                  : {}),
               }
             : session,
         ),
       );
-      // Resume restores the host's persisted posture. Reconcile it with the
-      // current global selector before enabling the composer again. A host
-      // ceiling must not make the saved conversation unusable: preserve the
-      // observed projection and keep automatic approval fail-closed.
-      let postureError: unknown = null;
-      try {
-        const posture = await invoke<Record<string, unknown>>("set_approval_mode", {
-          sessionId: id,
-          mode: authorizationMode,
-        });
-        const effective = (posture.effectiveMode as Record<string, unknown> | undefined)?.mode;
-        if (typeof effective === "string") {
-          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: effective }));
-        } else {
-          postureError = new Error("host returned no effective approval mode");
-          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: null }));
-        }
-      } catch (error) {
-        postureError = error;
-        setHostApprovalModeBySession((cur) => ({
-          ...cur,
-          [id]: meta.approval_mode ?? null,
-        }));
-      }
       // Cold reconnects can outlive the renderer's local log (for example
       // after a storage reset or a crash during streaming). Reconcile the
       // folded server history before enabling the composer again. The read is
@@ -4569,9 +4743,9 @@ export function useMuseSessions(): UseMuseSessions {
         console.warn("session history hydration unavailable", historyError);
       }
       try {
-        const pending = await invoke<unknown>("list_pending_requests", {
-          sessionId: id,
-        });
+        const pending = meta.running
+          ? await invoke<unknown>("list_pending_requests", { sessionId: id })
+          : {};
         if (typeof pending === "object" && pending !== null) {
           const { approvals: nextApprovals, inputs: nextInputs } = parsePendingSnapshot(id, pending);
           setApprovals((cur) => [
@@ -4589,10 +4763,27 @@ export function useMuseSessions(): UseMuseSessions {
         console.warn("pending request recovery unavailable", pendingError);
       }
       await reconcileQueueSnapshot(id);
+      // Resume restores the host's persisted posture, which may predate the
+      // current selector or its mapping. Re-project it last before enabling
+      // the composer, so no selector change can slip in between. A host
+      // ceiling must not make the saved conversation unusable: keep it
+      // connected and report the posture it kept.
+      const postureError = await projectPosture(id).then(() => null, (error: unknown) => error);
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setConnectionState(id, "connected");
       clearStopping(id);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
+      // M2-05: a moved conversation that could not go back to its folder says so.
+      if (meta.workspace_notice !== undefined) {
+        const note: LogEntry = {
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: describeWorkspaceFallback(session.workspace, meta.workspace, meta.workspace_notice),
+        };
+        setLogs((cur) => ({ ...cur, [id]: [...(cur[id] ?? []), note] }));
+        appendLog(id, [note]);
+      }
       kickPoll();
       await refreshModels(id);
       await refreshHostSkills(id);
@@ -4610,12 +4801,12 @@ export function useMuseSessions(): UseMuseSessions {
         setConnectionState(id, "disconnected");
       } else {
         setConnectionState(id, "error");
-        setError(reconnectErrorMessage(e));
+        setError(reconnectErrorMessage(e), host);
       }
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
+  }, [projects, projectPosture, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
 
   // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
@@ -4652,7 +4843,7 @@ export function useMuseSessions(): UseMuseSessions {
       const sessionId = await startSessionRow(
         workspacePath,
         sessionSettings,
-        projectSettings,
+        projectsRef.current.find((project) => project.id === projectId),
       );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
@@ -4707,18 +4898,27 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
           ...(source.model_id ? { model_id: source.model_id } : {}),
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+          ...(meta.host_workspace ? { host_workspace: meta.host_workspace } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
-        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
-          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
-        }
         setConnectionState(meta.session_id, "connected");
+        // Same host as its source: same posture; counted as handed what the source was.
+        setHostSandboxBySession((current) => ({ ...current, [meta.session_id]: meta.sandbox }));
+        remoteHandedRef.current[meta.session_id] = [...(remoteHandedRef.current[sourceId] ?? [])];
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
           record,
         ]);
         setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
         if (inherited.length > 0) appendLog(meta.session_id, inherited);
+        // The branch runs in its source's project: without it, every later
+        // reconnect resumed it at the global posture in that project's folder.
+        const sourceProject = threadProjectsRef.current[sourceId];
+        if (sourceProject !== undefined) {
+          const next = attachThreadRow(threadProjectsRef.current, projectsRef.current, meta.session_id, sourceProject);
+          threadProjectsRef.current = next;
+          setThreadProjects(next);
+        }
         setActiveId(meta.session_id);
         // A fork is a new host session, so the renderer-side copy of the
         // requested model must be applied through the same session/setModel
@@ -4727,6 +4927,9 @@ export function useMuseSessions(): UseMuseSessions {
         if (source.model_id && source.model_id !== "default") {
           await setSessionModel(meta.session_id, source.model_id);
         }
+        // Same for the posture: the branch may start at the host default.
+        await projectPosture(meta.session_id, meta.approval_mode)
+          .catch(() => setError("Branch created, but the host kept its existing authorization posture."));
         void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
@@ -4736,15 +4939,21 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [forkingId, refreshHostSkills, sessions, setConnectionState, setSessionModel],
+    [forkingId, projectPosture, refreshHostSkills, sessions, setConnectionState, setSessionModel],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
   // Hot-listed tools: re-read from the registry on every render, so a
   // fresh install lists without restart (no cache to invalidate).
-  const connectorTools = useMemo(() => listConnectorTools(connectors), [connectors]);
+  // Only tools something can serve: a catalog entry with no command lists
+  // tools that no server provides.
+  const connectorTools = useMemo(
+    () => listConnectorTools(connectors.filter(connectorReachable)),
+    [connectors],
+  );
 
   const installConnectorById = useCallback((dirId: string): void => {
+    clearConnectorError();
     const r = installConnector(connectorsRef.current, dirId);
     if (r === null) {
       setError(`unknown connector "${dirId}": install from the curated directory.`);
@@ -4753,7 +4962,8 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectors(r.registry);
   }, []);
 
-  const disconnectRemoteMcp = useCallback((id: string): void => {
+  /** Drop the app's own session with a remote connector; hosts keep what they were handed. */
+  const dropRemoteSession = useCallback((id: string): void => {
     delete remoteSessionsRef.current[id];
     setRemoteConnectedIds((current) => current.filter((item) => item !== id));
     setConnectors((current) => current.map((entry) => {
@@ -4766,20 +4976,43 @@ export function useMuseSessions(): UseMuseSessions {
     }));
   }, []);
 
+  /**
+   * M3-02: Forget token, Disconnect, Disable, Remove and Use in Muse off cannot
+   * take a bearer back from a conversation whose host was handed it (Use in
+   * Muse): each such conversation is told in its transcript, and the panel
+   * gets the count (null when none holds it).
+   */
+  const noteHeldBearer = useCallback((id: string, action: string): string | null => {
+    const holders = conversationsHoldingRemote(remoteHandedRef.current, connectedIdsRef.current, id);
+    const name = findConnector(connectorsRef.current, id)?.name ?? id.replace(/^remote-/, "");
+    for (const sessionId of holders) {
+      pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: heldBearerLine(name, action) }]);
+    }
+    return heldBearerNotice(holders.length);
+  }, []);
+
+  const disconnectRemoteMcp = useCallback((id: string): void => {
+    dropRemoteSession(id);
+    setRemoteNotice(noteHeldBearer(id, "disconnected"));
+  }, [dropRemoteSession, noteHeldBearer]);
+
   const forgetRemoteMcpCredential = useCallback(async (id: string): Promise<void> => {
-    disconnectRemoteMcp(id);
+    dropRemoteSession(id);
+    const held = noteHeldBearer(id, "its token was forgotten");
+    const say = (text: string): void => setRemoteNotice(held === null ? text : `${text} ${held}`);
     if (isTauriRuntime()) {
       try {
         await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) });
       } catch {
-        setRemoteNotice("The remote session was disconnected, but its native credential could not be removed.");
+        say("The remote session was disconnected, but its native credential could not be removed.");
         return;
       }
     }
-    setRemoteNotice("Remote credential forgotten. Reconnect will require a new token.");
-  }, [disconnectRemoteMcp]);
+    say("Remote credential forgotten. Reconnect will require a new token.");
+  }, [dropRemoteSession, noteHeldBearer]);
 
   const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
+    clearConnectorError();
     const entry = findConnector(connectorsRef.current, id);
     if (mcpRunningIds.includes(id)) {
       try {
@@ -4790,7 +5023,8 @@ export function useMuseSessions(): UseMuseSessions {
         return;
       }
     }
-    if (remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
+    if (remoteConnectedIds.includes(id)) dropRemoteSession(id);
+    const held = entry?.kind === "remote" ? noteHeldBearer(id, "removed") : null;
     setConnectors((cur) => uninstallConnector(cur, id).registry);
     if (entry?.source === "package" && entry.package && isTauriRuntime()) {
       await invoke("mcp_package_remove", {
@@ -4801,9 +5035,11 @@ export function useMuseSessions(): UseMuseSessions {
     if (entry?.kind === "remote" && isTauriRuntime()) {
       await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) }).catch(() => undefined);
     }
-  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
+    if (held !== null) setRemoteNotice(held);
+  }, [dropRemoteSession, mcpRunningIds, noteHeldBearer, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
+    clearConnectorError();
     setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
     if (!enabled && mcpRunningIds.includes(id)) {
       // Disabling a connector must release its native child as well. The
@@ -4817,12 +5053,17 @@ export function useMuseSessions(): UseMuseSessions {
           setError(`local MCP disable failed to stop server: ${e instanceof Error ? e.message : String(e)}`);
         });
     }
-    if (!enabled && remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
-  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
+    if (!enabled && remoteConnectedIds.includes(id)) dropRemoteSession(id);
+    const held = enabled ? null : noteHeldBearer(id, "disabled");
+    if (held !== null) setRemoteNotice(held);
+  }, [dropRemoteSession, mcpRunningIds, noteHeldBearer, remoteConnectedIds]);
 
   const setConnectorUseInMuseById = useCallback((id: string, enabled: boolean): void => {
+    clearConnectorError();
     setConnectors((current) => setConnectorUseInMuse(current, id, enabled));
-  }, []);
+    const held = enabled ? null : noteHeldBearer(id, "Use in Muse turned off");
+    if (held !== null) setRemoteNotice(held);
+  }, [noteHeldBearer]);
 
   const probeRemoteMcp = useCallback(
     async (
@@ -4830,6 +5071,7 @@ export function useMuseSessions(): UseMuseSessions {
       url: string,
       token = "",
     ): Promise<RemoteMcpProbeResult | null> => {
+      clearConnectorError();
       const trimmedName = name.trim();
       const endpoint = url.trim();
       const id = `remote-${trimmedName.toLowerCase().replace(/[\s_]+/g, "-")}`;
@@ -4845,21 +5087,27 @@ export function useMuseSessions(): UseMuseSessions {
           return null;
         }
       }
-      setRemoteNotice(null);
+      // Refused before any request: a token no conversation or store can take.
+      const tooLong = token.trim() ? bearerTokenProblem(endpoint, token) : null;
+      setRemoteNotice(tooLong);
+      if (tooLong !== null) return null;
+      let effectiveToken = token;
+      let noToken: NoTokenReason = "none";
+      const key = remoteMcpCredentialKey(id);
       try {
-        let effectiveToken = token;
         // Reconnects may be initiated from a persisted connector row, where
         // the token input is intentionally empty. Retrieve it only through
-        // the native credential boundary; it never enters localStorage.
-        if (!effectiveToken.trim() && existing?.kind === "remote" && isTauriRuntime()) {
+        // the native credential boundary; it never enters localStorage. The
+        // stored bearer goes to the URL it was saved for only.
+        if (!effectiveToken.trim() && isTauriRuntime()) {
           try {
-            effectiveToken = (await invoke<string | null>("secure_store_get", {
-              key: remoteMcpCredentialKey(id),
-            })) ?? "";
+            const stored = storedBearerFor(await invoke<string | null>("secure_store_get", { key }), endpoint);
+            effectiveToken = stored.token;
+            noToken = stored.reason ?? "none";
           } catch {
-            // A missing/unavailable store leaves the explicit reconnect path
-            // usable; the result below remains a normal auth failure.
-            effectiveToken = "";
+            // An unavailable store leaves the explicit reconnect path usable;
+            // the result below remains a normal auth failure, and says why.
+            noToken = "unreadable";
           }
         }
         const result = await probeRemoteMcpTransport(endpoint, effectiveToken);
@@ -4884,22 +5132,29 @@ export function useMuseSessions(): UseMuseSessions {
         };
         setConnectors(registered.registry);
         setRemoteConnectedIds((current) => [...new Set([...current, id])]);
-        if (effectiveToken.trim() && isTauriRuntime()) {
+        // A typed token is saved with its URL; one read back from the store already is.
+        if (token.trim() && isTauriRuntime()) {
           try {
-            await invoke("secure_store_set", {
-              key: remoteMcpCredentialKey(id),
-              secret: effectiveToken,
-            });
+            await invoke("secure_store_set", { key, secret: encodeStoredBearer(endpoint, token) });
           } catch {
-            setRemoteNotice("Connected, but the native secure store is unavailable; reconnect after restart will require the token again.");
+            // What stays stored is bound to its own URL; drop it anyway, and
+            // say what Reconnect can still do.
+            const removed = await invoke("secure_store_remove", { key }).then(() => true, () => false);
+            setRemoteNotice(removed
+              ? "Connected, but the system's credential store could not save the token: Reconnect will need it typed again."
+              : "Connected, but the system's credential store could not save this token, nor remove the one it held before (that one is only ever sent to the URL it was saved for).");
           }
+        } else if (!effectiveToken.trim() && existing?.kind === "remote" && existing.url !== endpoint && isTauriRuntime()) {
+          // Moved to another URL without a token: the stored one was the old URL's.
+          await invoke("secure_store_remove", { key }).catch(() => undefined);
         }
         return result;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = remoteMcpFailureMessage(error instanceof Error ? error.message : String(error), effectiveToken, noToken);
         setRemoteNotice(message);
+        // A failed probe of another URL leaves the registered endpoint as it was.
         setConnectors((current) => current.map((entry) =>
-          entry.id === id && entry.kind === "remote"
+          entry.id === id && entry.kind === "remote" && entry.url === endpoint
             ? { ...entry, status: "error", guardMessage: message }
             : entry,
         ));
@@ -4915,6 +5170,7 @@ export function useMuseSessions(): UseMuseSessions {
       toolName: string,
       argumentsText: string,
     ): Promise<RemoteMcpCallResult | null> => {
+      clearConnectorError();
       const session = remoteSessionsRef.current[id];
       if (!session) {
         setRemoteNotice("Remote connector is disconnected. Connect it before calling a tool.");
@@ -4935,11 +5191,12 @@ export function useMuseSessions(): UseMuseSessions {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (isRemoteMcpAuthenticationError(message) && session.token.trim()) {
-          // A 401/403 can mean that only the MCP session expired. Re-run the
-          // initialize/tools-list handshake once with the in-memory bearer
-          // token, then retry the call exactly once. Network timeouts and
-          // ambiguous tool outcomes remain non-retryable.
+        if (isRemoteMcpSessionExpired(message) || (isRemoteMcpAuthenticationError(message) && session.token.trim())) {
+          // The server ended the MCP session (404), or a 401/403 that can mean
+          // only the session expired. Re-run the initialize/tools-list
+          // handshake once with the in-memory bearer token, then retry the
+          // call exactly once. Network timeouts and ambiguous tool outcomes
+          // remain non-retryable.
           const entry = findConnector(connectorsRef.current, id);
           const name = entry?.kind === "remote" ? entry.name : id.replace(/^remote-/, "");
           try {
@@ -4974,11 +5231,11 @@ export function useMuseSessions(): UseMuseSessions {
           }
         }
         setRemoteNotice(message);
-        disconnectRemoteMcp(id);
+        dropRemoteSession(id);
         return null;
       }
     },
-    [connectorsRef, disconnectRemoteMcp],
+    [connectorsRef, dropRemoteSession],
   );
 
   const setSkillEnabledByName = useCallback((name: string, enabled: boolean): void => {
@@ -5425,7 +5682,7 @@ export function useMuseSessions(): UseMuseSessions {
           // Drain immediately: the next slow tick could be ~1s away, which
           // would delay the first tokens and dump them as one catch-up burst.
           kickPoll();
-          return sendAccepted(clientMessageId);
+          return sendAccepted(clientMessageId, admissionTurnId);
         }
         updateOutbox(sessionId, (cur) =>
           upsertOutbox(cur, markFailed(entry, failure, Date.now(), ambiguous)),
@@ -5772,10 +6029,17 @@ export function useMuseSessions(): UseMuseSessions {
           approvalId,
           choiceId,
         );
+        // Pin the decision to the stage the card shows: a click on a card
+        // the host has already moved past is refused (-32053), never applied
+        // to the next stage.
+        const card = approvals.find(
+          (a) => a.session_id === sessionId && a.request_id === approvalId,
+        );
         const terminal = await invoke<boolean>("approve", {
           sessionId,
           approvalId,
           choiceId,
+          requirementId: card?.requirementId ?? null,
         });
         // A compound command returns terminal=false after one stage. Keep
         // the card mounted until the host emits the next stage update (the
@@ -5798,90 +6062,25 @@ export function useMuseSessions(): UseMuseSessions {
         kickPoll();
         return true;
       } catch (e) {
-        setError(`approve failed: ${String(e)}`);
+        if (!isApprovalRequirementStale(e)) {
+          setError(`approve failed: ${String(e)}`);
+          return false;
+        }
+        // The host moved on before this click landed: nothing was decided.
+        // Re-read its pending fold so the card shows the step it is on now.
+        setError(STALE_APPROVAL_NOTICE);
+        void invoke<unknown>("list_pending_requests", { sessionId }).then(
+          (pending) => {
+            const fresh = parsePendingSnapshot(sessionId, pending).approvals;
+            setApprovals((cur) => [...cur.filter((a) => a.session_id !== sessionId), ...fresh]);
+          },
+          () => kickPoll(),
+        );
         return false;
       }
     },
     [approvals, kickPoll, touchStreamActivity],
   );
-
-  // Balanced mode removes repetitive prompts for local workspace actions;
-  // YOLO removes prompts for every non-denied choice. Network/elevated scopes
-  // continue through the visible panel in balanced mode. Decisions still go
-  // through the same approve IPC path, preserving host stale-token guards.
-  const autoApprovalInFlight = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    for (const key of autoApprovalInFlight.current) {
-      const [sessionId, requestId] = key.split("|");
-      if (!approvals.some((a) => a.session_id === sessionId && a.request_id === requestId)) {
-        autoApprovalInFlight.current.delete(key);
-      }
-    }
-    if (authorizationMode === "ask") return;
-    for (const approval of approvals) {
-      const resolved = resolveApproval(allowlist, {
-        toolName: approval.toolName,
-        summary: approval.summary,
-        scopes: approval.choices.map((choice) => choice.scope),
-      });
-      // An explicit persisted prompt/forbidden rule is more restrictive than
-      // the global posture and must remain user-controlled.
-      if (
-        resolved.rule?.decision === "prompt" ||
-        resolved.rule?.decision === "forbidden"
-      ) {
-        continue;
-      }
-      const choice = automaticApprovalChoice(authorizationMode, approval.choices);
-      if (choice === null) continue;
-      const effectiveHostMode = hostApprovalModeBySession[approval.session_id];
-      if (!hostModeMatches(authorizationMode, effectiveHostMode)) {
-        continue;
-      }
-      // Include the current choice set so an approval/updated stage can be
-      // auto-decided even though the host intentionally reuses approvalId.
-      const key = `${approval.session_id}|${approval.request_id}|${approval.choices
-        .map((choice) => choice.choiceId)
-        .join(",")}`;
-      if (autoApprovalInFlight.current.has(key)) continue;
-      autoApprovalInFlight.current.add(key);
-      void approve(approval.session_id, approval.request_id, choice.choiceId);
-    }
-  }, [approvals, authorizationMode, approve, allowlist, hostApprovalModeBySession]);
-
-  // US-15: effective allowlist decision for one pending approval request
-  // (badge in the panel; most-restrictive-wins, network default-deny).
-  const allowDecisionFor = useCallback(
-    (approval: ApprovalRequest): ResolvedApproval =>
-      resolveApproval(allowlist, {
-        toolName: approval.toolName,
-        summary: approval.summary,
-        scopes: approval.choices.map((c) => c.scope),
-      }),
-    [allowlist],
-  );
-
-  // US-15 "toujours autoriser": send the decision, then memorize an allow
-  // rule (command pattern + the chosen scope) for future requests.
-  const rememberApproval = useCallback(
-    async (approval: ApprovalRequest, choiceId: string) => {
-      const approved = await approve(approval.session_id, approval.request_id, choiceId);
-      if (!approved) return;
-      const choice = approval.choices.find((c) => c.choiceId === choiceId);
-      setAllowlist((cur) =>
-        addAllowRule(cur, {
-          pattern: defaultPatternFor(approval.toolName, approval.summary),
-          scope: choice?.scope ?? "",
-          decision: "allow",
-        }),
-      );
-    },
-    [approve],
-  );
-
-  const revokeAllowRule = useCallback((id: string) => {
-    setAllowlist((cur) => removeAllowRule(cur, id));
-  }, []);
 
   // US-19 browser: anchor a comment (invalid URL / empty comment = no-op),
   // remove one by id, toggle one app's computer-use permission.
@@ -5908,6 +6107,19 @@ export function useMuseSessions(): UseMuseSessions {
   const [computerUse, setComputerUse] = useState<ComputerStatus | null>(null);
   const computerServerRef = useRef<HostMcpStdioServer | null>(null);
   const [computerBusy, setComputerBusy] = useState(false);
+  // M0-13: the failure the last computer-use action raised. The next action
+  // clears it, so a revoke or another level no longer shows an old failure;
+  // another surface's failure stays.
+  const computerErrorRef = useRef<string | null>(null);
+  const clearComputerError = (): void => {
+    const last = computerErrorRef.current;
+    computerErrorRef.current = null;
+    if (last !== null) setErrorMessage((current) => (current === last ? null : current));
+  };
+  const setComputerError = (message: string): void => {
+    computerErrorRef.current = message;
+    setError(message);
+  };
 
   const refreshComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return null;
@@ -5931,16 +6143,20 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, []);
 
+  // After a failure the panel shows the service as it is: a failed level
+  // change stops the previous service first, and the panel kept "Granted".
   const setComputerLevel = useCallback(
     async (level: ComputerLevel) => {
       if (!isTauriRuntime()) return;
       setComputerBusy(true);
+      clearComputerError();
       try {
         const raw = await invoke<unknown>("computer_enable", { level });
         setComputerUse(parseComputerStatus(raw));
         await refreshComputerUse();
       } catch (error) {
-        setError(userFacingError(error, "Computer use could not be enabled."));
+        setComputerError(userFacingError(error, "Computer use could not be enabled."));
+        await refreshComputerUse();
       } finally {
         setComputerBusy(false);
       }
@@ -5952,12 +6168,14 @@ export function useMuseSessions(): UseMuseSessions {
     async (attach: boolean) => {
       if (!isTauriRuntime()) return;
       setComputerBusy(true);
+      clearComputerError();
       try {
         const raw = await invoke<unknown>("computer_set_attach", { attach });
         setComputerUse(parseComputerStatus(raw));
         await refreshComputerUse();
       } catch (error) {
-        setError(userFacingError(error, "The browser consent could not be changed."));
+        setComputerError(userFacingError(error, "The browser consent could not be changed."));
+        await refreshComputerUse();
       } finally {
         setComputerBusy(false);
       }
@@ -5968,25 +6186,23 @@ export function useMuseSessions(): UseMuseSessions {
   const disableComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return;
     setComputerBusy(true);
+    clearComputerError();
     try {
       const raw = await invoke<unknown>("computer_disable");
       setComputerUse(parseComputerStatus(raw));
       computerServerRef.current = null;
     } catch (error) {
-      setError(userFacingError(error, "Computer use could not be turned off."));
+      setComputerError(userFacingError(error, "Computer use could not be turned off."));
+      await refreshComputerUse();
     } finally {
       setComputerBusy(false);
     }
-  }, []);
+  }, [refreshComputerUse]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
     void refreshComputerUse();
   }, [refreshComputerUse]);
-
-  const setAllowRuleDecisionCb = useCallback((id: string, decision: AllowDecision) => {
-    setAllowlist((cur) => setAllowRuleDecision(cur, id, decision));
-  }, []);
 
   const cancelSession = useCallback(async (sessionId: string) => {
     if (stoppingBySessionRef.current[sessionId]) return;
@@ -6183,6 +6399,7 @@ export function useMuseSessions(): UseMuseSessions {
       command: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpProbeResult | null> => {
+      clearConnectorError();
       try {
         setRemoteNotice(null);
         return await invoke<LocalMcpProbeResult>("mcp_local_probe", {
@@ -6204,6 +6421,7 @@ export function useMuseSessions(): UseMuseSessions {
       argumentsText: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpCallResult | null> => {
+      clearConnectorError();
       let argumentsValue: unknown = {};
       try {
         argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
@@ -6267,6 +6485,7 @@ export function useMuseSessions(): UseMuseSessions {
       tools: ConnectorTool[],
       serverVersion?: string,
     ): boolean => {
+      clearConnectorError();
       const id = localConnectorIdForName(name);
       const result = registerLocalConnector(connectorsRef.current, {
         id,
@@ -6407,9 +6626,14 @@ export function useMuseSessions(): UseMuseSessions {
       const capturedSettings = capturedProject
         ? resolveProjectSettings(globalSettings, capturedProject.settings)
         : globalSettings;
+      // The run's own posture must not outlive its turn: the conversation
+      // goes back to the selector's once that turn stops, or right away when
+      // no admitted turn id can anchor the restore (failure, local compact).
+      let offPosture = false;
       const applyCapturedContext = async (sessionId: string): Promise<void> => {
-        if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
+        if (item.authorizationMode && item.authorizationMode !== authorizationModeRef.current) {
           await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
+          offPosture = true;
         }
         const model = item.model?.trim() || capturedSettings.model.trim();
         if (model && model !== "default") await setSessionModel(sessionId, model);
@@ -6420,7 +6644,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...capturedSettings,
           ...(item.model?.trim() ? { model: item.model.trim() } : {}),
         };
-        const fresh = await startSessionRow(item.workspace, settings);
+        const fresh = await startSessionRow(item.workspace, settings, capturedProject);
         if (fresh === null) {
           failRun("could not start target conversation", false);
           return false;
@@ -6445,6 +6669,14 @@ export function useMuseSessions(): UseMuseSessions {
           result = await sendInput(sessionId, item.instructions);
         }
         if (result.ok) {
+          if (offPosture && result.turnId) {
+            scheduledPostureRef.current.set(sessionId, result.turnId);
+            offPosture = false;
+          }
+          if (run && result.turnId) {
+            const turnId = result.turnId;
+            setScheduleRuns((cur) => attachRunTurn(cur, run.id, turnId));
+          }
           // `send_input` only acknowledges admission. The run remains
           // running until the host emits a stopped turn status, where the
           // result preview and unread marker are captured.
@@ -6461,9 +6693,14 @@ export function useMuseSessions(): UseMuseSessions {
         failRun(message, true);
         setError(`schedule run failed: ${message}`);
         return false;
+      } finally {
+        if (offPosture) {
+          void projectPosture(sessionId).catch(() =>
+            setError("Scheduled run ended, but the conversation kept its authorization posture."));
+        }
       }
     },
-    [activeId, authorizationMode, globalSettings, reconnectSession, projects, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
+    [activeId, globalSettings, reconnectSession, projects, projectPosture, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
   );
 
   const prepareBrowserContext = useCallback(
@@ -6521,6 +6758,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const rollbackLocalMcp = useCallback((id: string): boolean => {
+    clearConnectorError();
     const result = rollbackLocalConnector(connectorsRef.current, id);
     if (result === null) {
       setError("local MCP rollback is unavailable for this connector");
@@ -6580,6 +6818,7 @@ export function useMuseSessions(): UseMuseSessions {
       id: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpProbeResult | null> => {
+      clearConnectorError();
       const entry = findConnector(connectorsRef.current, id);
       if (entry === null || entry.kind !== "local" || !entry.command) {
         setError("local MCP start requires a configured command");
@@ -6610,6 +6849,7 @@ export function useMuseSessions(): UseMuseSessions {
       id: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpProbeResult | null> => {
+      clearConnectorError();
       const entry = findConnector(connectorsRef.current, id);
       if (entry === null || entry.kind !== "local" || !entry.command) {
         setError("local MCP refresh requires a configured command");
@@ -6636,6 +6876,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const stopLocalMcp = useCallback(async (id: string): Promise<boolean> => {
+    clearConnectorError();
     try {
       const stopped = await invoke<boolean>("mcp_local_stop", { connectorId: id });
       if (stopped) {
@@ -6654,6 +6895,7 @@ export function useMuseSessions(): UseMuseSessions {
       toolName: string,
       argumentsText: string,
     ): Promise<LocalMcpCallResult | null> => {
+      clearConnectorError();
       let argumentsValue: unknown = {};
       try {
         argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
@@ -6678,6 +6920,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const installMcpPackage = useCallback(
     async (file: File): Promise<boolean> => {
+      clearConnectorError();
       if (!isTauriRuntime()) {
         setError("MCP bundle installation is available in the desktop app.");
         return false;
@@ -6996,6 +7239,9 @@ export function useMuseSessions(): UseMuseSessions {
 
   const answerInput = useCallback(
     async (sessionId: string, inputId: string, answers: InputAnswer[]) => {
+      const key = `${sessionId}:${inputId}`;
+      if (answeredInputsRef.current.has(key)) return;
+      answeredInputsRef.current.add(key);
       try {
         setError(null);
         await invoke("answer_input", {
@@ -7012,6 +7258,7 @@ export function useMuseSessions(): UseMuseSessions {
         markResumePending(sessionId, "input");
         kickPoll();
       } catch (e) {
+        answeredInputsRef.current.delete(key);
         setError(`answer_input failed: ${String(e)}`);
       }
     },
@@ -7019,10 +7266,14 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const cancelInput = useCallback(async (sessionId: string, inputId: string) => {
+    const key = `${sessionId}:${inputId}`;
+    if (answeredInputsRef.current.has(key)) return;
+    answeredInputsRef.current.add(key);
     try {
       setError(null);
       await invoke("cancel_input", { sessionId, userInputId: inputId });
     } catch (e) {
+      answeredInputsRef.current.delete(key);
       setError(`cancel_input failed: ${String(e)}`);
     }
   }, []);
@@ -7750,6 +8001,67 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [terminalsBySession]);
 
+  const previewHandoff = useCallback(
+    async (sessionId: string, target: string | null): Promise<HandoffPreview | null> => {
+      try {
+        setError(null);
+        return await invoke<HandoffPreview>("handoff_preview", { sessionId, target });
+      } catch (e) {
+        setError(`The move could not be prepared: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
+  /**
+   * M2-05: when the conversation moves too, its folder-bound state starts over
+   * in the target: files listing, terminal (reopened there), branch. The
+   * outcome goes into the transcript either way.
+   */
+  const handoffConversation = useCallback(
+    async (sessionId: string, target: string, newWorktree = false): Promise<HandoffPreview | null> => {
+      let result: HandoffPreview;
+      try {
+        setError(null);
+        result = await invoke<HandoffPreview>("handoff_move", { sessionId, target, newWorktree });
+      } catch (e) {
+        setError(`The conversation was not moved: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+      const moved = result.target;
+      if (result.sameSession && moved !== null) {
+        setSessions((cur) => cur.map((session) => {
+          if (session.session_id !== sessionId) return session;
+          const next = {
+            ...session,
+            workspace: moved,
+            host_workspace: session.host_workspace ?? session.workspace,
+          };
+          // The host's last branch observation is about the folder left behind.
+          delete next.branch;
+          return next;
+        }));
+        setFilesBySession((cur) => {
+          const next = { ...cur };
+          delete next[sessionId];
+          return next;
+        });
+        await closeTerminal(sessionId);
+      }
+      const note: LogEntry = {
+        id: newId(),
+        ts: Date.now(),
+        role: "system",
+        text: describeHandoffResult(result),
+      };
+      setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
+      appendLog(sessionId, [note]);
+      return result;
+    },
+    [closeTerminal],
+  );
+
   const prepareTerminalContext = useCallback(
     (sessionId: string): boolean => {
       const terminal = terminalsBySession[sessionId];
@@ -7772,6 +8084,11 @@ export function useMuseSessions(): UseMuseSessions {
     (sessionId: string): boolean =>
       grantedCapabilitiesBySession[sessionId]?.some((capability) => capability === "userShell") === true,
     [grantedCapabilitiesBySession],
+  );
+
+  const hostSandboxForSession = useCallback(
+    (sessionId: string): HostSandboxConfig | undefined => hostSandboxBySession[sessionId],
+    [hostSandboxBySession],
   );
 
   /**
@@ -8075,6 +8392,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    hostSandboxForSession,
     sessionLoadedForSession,
     sendInput,
     steerInput,
@@ -8084,11 +8402,6 @@ export function useMuseSessions(): UseMuseSessions {
     retryFailedTurn,
     discardSend,
     approve,
-    allowlist,
-    allowDecisionFor,
-    rememberApproval,
-    revokeAllowRule,
-    setAllowRuleDecision: setAllowRuleDecisionCb,
     browserAnnotations,
     addBrowserAnnotation: addBrowserAnnotationCb,
     prepareBrowserContext,
@@ -8235,6 +8548,8 @@ export function useMuseSessions(): UseMuseSessions {
     runUserShell,
     resizeTerminal,
     closeTerminal,
+    previewHandoff,
+    handoffConversation,
     prepareTerminalContext,
     filesForSession,
     prepareWorkspaceFileContext,
@@ -8244,6 +8559,7 @@ export function useMuseSessions(): UseMuseSessions {
     unwatchWorkspaceFiles,
     openWorkspacePath,
     error,
+    errorHost,
     setError: (message) => setError(message),
     evtCount,
     dismissQueuedTurn,
