@@ -29,10 +29,11 @@ permissions:
 env:
   # The Muse engine bundled in the installer is not in the repository. It
   # lives in a draft release, visible to repository members only, and is
-  # checked against this digest before anything is built with it.
-  SIDECAR_RELEASE: sidecar-muse-1.3.0
+  # checked against this digest before anything is built with it. A draft has
+  # no tag (GitHub shows it as untagged-…), so it is found by its title.
+  SIDECAR_RELEASE: "CI input — Muse engine 1.4.2 — DO NOT PUBLISH"
   SIDECAR_FILE: muse-x86_64-pc-windows-msvc.exe
-  SIDECAR_SHA256: e0a7cfef0755a6c7d249ad66a4d3cccdc52671563c8f1ff3a66881cdb11a6bba
+  SIDECAR_SHA256: 39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba
 
 jobs:
   windows:
@@ -75,8 +76,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$SIDECAR_RELEASE" --repo "$GITHUB_REPOSITORY" \
-            --pattern "$SIDECAR_FILE" --dir src-tauri/binaries
+          asset=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.draft and .name == env.SIDECAR_RELEASE) | .assets[] | select(.name == env.SIDECAR_FILE) | .id")
+          test -n "$asset" || { echo "::error::engine draft \"$SIDECAR_RELEASE\" not found"; exit 1; }
+          mkdir -p src-tauri/binaries
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset" \
+            -H "Accept: application/octet-stream" > "src-tauri/binaries/$SIDECAR_FILE"
           echo "$SIDECAR_SHA256  src-tauri/binaries/$SIDECAR_FILE" | sha256sum --check
 
       - name: Run unit tests
