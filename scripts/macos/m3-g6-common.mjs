@@ -53,7 +53,8 @@ export function platform() {
 /** Labels for the proof folder and the home folder, in every spelling macOS gives them. */
 export function redactorFor(base) {
   const pairs = [];
-  for (const path of [base, base.replace(/^\/var\//, "/private/var/")]) pairs.push([path, "<proof>"]);
+  // Longest first: /private/var/... before /var/..., so no "/private" is left in front of a label.
+  for (const path of [base.replace(/^\/var\//, "/private/var/"), base]) pairs.push([path, "<proof>"]);
   pairs.push([homedir(), "~"]);
   return (value, secrets = []) => {
     let text = J(value);
