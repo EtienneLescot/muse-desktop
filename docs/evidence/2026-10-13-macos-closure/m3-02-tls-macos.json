@@ -1,0 +1,484 @@
+{
+  "schema": "muse-desktop.macos-m3-02-tls.v1",
+  "ticket": "M3-02",
+  "date": "2026-10-13",
+  "commit": "df57377",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build df57377 with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m3-02-tls.mjs on scripts/macos/test-instance.mjs (G9 ports 9490-9499)",
+  "criteria": "docs/ROADMAP.md §M3-02: the TLS half proved on Windows (27/09 real public endpoint mcp.deepwiki.com; 05/10 invalid TLS refused honestly, docs/evidence/2026-10-05-roadmap-closure/m1-05-m3-02-terminal-mcp.json), here on macOS. The loopback criteria (expired token, Keychain, network refusals, disconnection with the server down, live turn) are in m3-02-remote-mcp.json (G6).",
+  "complements": "docs/evidence/2026-10-13-macos-closure/m3-02-remote-mcp.json",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<b302442d-550d-5044-8e29-d265630638a6>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "endpoint": {
+    "choice": "Public HTTPS endpoints only, with the app's own URL rule: the instance runs without MUSE_DESKTOP_TEST_REMOTE_MCP, so no test-mode allowance is in force.",
+    "outbound": [
+      "mcp.deepwiki.com",
+      "expired.badssl.com",
+      "self-signed.badssl.com"
+    ],
+    "token": "none: no bearer typed, none stored, none sent (the tap records whether an Authorization header left)."
+  },
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment): fresh data folder, its own WKWebView store, the pinned engine with MUSE_NO_AUTO_UPDATE=1, CDP through the test bridge.",
+    "A page tap on window.fetch records each outbound request of the webview: host, path, JSON-RPC method, HTTP status or network error, time; and the secure_store_* IPC calls (key only).",
+    "A Node TLS handshake (no HTTP request) against each badssl host first, as a control that the certificate is invalid today.",
+    "The Keychain is read with security find-generic-password -s com.muse.desktop.mcp -a <this run's account>: presence only, never -w. The connector name is unique per run (proof-g9-<id>).",
+    "Fingerprint (size, mtime) of ~/.config/muse and ~/.local/share/muse/{plugins,skills} before and after."
+  ],
+  "phases": {
+    "control": {
+      "tlsExpired": {
+        "host": "expired.badssl.com",
+        "authorized": false,
+        "error": "CERT_HAS_EXPIRED",
+        "ms": 339
+      },
+      "tlsSelfSigned": {
+        "host": "self-signed.badssl.com",
+        "authorized": false,
+        "error": "DEPTH_ZERO_SELF_SIGNED_CERT",
+        "ms": 359
+      },
+      "deepwiki": {
+        "host": "mcp.deepwiki.com",
+        "authorized": true,
+        "error": null,
+        "ms": 314
+      },
+      "verdict": {
+        "expiredIsInvalid": true,
+        "selfSignedIsInvalid": true,
+        "deepwikiIsValid": true
+      }
+    },
+    "start": {
+      "connectorName": "proof-g9-<id>",
+      "keychainAccount": "remote-mcp-remote-proof-g9-<id>",
+      "keychainBefore": {
+        "present": false,
+        "exit": 44
+      },
+      "testRemoteMcpAllowance": null,
+      "profile": {
+        "remotes": 0,
+        "posture": "ask"
+      },
+      "verdict": {
+        "noLoopbackAllowance": true,
+        "emptyRemoteRegistry": true,
+        "accountUnused": true
+      }
+    },
+    "tls": {
+      "tlsExpired": {
+        "url": "https://expired.badssl.com/mcp",
+        "clicked": true,
+        "settledMs": 315,
+        "notice": [
+          "remote MCP request failed: Load failed"
+        ],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [],
+        "registry": [],
+        "webviewRequests": [
+          {
+            "atMs": 319,
+            "host": "expired.badssl.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "initialize",
+            "error": "Load failed",
+            "ms": 259
+          }
+        ],
+        "keychain": {
+          "present": false,
+          "exit": 44
+        }
+      },
+      "tlsSelfSigned": {
+        "url": "https://self-signed.badssl.com/mcp",
+        "clicked": true,
+        "settledMs": 316,
+        "notice": [
+          "remote MCP request failed: Load failed"
+        ],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [],
+        "registry": [],
+        "webviewRequests": [
+          {
+            "atMs": 1183,
+            "host": "self-signed.badssl.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "initialize",
+            "error": "Load failed",
+            "ms": 237
+          }
+        ],
+        "keychain": {
+          "present": false,
+          "exit": 44
+        }
+      },
+      "webkitNoCorsDiscriminator": {
+        "tlsExpired": {
+          "url": "https://expired.badssl.com/mcp",
+          "resolved": false,
+          "error": "Load failed",
+          "ms": 237
+        },
+        "tlsSelfSigned": {
+          "url": "https://self-signed.badssl.com/mcp",
+          "resolved": false,
+          "error": "Load failed",
+          "ms": 236
+        },
+        "validControl": {
+          "url": "https://mcp.deepwiki.com/mcp",
+          "resolved": true,
+          "type": "opaque",
+          "ms": 529
+        }
+      },
+      "consoleErrorsSoFar": [],
+      "verdict": {
+        "expiredHonest": true,
+        "expiredStoppedInNetworkLayer": true,
+        "selfSignedHonest": true,
+        "selfSignedStoppedInNetworkLayer": true,
+        "webkitRefusesBothCertificates": true,
+        "webkitAcceptsValidControl": true,
+        "noBearerSent": true,
+        "noKeychainEntry": true
+      }
+    },
+    "real": {
+      "connect": {
+        "url": "https://mcp.deepwiki.com/mcp",
+        "clicked": true,
+        "settledMs": 781,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 730 ms",
+        "tools": [
+          "ask_wiki_question",
+          "read_wiki_contents",
+          "read_wiki_structure"
+        ],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Connected · server v2.14.3",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "registry": [
+          {
+            "name": "proof-g9-mv6ic34i",
+            "status": "installed",
+            "url": "https://mcp.deepwiki.com/mcp",
+            "tools": [
+              "ask_wiki_question",
+              "read_wiki_contents",
+              "read_wiki_structure"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "webviewRequests": [
+          {
+            "atMs": 3055,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "initialize",
+            "status": 200,
+            "ms": 361
+          },
+          {
+            "atMs": 3418,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "notifications/initialized",
+            "status": 202,
+            "ms": 182
+          },
+          {
+            "atMs": 3600,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "tools/list",
+            "status": 200,
+            "ms": 183
+          }
+        ]
+      },
+      "call": {
+        "clicked": true,
+        "label": "Review and call",
+        "selected": "read_wiki_structure",
+        "approvedOnce": true,
+        "settledMs": 322,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 730 ms",
+        "tools": [
+          "ask_wiki_question",
+          "read_wiki_contents",
+          "read_wiki_structure"
+        ],
+        "callOutput": "{ \"content\": [ { \"type\": \"text\", \"text\": \"Available pages for modelcontextprotocol/servers:\\n\\n- 1 Introduction to Model Context Protocol Servers\\n - 1.1 MCP Protocol and Architecture\\n - 1.2 Repository Structure and Package Management\\n- 2 Reference Servers Overview\\n - 2.1 Everything Server\\n - 2.1.1 Architecture and Design Patterns\\n - 2.1.2 Tools and Features Reference\\n - 2.1.3 Transport Implementations\\n - 2.1.4 Advanced Features (Tasks, Sampling, Elicitation)\\n - 2.2 Filesystem Server\\n - 2.2.1 Security Model and Access Control\\n - 2.2.2 Filesystem Tools Reference\\n - 2.3 Git Server\\n -",
+        "statusRows": [
+          {
+            "text": "Connected · server v2.14.3",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "registry": [
+          {
+            "name": "proof-g9-mv6ic34i",
+            "status": "installed",
+            "url": "https://mcp.deepwiki.com/mcp",
+            "tools": [
+              "ask_wiki_question",
+              "read_wiki_contents",
+              "read_wiki_structure"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "callOutputChars": 2398,
+        "webviewRequests": [
+          {
+            "atMs": 4861,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "tools/call",
+            "tool": "read_wiki_structure",
+            "status": 200,
+            "ms": 261
+          }
+        ]
+      },
+      "disconnect": {
+        "clicked": true,
+        "settledMs": 6,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Disconnected · server v2.14.3",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "registry": [
+          {
+            "name": "proof-g9-mv6ic34i",
+            "status": "error",
+            "url": "https://mcp.deepwiki.com/mcp",
+            "tools": [
+              "ask_wiki_question",
+              "read_wiki_contents",
+              "read_wiki_structure"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "webviewRequests": []
+      },
+      "reconnect": {
+        "clicked": true,
+        "settledMs": 624,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 547 ms",
+        "tools": [
+          "ask_wiki_question",
+          "read_wiki_contents",
+          "read_wiki_structure"
+        ],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Connected · server v2.14.3",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "registry": [
+          {
+            "name": "proof-g9-mv6ic34i",
+            "status": "installed",
+            "url": "https://mcp.deepwiki.com/mcp",
+            "tools": [
+              "ask_wiki_question",
+              "read_wiki_contents",
+              "read_wiki_structure"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "webviewRequests": [
+          {
+            "atMs": 5925,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "initialize",
+            "status": 200,
+            "ms": 181
+          },
+          {
+            "atMs": 6107,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "notifications/initialized",
+            "status": 202,
+            "ms": 181
+          },
+          {
+            "atMs": 6288,
+            "host": "mcp.deepwiki.com",
+            "path": "/mcp",
+            "method": "POST",
+            "authorizationHeader": false,
+            "rpc": "tools/list",
+            "status": 200,
+            "ms": 183
+          }
+        ]
+      },
+      "keychain": {
+        "present": false,
+        "exit": 44
+      },
+      "secureStoreCalls": [
+        {
+          "atMs": 314,
+          "cmd": "secure_store_get",
+          "key": "remote-mcp-remote-proof-g9-mv6ic34i"
+        },
+        {
+          "atMs": 1179,
+          "cmd": "secure_store_get",
+          "key": "remote-mcp-remote-proof-g9-mv6ic34i"
+        },
+        {
+          "atMs": 3053,
+          "cmd": "secure_store_get",
+          "key": "remote-mcp-remote-proof-g9-mv6ic34i"
+        },
+        {
+          "atMs": 5921,
+          "cmd": "secure_store_get",
+          "key": "remote-mcp-remote-proof-g9-mv6ic34i"
+        }
+      ],
+      "verdict": {
+        "connectedByExchange": true,
+        "toolsListed": true,
+        "realToolsCall": true,
+        "disconnectLeavesOnlyDisconnected": true,
+        "reconnectByExchange": true,
+        "noBearerSent": true,
+        "onlyAllowedHosts": true,
+        "noKeychainEntry": true
+      }
+    },
+    "cleanup": {
+      "remove": {
+        "removed": true,
+        "remotesAfter": 0
+      },
+      "keychainEnd": {
+        "present": false,
+        "exit": 44
+      },
+      "verdict": {
+        "removedInApp": true,
+        "noKeychainEntryLeft": true
+      }
+    }
+  },
+  "verdicts": {
+    "control: badssl certificates invalid today, DeepWiki's valid (Node TLS)": true,
+    "no test-mode allowance: the app's public-HTTPS rule in force": true,
+    "invalid TLS (expired, self-signed): honest, bounded failure, stopped by TLS": true,
+    "real public HTTPS endpoint: connected by exchange, tools listed, real tools/call, Disconnect, Reconnect": true,
+    "cleanup: connector removed, no Keychain entry": true,
+    "clean exit, no process left": true,
+    "user engine settings untouched": true
+  },
+  "limits": [
+    "The server cut (disconnection with the server gone mid-session) is not repeated against DeepWiki: the bridge has no Network.setBlockedURLs, and the cut is proved on loopback in m3-02-remote-mcp.json (phase down). Here Disconnect is the user's own button.",
+    "The panel exercises the webview's transport (WKWebView, macOS trust store). The engine's own connection to a public HTTPS server (Use in Muse, a live turn) is not repeated here; G6 proved the engine path on loopback.",
+    "No token: the bearer and Keychain path over TLS is not exercised (DeepWiki is tokenless); the Keychain path is in m3-02-remote-mcp.json."
+  ],
+  "webviewHosts": [
+    "expired.badssl.com",
+    "self-signed.badssl.com",
+    "mcp.deepwiki.com"
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true
+}
