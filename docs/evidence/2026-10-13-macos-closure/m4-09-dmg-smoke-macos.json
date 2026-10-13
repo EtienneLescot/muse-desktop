@@ -1,0 +1,170 @@
+{
+  "schema": "muse-desktop.m4-09-dmg-smoke-macos.v1",
+  "ticket": "M4-09",
+  "date": "2026-10-13",
+  "commit": "e0c029b",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon",
+  "harness": "scripts/macos/m4-09-dmg-smoke.mjs",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "dmgs": {
+    "old": {
+      "file": "Muse-Desktop_0.3.0_aarch64.dmg",
+      "sha256": "e2c414d44727f05917da5c996aaf45073f29e03bb3a3e24ae79a6fd4135264e3",
+      "gatekeeper": {
+        "accepted": true,
+        "source": "Notarized Developer ID",
+        "origin": "Developer ID Application: Etienne Lescot (M4LK7C6S84)"
+      }
+    },
+    "new": {
+      "file": "Muse-Desktop_0.4.0_aarch64.dmg",
+      "sha256": "3925efff031a0b4a61bd8c9fb5c7e68a403943b17839ea60b28b4cd5f77bd5fa",
+      "gatekeeper": {
+        "accepted": true,
+        "source": "Notarized Developer ID",
+        "origin": "Developer ID Application: Etienne Lescot (M4LK7C6S84)"
+      }
+    }
+  },
+  "steps": {
+    "installOld": {
+      "version": "0.3.0",
+      "codesign": "valid",
+      "gatekeeper": {
+        "accepted": true,
+        "source": "Notarized Developer ID",
+        "origin": "Developer ID Application: Etienne Lescot (M4LK7C6S84)"
+      }
+    },
+    "installedBefore": "0.3.0",
+    "runOld": {
+      "label": "0.3.0",
+      "launched": true,
+      "aliveAfter15s": true,
+      "children": [
+        "bash"
+      ],
+      "closedOnSigterm": true,
+      "newCrashReports": []
+    },
+    "dataAfterOld": {
+      "files": 6,
+      "storageEntries": 33,
+      "storageDatabases": 1
+    },
+    "installNew": {
+      "version": "0.4.0",
+      "codesign": "valid",
+      "gatekeeper": {
+        "accepted": true,
+        "source": "Notarized Developer ID",
+        "origin": "Developer ID Application: Etienne Lescot (M4LK7C6S84)"
+      }
+    },
+    "installTouchedNoData": {
+      "files": {
+        "missing": [],
+        "changed": [],
+        "added": []
+      },
+      "storage": {
+        "missing": [],
+        "changed": [],
+        "added": []
+      }
+    },
+    "runNew": {
+      "label": "0.4.0",
+      "launched": true,
+      "aliveAfter15s": true,
+      "children": [
+        "bash"
+      ],
+      "closedOnSigterm": true,
+      "newCrashReports": []
+    },
+    "updateComparedWithOld": {
+      "files": {
+        "missing": [],
+        "changed": [],
+        "added": []
+      },
+      "storage": {
+        "missing": [],
+        "changed": [
+          "muse-desktop.stream-position.v1"
+        ],
+        "added": []
+      }
+    },
+    "uninstall": {
+      "movedToBin": true,
+      "dataKept": {
+        "files": {
+          "missing": [],
+          "changed": [],
+          "added": []
+        },
+        "storage": {
+          "missing": [],
+          "changed": [],
+          "added": []
+        }
+      }
+    },
+    "reinstall": {
+      "version": "0.4.0",
+      "codesign": "valid",
+      "gatekeeper": {
+        "accepted": true,
+        "source": "Notarized Developer ID",
+        "origin": "Developer ID Application: Etienne Lescot (M4LK7C6S84)"
+      }
+    },
+    "runReinstalled": {
+      "label": "0.4.0 reinstalled",
+      "launched": true,
+      "aliveAfter15s": true,
+      "children": [
+        "bash"
+      ],
+      "closedOnSigterm": true,
+      "newCrashReports": []
+    },
+    "reinstallComparedWithUpdate": {
+      "files": {
+        "missing": [],
+        "changed": [
+          "scheduler/scheduler-lease.lock"
+        ],
+        "added": []
+      },
+      "storage": {
+        "missing": [],
+        "changed": [
+          "muse-desktop.stream-position.v1"
+        ],
+        "added": []
+      }
+    },
+    "binCopyRemoved": true
+  },
+  "verdicts": {
+    "bothDmgsNotarised": true,
+    "installedAppAccepted": true,
+    "oldLaunches": true,
+    "newLaunchesOverOld": true,
+    "installTouchesNoData": true,
+    "updateKeepsEveryFile": true,
+    "updateKeepsEveryStorageEntry": true,
+    "uninstallKeepsData": true,
+    "reinstallLaunchesWithData": true
+  },
+  "limits": [
+    "No UI was driven in the installed app (the agent was not granted control of it): the real turn in the packaged app, the two-project scenario of M0-01 and the Gatekeeper box of a quarantined download are Étienne's (docs/plans/2026-10-13-macos-sessions-with-etienne.md, step 7).",
+    "The DMGs were downloaded with the GitHub CLI, which sets no quarantine attribute: spctl checks the signature and the notarisation, not the first-open dialog.",
+    "Entries the app rewrites at launch are listed under `changed`; an entry or a file is lost only if it is under `missing`."
+  ],
+  "passed": true
+}
