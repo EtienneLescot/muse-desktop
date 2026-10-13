@@ -1,0 +1,361 @@
+{
+  "schema": "muse-desktop.m2-03-worktree.macos.v1",
+  "ticket": "M2-03",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon, APFS (case-insensitive); debug build 08b291d with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "git": "git version 2.50.1 (Apple Git-155)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m2-03-worktree.mjs on scripts/macos/test-instance.mjs, bridge port 9453",
+  "method": "One isolated instance on a fresh Git repository (local user config, no global config touched). The project is created from the welcome screen (folder dialog answered by the IPC trace); the first message is typed with Input.insertText and sent with a real Enter. The refusals and the simultaneous creations call the app's native command through the Tauri IPC, as the renderer does. In D the harness refuses start_session (window.__baselineIpc.block) to stand for a failed admission.",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<bbc94152-2941-56a5-ba30-9d451e6dbadf>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "A": {
+    "start": "ready",
+    "switch": {
+      "present": true,
+      "wasChecked": false,
+      "disabled": false,
+      "checked": true,
+      "note": "Runs in a copy of repo on a new branch, leaving it untouched."
+    },
+    "createCall": [
+      {
+        "args": {
+          "workspace": "<repo>",
+          "branch": "muse/repo-gaiea",
+          "relativePath": ".muse/worktrees/repo-gaiea",
+          "baseRef": "HEAD"
+        },
+        "ok": true,
+        "result": {
+          "repoRoot": "<repo>",
+          "path": "<repo>/.muse/worktrees/repo-gaiea",
+          "branch": "muse/repo-gaiea",
+          "base": "HEAD",
+          "createdAt": 1791882023959
+        }
+      }
+    ],
+    "startSession": {
+      "workspacePath": "<repo>/.muse/worktrees/repo-gaiea",
+      "ok": true,
+      "sid": "01a1347d-d659-73f1-994f-9964336ab6a9"
+    },
+    "replyStored": true,
+    "worktreeBranch": "muse/repo-gaiea",
+    "worktreeList": [
+      "<repo>",
+      "<repo>/.muse/worktrees/repo-gaiea"
+    ],
+    "engineCwds": [
+      "<repo>/.muse/worktrees/repo-gaiea"
+    ],
+    "header": [
+      "<repo>/.muse/worktrees/repo-gaiea"
+    ],
+    "mainAfter": {
+      "head": "f3c3f64607c6ee95d5702e4e0dbfda24174f9885",
+      "branch": "main",
+      "status": ""
+    },
+    "mainBefore": {
+      "head": "f3c3f64607c6ee95d5702e4e0dbfda24174f9885",
+      "branch": "main",
+      "status": ""
+    }
+  },
+  "B": {
+    "cases": {
+      "traversal": {
+        "request": {
+          "branch": "muse/t-mv6gagh2",
+          "relativePath": "../outside",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree path must be relative and stay inside .muse/worktrees"
+        }
+      },
+      "absolutePath": {
+        "request": {
+          "branch": "muse/a-mv6gagh2",
+          "relativePath": "<proof>/abs",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree path must be relative and stay inside .muse/worktrees"
+        }
+      },
+      "outsideManaged": {
+        "request": {
+          "branch": "muse/o-mv6gagh2",
+          "relativePath": "elsewhere/wt",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree path must start with .muse/worktrees/"
+        }
+      },
+      "traversalInsideManaged": {
+        "request": {
+          "branch": "muse/i-mv6gagh2",
+          "relativePath": ".muse/worktrees/../../escape",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree path must be relative and stay inside .muse/worktrees"
+        }
+      },
+      "existingPath": {
+        "request": {
+          "branch": "muse/e-mv6gagh2",
+          "relativePath": ".muse/worktrees/repo-gaiea",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree path already exists: <repo>/.muse/worktrees/repo-gaiea"
+        }
+      },
+      "existingPathOtherCase": {
+        "request": {
+          "branch": "muse/c-mv6gagh2",
+          "relativePath": ".muse/worktrees/REPO-GAIEA",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree path already exists: <repo>/.muse/worktrees/REPO-GAIEA"
+        }
+      },
+      "optionShapedBranch": {
+        "request": {
+          "branch": "--orphan",
+          "relativePath": ".muse/worktrees/opt-mv6gagh2",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "worktree branch is not a safe Git reference"
+        }
+      },
+      "optionShapedBase": {
+        "request": {
+          "branch": "muse/ob-mv6gagh2",
+          "relativePath": ".muse/worktrees/optb-mv6gagh2",
+          "baseRef": "--detach"
+        },
+        "answer": {
+          "error": "worktree base is not a safe Git reference"
+        }
+      },
+      "missingBaseRef": {
+        "request": {
+          "branch": "muse/m-mv6gagh2",
+          "relativePath": ".muse/worktrees/missing-mv6gagh2",
+          "baseRef": "no-such-branch"
+        },
+        "answer": {
+          "error": "fatal: invalid reference: no-such-branch"
+        }
+      },
+      "existingBranchOtherCase": {
+        "request": {
+          "branch": "muse/REPO-GAIEA",
+          "relativePath": ".muse/worktrees/bcase-mv6gagh2",
+          "baseRef": "HEAD"
+        },
+        "answer": {
+          "error": "Preparing worktree (new branch 'muse/REPO-GAIEA')\nfatal: a branch named 'muse/REPO-GAIEA' already exists"
+        }
+      }
+    },
+    "before": {
+      "worktrees": [
+        "<repo>",
+        "<repo>/.muse/worktrees/repo-gaiea"
+      ],
+      "branches": [
+        "main",
+        "muse/repo-gaiea"
+      ],
+      "dirs": [
+        "repo-gaiea"
+      ]
+    },
+    "after": {
+      "worktrees": [
+        "<repo>",
+        "<repo>/.muse/worktrees/repo-gaiea"
+      ],
+      "branches": [
+        "main",
+        "muse/repo-gaiea"
+      ],
+      "dirs": [
+        "repo-gaiea"
+      ]
+    }
+  },
+  "C": {
+    "answers": [
+      {
+        "ok": {
+          "repoRoot": "<repo>",
+          "path": "<repo>/.muse/worktrees/sim1-mv6gagh2",
+          "branch": "muse/sim1-mv6gagh2",
+          "base": "HEAD",
+          "createdAt": 1791882029119
+        }
+      },
+      {
+        "ok": {
+          "repoRoot": "<repo>",
+          "path": "<repo>/.muse/worktrees/sim2-mv6gagh2",
+          "branch": "muse/sim2-mv6gagh2",
+          "base": "HEAD",
+          "createdAt": 1791882029125
+        }
+      }
+    ],
+    "worktrees": [
+      "<repo>",
+      "<repo>/.muse/worktrees/repo-gaiea",
+      "<repo>/.muse/worktrees/sim1-mv6gagh2",
+      "<repo>/.muse/worktrees/sim2-mv6gagh2"
+    ],
+    "branches": [
+      "main",
+      "muse/repo-gaiea",
+      "muse/sim1-mv6gagh2",
+      "muse/sim2-mv6gagh2"
+    ],
+    "removed": [
+      {
+        "ok": null
+      },
+      {
+        "ok": null
+      }
+    ],
+    "afterRemove": {
+      "worktrees": [
+        "<repo>",
+        "<repo>/.muse/worktrees/repo-gaiea"
+      ],
+      "dirs": [
+        "repo-gaiea"
+      ]
+    }
+  },
+  "D": {
+    "screen": {
+      "worktreeOn": true,
+      "note": "Runs in a copy of repo on a new branch, leaving it untouched."
+    },
+    "calls": [
+      {
+        "cmd": "git_worktree_create_for_workspace",
+        "ok": true,
+        "blockedByHarness": false,
+        "path": "<repo>/.muse/worktrees/repo-gaorj"
+      },
+      {
+        "cmd": "start_session",
+        "ok": false,
+        "blockedByHarness": true
+      }
+    ],
+    "shown": [
+      "This conversation could not be started. — blocked by the test harness"
+    ],
+    "draftKept": true,
+    "after": {
+      "worktrees": [
+        "<repo>",
+        "<repo>/.muse/worktrees/repo-gaiea",
+        "<repo>/.muse/worktrees/repo-gaorj"
+      ],
+      "branches": [
+        "main",
+        "muse/repo-gaiea",
+        "muse/repo-gaorj",
+        "muse/sim1-mv6gagh2",
+        "muse/sim2-mv6gagh2"
+      ],
+      "dirs": [
+        "repo-gaiea",
+        "repo-gaorj"
+      ]
+    },
+    "before": {
+      "worktrees": [
+        "<repo>",
+        "<repo>/.muse/worktrees/repo-gaiea"
+      ],
+      "branches": [
+        "main",
+        "muse/repo-gaiea",
+        "muse/sim1-mv6gagh2",
+        "muse/sim2-mv6gagh2"
+      ],
+      "dirs": [
+        "repo-gaiea"
+      ]
+    },
+    "leftBehind": {
+      "worktrees": [
+        "<repo>/.muse/worktrees/repo-gaorj"
+      ],
+      "branches": [
+        "muse/repo-gaorj"
+      ]
+    }
+  },
+  "verdicts": {
+    "worktreeSwitchOffered": true,
+    "createdUnderMuseWorktrees": true,
+    "conversationStartsInWorktree": true,
+    "museBranch": true,
+    "gitListsWorktree": true,
+    "engineRunsInWorktree": true,
+    "liveTurnAnsweredInWorktree": true,
+    "mainCheckoutUnchanged": true,
+    "refusalsAll": true,
+    "refusalsLeaveNothing": true,
+    "otherCasePathRefused": true,
+    "twoSimultaneousCreations": true,
+    "simultaneousRemovedByApp": true,
+    "failedStartRollsBackWorktree": false
+  },
+  "observations": {
+    "failedStartDraftKept": true,
+    "failedStartMessage": [
+      "This conversation could not be started. — blocked by the test harness"
+    ]
+  },
+  "defects": [
+    {
+      "what": "A conversation whose start fails after the welcome screen created its worktree leaves that worktree and its muse/ branch behind, and the message does not mention them; each retry creates another one (a new name per attempt).",
+      "where": "src/App.tsx, welcome onStart: createWorktreeForWorkspace then startSessionInWorkspace; on a null id it returns false with no git_worktree_remove. The native one-step Create & open with rollback that the roadmap describes no longer exists (no such command in src-tauri/src/main.rs at 08b291d).",
+      "platform": "shared code, not specific to macOS; the Windows record does not exercise this path.",
+      "loss": "none: the leftover is a clean checkout of the base, removable from the cleanup surface (M2-06)."
+    }
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "limits": [
+    "The folder dialog is answered by the IPC trace; in D the start refusal is forged by the harness (no real admission failure was available on demand).",
+    "Disk-full failures are not exercised."
+  ],
+  "passed": false
+}
