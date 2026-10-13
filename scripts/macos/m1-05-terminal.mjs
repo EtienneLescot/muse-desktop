@@ -17,6 +17,7 @@
  *
  *   node scripts/macos/m1-05-terminal.mjs --exe ~/muse-proofs/app/08b291d/muse-desktop
  *     [--port 9441] [--base $TMPDIR/muse-proofs-g4/m1-05] [--out docs/evidence/2026-10-13-macos-closure/m1-05-terminal-macos.json]
+ *     [--build-commit 08b291d]
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
@@ -27,6 +28,8 @@ import { newProjectConversation, sendFirstMessage } from "./smoke-real-turn.mjs"
 import { launch } from "./test-instance.mjs";
 import { descendants, loneSurrogates, plain, platform, proc, redactPaths, replacements, request, sameAlive, shellsOf, terminalDriver } from "./m1-05-terminal-lib.mjs";
 
+const BUILD = argValue("--build-commit", "08b291d");
+const FIXED_BUILD = BUILD !== "08b291d";
 const EXE = resolve(argValue("--exe", "src-tauri/target/debug/muse-desktop"));
 const PORT = Number(argValue("--port", "9441"));
 const ID = Date.now().toString(36);
@@ -100,8 +103,8 @@ const record = {
   schema: "muse-desktop.m1-05-terminal-macos.v1",
   ticket: "M1-05",
   date: new Date().toISOString().slice(0, 10),
-  commit: "08b291d",
-  platform: platform(),
+  commit: BUILD,
+  platform: platform().replace("08b291d", BUILD),
   engine: null,
   liveTurns: 0,
   harness: `scripts/macos/m1-05-terminal.mjs (+ m1-05-terminal-lib.mjs) on scripts/macos/test-instance.mjs, bridge port ${PORT}`,
@@ -110,7 +113,20 @@ const record = {
   env: { LANG: process.env.LANG ?? null, LC_ALL: process.env.LC_ALL ?? null, LC_CTYPE: process.env.LC_CTYPE ?? null, SHELL: process.env.SHELL ?? null },
   checks: {},
   verdicts: {},
-  findings: [
+  // On a build after the fix (--build-commit other than 08b291d), unicodeShellEcho
+  // and typedQuotesReachShell are expected true: the 08b291d defects go to previousRun.
+  ...(FIXED_BUILD ? {
+    previousRun: {
+      file: "docs/evidence/2026-10-13-macos-closure/m1-05-terminal-macos.json",
+      commit: "08b291d",
+      defectsThen: [
+        "unicodeShellEcho false: the PTY shell had no LANG (GUI app environment), zsh ran under LC_CTYPE=C, echoed typed UTF-8 as U+FFFD and <0082>-style escapes, and `ls` printed a non-ASCII name as '?????????'.",
+        "typedQuotesReachShell false: typed one key at a time, `echo 'q1 q2' \"q3\" -- end` reached zsh as `echo ‘q1 q2’ “q3” — end` (system smart quotes and dashes on an input with no spellcheck attribute).",
+      ],
+      expectationNow: `Replay on ${BUILD} (terminal.rs sets LANG=en_US.UTF-8 when no locale is set; spellCheck={false} on the terminal input): both verdicts are expected true, with the same checks and the same harness environment (no LANG, LC_ALL or LC_CTYPE, as a Finder launch).`,
+    },
+  } : {}),
+  findings: FIXED_BUILD ? [] : [
     "macOS code defect (unicodeShellEcho): the PTY shell gets the GUI app's environment, which on macOS carries no LANG (launchd gives none to apps; Terminal.app sets its own). terminal.rs sets TERM only, so zsh runs under LC_CTYPE=C: the typed line it echoes back holds U+FFFD and <0082>-style escapes, and `ls` prints a non-ASCII file name as '?????????'. The same commands under LANG=en_US.UTF-8 in a subshell are clean. Suggested fix: on macOS, set LANG (or LC_CTYPE) to a UTF-8 locale in the CommandBuilder when the environment has none.",
     "macOS code defect (typedQuotesReachShell): WKWebView applies the system text substitutions (smart quotes and dashes, on by default in macOS) to the terminal input, which has no spellcheck=\"false\". Typed one key at a time, `echo 'q1 q2' \"q3\" -- end` reaches zsh as `echo ‘q1 q2’ “q3” — end`. scripts/macos/m1-05-quote-probe.mjs shows the same field without substitution once spellcheck=\"false\" is set. Suggested fix: spellCheck={false} (and autoCorrect/autoCapitalize off) on the terminal input.",
   ],
@@ -234,7 +250,11 @@ try {
     exactUnicodeLines: uLines, exactWideLines: wLines,
     rawReplacementChars: replacements(longRaw), rawLoneSurrogates: loneSurrogates(longRaw),
     domChars: dom.length, domReplacementChars: replacements(dom), domHasLastLine: dom.includes("W4000 ") && dom.includes("LONG-DONE 4000"),
+    brokenRawLines: plain(longRaw).split("\n").filter((l) => l.includes("�")).slice(0, 4).map((l) => l.slice(0, 80)),
   });
+  if (replacements(longRaw) > 0) {
+    record.findings.push(`Shared code defect (unicode-long, intermittent): ${replacements(longRaw)} U+FFFD in the raw terminal_read stream of a long multibyte output (python3 writes valid UTF-8). src-tauri/src/terminal.rs read_output decodes each 8192-byte PTY read on its own with String::from_utf8_lossy, so a 3- or 4-byte character split across two reads becomes replacement characters. Whether it happens depends on where the reads fall (0 in the 08b291d run, ${replacements(longRaw)} here). Fix direction: keep the incomplete UTF-8 tail of a read and prepend it to the next one. Not part of the 3196ce2 fixes.`);
+  }
   // Program output and program input (the plan's Unicode criterion).
   record.verdicts.unicodeProgramOutputAndInput = Boolean(
     echo.ok && echo.added.split("\n").some((l) => l.trim() === UNICODE)

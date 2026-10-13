@@ -31,6 +31,12 @@
  *   node scripts/macos/m0-06-policy-in-force.mjs --exe ~/muse-proofs/app/08b291d/muse-desktop
  *     [--port 9426] [--base $TMPDIR/muse-proofs-g2/m0-06] [--phases scope,matrix,middle,texts]
  *     [--out docs/evidence/2026-10-13-macos-closure/m0-06-policy-in-force.json]
+ *     [--build-commit 08b291d] [--seed-from <record.json>]
+ *
+ * --seed-from starts a new record (when --out does not exist yet) from an
+ * earlier one: its phases not run now are carried over, marked carriedFrom,
+ * and their turns are not counted as this run's. E.g. a text-only change of
+ * Settings replayed with --phases texts on the cells measured before.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -48,6 +54,10 @@ const PORT = Number(argValue("--port", "9426"));
 const BASE = resolve(argValue("--base", join(tmpdir(), "muse-proofs-g2", "m0-06")));
 const PHASES = argValue("--phases", "scope,matrix,middle,temp,texts").split(",");
 const OUT = argValue("--out", "docs/evidence/2026-10-13-macos-closure/m0-06-policy-in-force.json");
+const BUILD = argValue("--build-commit", "08b291d");
+const SEED = argValue("--seed-from", null);
+// Settings' macOS sentence added in 3196ce2 (SettingsPanel.tsx, Isolation note).
+const MAC_NOTE = /On macOS with Muse 1\.4\.2, Workspace only also lets commands write in the system's temporary folders \(\$TMPDIR, \/tmp\); other writes outside the folder are refused, and names do not resolve\./;
 const ID = Date.now().toString(36);
 const RUN = join(BASE, `run-${ID}`);
 const OUT_TMP = join(RUN, "outside");
@@ -328,10 +338,18 @@ async function textsPhase(record) {
   const e = cell("elevated", "yolo");
   const m = cell("workspace", "workspace");
   const sentence = (label) => r.settings?.isolation.find((x) => x.label === label)?.detail ?? r.settings?.postures.find((x) => x.label === label)?.detail ?? null;
+  const t = record.phases.temp?.disk ?? null;
+  r.macosNoteShown = MAC_NOTE.test(r.settings?.isolationNote ?? "");
+  const writeCells = { inside: [w?.disk?.["write-inside-relative"], w?.disk?.["write-inside-absolute"]], outsideHome: w?.disk?.["write-outside-home"], outsideTemp: w?.disk?.["write-outside-temp"], tempPhase: t };
+  const insideOnly = ok(w, "write-inside-relative") && ok(w, "write-inside-absolute") && !ok(w, "write-outside-home");
   r.claims = [
-    { sentence: sentence("Workspace only"), claim: "writes stay inside the folder", holds: ok(w, "write-inside-relative") && ok(w, "write-inside-absolute") && !ok(w, "write-outside-home") && !ok(w, "write-outside-temp"),
-      cells: { inside: [w?.disk?.["write-inside-relative"], w?.disk?.["write-inside-absolute"]], outsideHome: w?.disk?.["write-outside-home"], outsideTemp: w?.disk?.["write-outside-temp"],
-        tempPhase: record.phases.temp?.disk ?? null } },
+    r.macosNoteShown
+      // With the macOS note, the Workspace only sentence is read with the exception the note states.
+      ? { sentence: `${sentence("Workspace only")} + note: ${r.settings.isolationNote.match(MAC_NOTE)[0]}`, claim: "writes stay inside the folder, except the system temp folders ($TMPDIR, /tmp); other writes outside are refused",
+        holds: insideOnly && t?.["write-tmpdir-sibling"] === "ok" && t?.["write-tmpdir-other-tree"] === "ok" && t?.["write-private-tmp"] === "ok" && t?.["write-home"] === "fail",
+        cells: writeCells }
+      : { sentence: sentence("Workspace only"), claim: "writes stay inside the folder", holds: insideOnly && !ok(w, "write-outside-temp"), cells: writeCells },
+    ...(r.macosNoteShown ? [{ sentence: r.settings.isolationNote.match(MAC_NOTE)[0], claim: "names do not resolve under Workspace only", holds: /^exit6:/.test(w?.printed?.["net-http"] ?? "") && /^exit6:/.test(w?.printed?.["net-https"] ?? ""), cells: { http: w?.printed?.["net-http"], https: w?.printed?.["net-https"] } }] : []),
     { sentence: sentence("Workspace only"), claim: "commands cannot connect out", holds: Boolean(w) && !net(w, "http") && !net(w, "https"), cells: { http: w?.printed?.["net-http"], https: w?.printed?.["net-https"] } },
     { sentence: sentence("Workspace only"), claim: "reads can reach other folders", holds: ok(w, "read-outside-home"), cells: { read: w?.printed?.["read-outside-home"] } },
     { sentence: sentence("Workspace and network"), claim: "also lets commands connect out", holds: net(n, "http") && net(n, "https") && !ok(n, "write-outside-home"), cells: { http: n?.printed?.["net-http"], https: n?.printed?.["net-https"], outsideHome: n?.disk?.["write-outside-home"] } },
@@ -340,26 +358,43 @@ async function textsPhase(record) {
     { sentence: sentence("Ask only for more access"), claim: "the engine's sandbox decides when Muse asks (macOS cell recorded)", holds: Boolean(m?.turnEnded), cells: { cards: m?.cards.length ?? null, tools: (m?.cards ?? []).map((x) => x.tool), outsideHome: m?.disk?.["write-outside-home"], http: m?.printed?.["net-http"] } },
   ];
   r.windowsOnlyNoteAbsent = !/Windows|PowerShell/.test(r.settings?.isolationNote ?? "");
-  r.verdict = { everyClaimHolds: r.claims.every((x) => x.holds), windowsOnlyNoteAbsent: r.windowsOnlyNoteAbsent };
+  r.verdict = { everyClaimHolds: r.claims.every((x) => x.holds), windowsOnlyNoteAbsent: r.windowsOnlyNoteAbsent, ...(BUILD === "08b291d" ? {} : { macosNoteShown: r.macosNoteShown }) };
   return r;
 }
 
 async function main() {
   mkdirSync(RUN, { recursive: true });
-  const record = readJson(OUT, null) ?? {
+  const seed = SEED ? readJson(SEED, null) : null;
+  const carried = (p) => Boolean(p?.carriedFrom);
+  const record = readJson(OUT, null) ?? (seed ? {
+    ...seed,
+    harness: `scripts/macos/m0-06-policy-in-force.mjs (+ scripts/macos/m0-05-06-common.mjs), port ${PORT}`,
+    phases: Object.fromEntries(Object.entries(seed.phases).filter(([k]) => !PHASES.includes(k)).map(([k, p]) => [k, { ...p, carriedFrom: `${SEED} (${seed.commit}, ${seed.date})` }])),
+  } : {
     schema: "muse-desktop.m0-06-policy-in-force-macos.v1",
     ticket: "M0-06",
-    commit: "08b291d",
+    commit: BUILD,
     platform: macPlatform(),
     harness: `scripts/macos/m0-06-policy-in-force.mjs (+ scripts/macos/m0-05-06-common.mjs), port ${PORT}`,
     phases: {},
-  };
+  });
+  record.commit = BUILD;
+  if (seed) {
+    record.previousRun = {
+      file: SEED, commit: seed.commit,
+      defectThen: "texts.everyClaimHolds false: Settings' 'Writes stay inside the conversation's folder' over-claimed on macOS, where Workspace only let commands write in $TMPDIR and /private/tmp (home folder refused).",
+      expectationNow: `Replay on ${BUILD}: the Isolation note shows the macOS sentence (macosNoteShown), and the Workspace only claim is judged with the exception it states against the cells of ${seed.commit} (carried phases: the engine, its argv and the cells are unchanged by a text-only fix), so everyClaimHolds is expected true. Only the texts phase runs; no turn.`,
+    };
+  }
   record.date = new Date().toISOString().slice(0, 10);
   record.engine = engineVersion();
   record.isolation = "One isolated test instance per phase (scripts/macos/test-instance.mjs): fresh data folder and WKWebView store under the run folder, projects in folders under the run folder ($TMPDIR) created through the Projects panel, the pinned engine with MUSE_NO_AUTO_UPDATE=1; each stop records the default stores unchanged and no process left. Outside-the-folder write targets: a sibling under $TMPDIR, another $TMPDIR tree, /private/tmp/muse-proofs-g2-<run> and ~/muse-proofs/g2-outside-<run>, all created and deleted by the script. The engine's session store is shared with the user (ADR 0003).";
-  record.method = "scope: conversations with no message started from each project's row (Projects panel > New conversation here) under each Isolation level of Settings; the requested posture is read from start_session on the page's IPC trace, the engine argv from ps under the app's pid; the posture menu cycled with five engines running (set_approval_mode, host effectiveMode), then a graceful relaunch. matrix/middle/temp: real 1.4.2 turns whose only action is `sh probe.sh`, a script the harness wrote in the project folder; writes are judged on disk, the read and the network from the probe lines in the stored transcript (curl exit code and HTTP status). texts: Settings' sentences read on macOS and set against those cells.";
+  record.method = "scope: conversations with no message started from each project's row (Projects panel > New conversation here) under each Isolation level of Settings; the requested posture is read from start_session on the page's IPC trace, the engine argv from ps under the app's pid; the posture menu cycled with five engines running (set_approval_mode, host effectiveMode), then a graceful relaunch. matrix/middle/temp: real 1.4.2 turns whose only action is `sh probe.sh`, a script the harness wrote in the project folder; writes are judged on disk, the read and the network from the probe lines in the stored transcript (curl exit code and HTTP status). texts: Settings' sentences read on macOS and set against those cells."
+    + (seed ? ` Replay on ${BUILD}, texts phase only (no turn): the scope, matrix, middle and temp phases are carried from ${seed.commit} (carriedFrom), the fix being a Settings sentence; the Isolation note is read in a fresh instance of ${BUILD} and the Workspace only claim judged with the macOS exception it now states.` : "");
   record.limits = [
-    "macOS engine 1.4.2 (Seatbelt): under Workspace only, writes outside the folder are refused in the home folder but succeed in the user's temp folder ($TMPDIR) and in /private/tmp; Settings' 'Writes stay inside the conversation's folder' over-claims on macOS for those two folders. Names do not resolve under Workspace only (curl exit 6), where Windows resolved them and refused the connect.",
+    BUILD === "08b291d"
+      ? "macOS engine 1.4.2 (Seatbelt): under Workspace only, writes outside the folder are refused in the home folder but succeed in the user's temp folder ($TMPDIR) and in /private/tmp; Settings' 'Writes stay inside the conversation's folder' over-claims on macOS for those two folders. Names do not resolve under Workspace only (curl exit 6), where Windows resolved them and refused the connect."
+      : `macOS engine 1.4.2 (Seatbelt): under Workspace only, writes outside the folder are refused in the home folder but succeed in the user's temp folder ($TMPDIR) and in /private/tmp, and names do not resolve (curl exit 6); measured on 08b291d (carried cells) and, since ${BUILD}, stated by Settings' Isolation note on macOS. The 'Workspace only' row itself still reads 'Writes stay inside the conversation's folder'; the exception is in the note above the rows.`,
     "Under 'Ask only for more access' (onRequest) the macOS engine ran `sh probe.sh` without asking (0 cards); the sentence's Windows clause ('On Windows it asks for shell commands') says nothing about macOS.",
     "A relaunch resumes a conversation on an engine started with the current Settings level when the project follows Settings (F1 started under Workspace only came back under Elevated access), as Settings' note says ('Applied when a new engine starts').",
     "The boot resume runs before the harness installs its IPC trace: the relaunch is judged on the posture the app re-applies and the host's answer to it.",
@@ -374,7 +409,9 @@ async function main() {
         result = { error: String(error?.message ?? error).slice(0, 400), appOutput: (error?.appOutput ?? []).slice(-10) };
       }
       record.phases[phase] = redact({ at: new Date().toISOString(), ...result });
-      record.liveTurns = Object.values(record.phases).reduce((n, p) => n + (p.liveTurns ?? 0), 0);
+      record.liveTurns = Object.values(record.phases).filter((p) => !carried(p)).reduce((n, p) => n + (p.liveTurns ?? 0), 0);
+      const carriedTurns = Object.values(record.phases).filter(carried).reduce((n, p) => n + (p.liveTurns ?? 0), 0);
+      if (carriedTurns > 0) record.liveTurnsInCarriedPhases = carriedTurns;
       record.verdicts = Object.fromEntries(Object.entries(record.phases).map(([k, p]) => [k, p.verdict ?? (p.error ? { error: p.error } : "recorded (cells judged by texts)")]));
       mkdirSync(join(OUT, ".."), { recursive: true });
       writeFileSync(OUT, `${JSON.stringify(record, null, 2)}\n`);
