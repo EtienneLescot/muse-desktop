@@ -1,0 +1,337 @@
+{
+  "schema": "muse-desktop.m2-04-06-setup-cleanup.macos.v1",
+  "tickets": [
+    "M2-04",
+    "M2-06"
+  ],
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon, APFS; debug build 08b291d with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "git": "git version 2.50.1 (Apple Git-155)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m2-04-06-setup-cleanup.mjs on scripts/macos/test-instance.mjs, bridge port 9454",
+  "method": "One isolated instance, started with an extra variable M2_04_PLANTED_SECRET in its environment. Settings' Worktree tools are driven through their DOM (values set, buttons clicked). Worktrees B to E are made with the git CLI as a user would outside the app; ages are set with utimes (ten days back). Native commands are called through the Tauri IPC only for the refusals the UI cannot ask for. The folder dialog and the confirmation boxes go through the IPC trace; every plugin:dialog call is recorded.",
+  "m204": {
+    "surface": {
+      "setup": true,
+      "readiness": true,
+      "note": "One command prepares this worktree (dependencies, builds). It runs only when you click, is bounded to 2,000 characters and ten minutes, and never starts on its own."
+    },
+    "ready": {
+      "command": "echo M2-04-SETUP-PROOF > setup-proof.txt; pwd > setup-pwd.txt; env | cut -d= -f1 | sort > setup-env.txt",
+      "status": "Setup ready in 0.3s · exit 0",
+      "uiMs": 414,
+      "cancelToOutcomeMs": null
+    },
+    "proofFile": "M2-04-SETUP-PROOF",
+    "pwd": "<repo>/.muse/worktrees/wt-a",
+    "environment": {
+      "count": 66,
+      "planted": true,
+      "kept": [
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "USER"
+      ],
+      "testSwitches": 3
+    },
+    "proofNotInMain": true,
+    "failed": {
+      "command": "exit 5",
+      "status": "Setup failed in 0.3s · exit 5",
+      "uiMs": 412,
+      "cancelToOutcomeMs": null
+    },
+    "retry": {
+      "command": "echo retry > setup-retry.txt",
+      "status": "Setup ready in 0.3s · exit 0",
+      "uiMs": 416,
+      "cancelToOutcomeMs": null,
+      "fileWritten": true
+    },
+    "cancelSimple": {
+      "command": "sleep 29",
+      "status": "Setup cancelled in 1.5s",
+      "uiMs": 1712,
+      "cancelToOutcomeMs": 204,
+      "sleepLeft": 0
+    },
+    "cancelCompound": {
+      "command": "sleep 27; echo late > setup-late.txt",
+      "status": "Setup cancelled in 27.0s",
+      "uiMs": 27166,
+      "cancelToOutcomeMs": 25659,
+      "during": {
+        "sleepAlive2sAfterCancel": 1,
+        "uiStillRunning": true
+      },
+      "sleepLeft": 0,
+      "tailRanAfterCancel": false
+    },
+    "readiness": "Readiness: ready · package.json · git available · node available",
+    "refuseMain": {
+      "error": "the command runs only inside a checkout under .muse/worktrees"
+    },
+    "refuseLong": {
+      "error": "setup command exceeds the 2000 character limit"
+    },
+    "storedCommand": "sleep 27; echo late > setup-late.txt"
+  },
+  "m206": {
+    "gitList": [
+      "<repo>",
+      "<repo>/.muse/worktrees/wt-a",
+      "<repo>/.muse/worktrees/wt-b",
+      "<repo>/.muse/worktrees/wt-c",
+      "<repo>/.muse/worktrees/wt-d",
+      "<repo>/.muse/worktrees/wt-e"
+    ],
+    "inspect": [
+      {
+        "path": "<repo>",
+        "text": "main checkout",
+        "button": null
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-a",
+        "text": "muse/wt-a · clean · 10 days · attached to a conversation",
+        "button": "Remove"
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-b",
+        "text": "muse/wt-b · dirty · today",
+        "button": "Force remove"
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-c",
+        "text": "muse/wt-c · clean · today",
+        "button": "Remove"
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-d",
+        "text": "muse/wt-d · clean · 10 days",
+        "button": "Remove"
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-e",
+        "text": "muse/wt-e · clean · 10 days · attached to a conversation",
+        "button": "Remove"
+      }
+    ],
+    "refusals": {
+      "dirty": {
+        "error": "worktree has uncommitted changes; inspect it and confirm the forced removal"
+      },
+      "mainCheckout": {
+        "error": "the command runs only inside a checkout under .muse/worktrees"
+      },
+      "outsideRepository": {
+        "error": "the command runs only inside a checkout under .muse/worktrees"
+      }
+    },
+    "afterRefusals": {
+      "list": [
+        "<repo>",
+        "<repo>/.muse/worktrees/wt-a",
+        "<repo>/.muse/worktrees/wt-b",
+        "<repo>/.muse/worktrees/wt-c",
+        "<repo>/.muse/worktrees/wt-d",
+        "<repo>/.muse/worktrees/wt-e"
+      ],
+      "dirtyFileKept": true
+    },
+    "removeC": {
+      "label": "Remove",
+      "status": [],
+      "onDisk": false,
+      "listed": false
+    },
+    "cleanUp": {
+      "status": [],
+      "rows": [
+        {
+          "path": "<repo>",
+          "text": "main checkout",
+          "button": null
+        },
+        {
+          "path": "<repo>/.muse/worktrees/wt-a",
+          "text": "muse/wt-a · clean · 10 days · attached to a conversation",
+          "button": "Remove"
+        },
+        {
+          "path": "<repo>/.muse/worktrees/wt-b",
+          "text": "muse/wt-b · dirty · today",
+          "button": "Force remove"
+        },
+        {
+          "path": "<repo>/.muse/worktrees/wt-e",
+          "text": "muse/wt-e · clean · 10 days · attached to a conversation",
+          "button": "Remove"
+        }
+      ]
+    },
+    "afterCleanUp": {
+      "list": [
+        "<repo>",
+        "<repo>/.muse/worktrees/wt-a",
+        "<repo>/.muse/worktrees/wt-b",
+        "<repo>/.muse/worktrees/wt-e"
+      ],
+      "A": true,
+      "B": true,
+      "D": false,
+      "E": true
+    },
+    "retentionStored": {
+      "<repo>": 7
+    },
+    "retentionAfterReload": "7",
+    "dialogsDuringRemoveAndCleanUp": 1,
+    "rowsBeforeProbes": [
+      {
+        "path": "<repo>",
+        "text": "main checkout",
+        "button": null
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-a",
+        "text": "muse/wt-a · clean · 10 days · attached to a conversation",
+        "button": "Remove"
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-b",
+        "text": "muse/wt-b · dirty · today",
+        "button": "Force remove"
+      },
+      {
+        "path": "<repo>/.muse/worktrees/wt-e",
+        "text": "muse/wt-e · clean · 10 days · attached to a conversation",
+        "button": "Remove"
+      }
+    ],
+    "probeForceRemoveDirty": {
+      "label": "Force remove",
+      "dialogCalls": [],
+      "worktreeGone": true,
+      "uncommittedFileLost": true
+    },
+    "probeRemoveActive": {
+      "rowText": "muse/wt-a · clean · 10 days · attached to a conversation",
+      "label": "Remove",
+      "dialogCalls": [],
+      "worktreeGone": true,
+      "engineCwds": [
+        "<repo>/.muse/worktrees/wt-e",
+        "<repo>/.muse/worktrees/wt-a"
+      ]
+    }
+  },
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<a2bcfb65-86b6-5bae-8317-bfd17adeec4e>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "fixture": {
+    "sids": {
+      "E": "01a13484-fb0c-7281-87ef-effcbef00b38",
+      "A": "01a13485-072b-7150-a492-7106782e56dc"
+    },
+    "sessionWorkspaces": [
+      "<repo>/.muse/worktrees/wt-e",
+      "<repo>/.muse/worktrees/wt-a"
+    ]
+  },
+  "verdicts": {
+    "M2-04.setupSurfaceInWorktree": true,
+    "M2-04.setupRunsInWorktree": true,
+    "M2-04.failureCarriesExitCode": true,
+    "M2-04.retryAfterFailure": true,
+    "M2-04.cancelSimpleCommand": true,
+    "M2-04.readinessDetects": true,
+    "M2-04.refusesMainCheckout": true,
+    "M2-04.refusesOverlongCommand": true,
+    "M2-04.commandKeptPerWorkspace": true,
+    "M2-06.inspectListsAll": true,
+    "M2-06.realStatusAndAge": true,
+    "M2-06.attachedShown": true,
+    "M2-06.dirtyRemovalRefused": true,
+    "M2-06.outsideTargetsRefused": true,
+    "M2-06.cleanRemovedFromPanel": true,
+    "M2-06.cleanUpRemovesOnlyEligible": true,
+    "M2-06.cleanUpSparesAttachedViaSymlinkSpelling": true,
+    "M2-06.retentionPersistsPerRepository": true
+  },
+  "findings": {
+    "setupEnvironmentPassesAppVariables": true,
+    "compoundCancelLeavesChildRunning": true,
+    "compoundCancel": {
+      "command": "sleep 27; echo late > setup-late.txt",
+      "status": "Setup cancelled in 27.0s",
+      "uiMs": 27166,
+      "cancelToOutcomeMs": 25659,
+      "during": {
+        "sleepAlive2sAfterCancel": 1,
+        "uiStillRunning": true
+      },
+      "sleepLeft": 0,
+      "tailRanAfterCancel": false
+    },
+    "forceRemoveWithoutConfirmation": true,
+    "removeActiveConversationWorktree": true
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "defects": [
+    {
+      "ticket": "M2-06",
+      "severity": "data loss",
+      "what": "Settings > Worktrees: the per-row \"Force remove\" of a dirty worktree removes it with its uncommitted files in one click, with no confirmation box (no plugin:dialog call recorded). The native refusal (\"worktree has uncommitted changes; inspect it and confirm the forced removal\") only applies when force is false, and the button always sends force: true for a dirty row.",
+      "where": "src/components/WorktreeTools.tsx: onClick={() => void removeWorktree(inspection.path, !inspection.clean)}; src-tauri/src/git.rs remove_worktree.",
+      "platform": "shared code, not specific to macOS"
+    },
+    {
+      "ticket": "M2-06",
+      "severity": "work removed from under a conversation (clean checkout: no uncommitted loss here)",
+      "what": "The per-row \"Remove\" removes a clean worktree that the panel itself labels \"attached to a conversation\", including the active conversation's own worktree, while its engine still runs there (lsof cwd). Only the bulk Clean up skips attached worktrees; the native command does not check attachment.",
+      "where": "src/components/WorktreeTools.tsx removeWorktree (no attachedWorktree check, no confirmation); git_worktree_remove in src-tauri/src/main.rs.",
+      "platform": "shared code, not specific to macOS"
+    },
+    {
+      "ticket": "M2-04",
+      "severity": "cancellation not effective",
+      "what": "Cancel setup kills only the `sh` process: a command with more than one step (here `sleep 27; echo …`, as `npm install && …` would be) keeps its running child, the UI stays on \"Running setup…\" and reports \"cancelled\" only when that child ends (the output pipes stay open). The same kill is used for the ten-minute timeout.",
+      "where": "src-tauri/src/git.rs run_worktree_setup, #[cfg(not(target_os = \"windows\"))] branch: Command::new(\"sh\") without a process group, child.kill() on cancel and timeout, then reader.join() on the inherited pipes.",
+      "platform": "the non-Windows code path (macOS and Linux)"
+    },
+    {
+      "ticket": "M2-04",
+      "severity": "low",
+      "what": "The setup command inherits the app's whole environment (a variable planted in the app's environment is visible to it); the roadmap's \"purges the inherited environment\" does not match the code (no env_clear).",
+      "where": "src-tauri/src/git.rs run_worktree_setup",
+      "platform": "shared code"
+    }
+  ],
+  "proposedMacosState": {
+    "M2-04": "◐ (verdicts pass; cancellation of a multi-step command is not effective on the non-Windows path)",
+    "M2-06": "◐ (verdicts pass; the per-row buttons remove dirty or attached worktrees without the refusal the ticket requires)"
+  },
+  "notProved": [
+    "M2-06 persistent cleanup intent resumed after an interruption: muse-desktop.worktree-cleanup.v1 is loaded and saved by useMuseSessions but nothing writes an intent and no Retry cleanup action exists at 08b291d, so there is nothing to resume."
+  ],
+  "limits": [
+    "The ten-minute kill (timedOut) is not waited for; it is covered by the Rust tests only.",
+    "Ages are set with utimes on the worktree folder, the value the inspection reads.",
+    "Engine session store and Keychain shared with the user (ADR 0003 amendment)."
+  ],
+  "passed": true
+}
