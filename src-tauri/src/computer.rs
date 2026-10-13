@@ -338,11 +338,15 @@ fn mcp_server_for(relay: &Path, grant: &str) -> Option<Value> {
     if grant != "active" {
         return None;
     }
+    let mut args = vec![RELAY_ARG.to_string()];
+    // A test instance names its folder: the relay must not fall back to the
+    // user's endpoint and level (ADR 0003).
+    args.extend(crate::test_mode::relay_args());
     Some(json!({
         "name": "computer-use",
         "transport": "stdio",
         "command": relay.display().to_string(),
-        "args": [RELAY_ARG],
+        "args": args,
         "mode": "optional",
     }))
 }

@@ -35,6 +35,7 @@ import { join, resolve } from "node:path";
 import { INSTALL_IPC_TRACE, argValue, redactor, sleep, waitFor } from "../cdp-harness.mjs";
 import { launch, processTree } from "./test-instance.mjs";
 
+const BUILD = argValue("--build-commit", "08b291d");
 const EXE = resolve(argValue("--exe", "src-tauri/target/debug/muse-desktop"));
 const PORT = Number(argValue("--port", "9454"));
 const ID = Date.now().toString(36);
@@ -99,8 +100,8 @@ const record = {
   schema: "muse-desktop.m2-04-06-setup-cleanup.macos.v1",
   tickets: ["M2-04", "M2-06"],
   date: new Date().toISOString().slice(0, 10),
-  commit: "08b291d",
-  platform: `macOS ${execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim()} (${execFileSync("sw_vers", ["-buildVersion"], { encoding: "utf8" }).trim()}), ${process.arch}, Apple Silicon, APFS; debug build 08b291d with embedded frontend, WKWebView through the test bridge`,
+  commit: BUILD,
+  platform: `macOS ${execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim()} (${execFileSync("sw_vers", ["-buildVersion"], { encoding: "utf8" }).trim()}), ${process.arch}, Apple Silicon, APFS; debug build ${BUILD} with embedded frontend, WKWebView through the test bridge`,
   engine: null,
   git: execFileSync("git", ["--version"], { encoding: "utf8" }).trim(),
   liveTurns: 0,
@@ -231,12 +232,24 @@ try {
   // Probes of the per-row buttons (sandbox data only).
   await app.ev(page("button('Inspect all', tools()).click(); await wait(2500); return true;"));
   m6.rowsBeforeProbes = await app.ev(page("return rows();"));
-  m6.probeForceRemoveDirty = await app.ev(page(`const li = [...document.querySelectorAll('.worktree-inspections li')].find((x) => x.querySelector('code')?.innerText.endsWith('/wt-b')); const b = li?.querySelector('button'); const label = b?.innerText; b?.click(); await wait(2500); return { label };`));
-  m6.probeForceRemoveDirty.dialogCalls = await app.ev("window.__baselineIpc.calls.filter((c) => c.cmd.startsWith('plugin:dialog')).map((c) => c.cmd)");
+  // Force remove on the dirty row: a confirmation box first (answered Cancel,
+  // then OK through the IPC trace, as the user's click would).
+  const clickRow = (suffix) => app.ev(page(`const li = [...document.querySelectorAll('.worktree-inspections li')].find((x) => x.querySelector('code')?.innerText.endsWith(${JSON.stringify(suffix)})); const b = li?.querySelector('button'); const label = b?.innerText; const disabled = Boolean(b?.disabled); const title = b?.title || null; b?.click(); await wait(2500); return { label, disabled, title, rowText: li?.querySelector('span')?.innerText };`));
+  const dialogs = () => app.ev("window.__baselineIpc.calls.filter((c) => c.cmd.startsWith('plugin:dialog')).map((c) => ({ cmd: c.cmd, message: c.args?.message ?? null, answered: Boolean(c.answeredByHarness) }))");
+  const dialogsAtProbe = (await dialogs()).length;
+  await app.ev("(window.__baselineIpc.messageQueue.push('Cancel'), true)");
+  m6.probeForceRemoveDirty = await clickRow("/wt-b");
+  m6.probeForceRemoveDirty.dialogCalls = (await dialogs()).slice(dialogsAtProbe);
   m6.probeForceRemoveDirty.worktreeGone = !existsSync(WT("wt-b"));
   m6.probeForceRemoveDirty.uncommittedFileLost = !existsSync(join(WT("wt-b"), "uncommitted.txt"));
-  m6.probeRemoveActive = await app.ev(page(`const li = [...document.querySelectorAll('.worktree-inspections li')].find((x) => x.querySelector('code')?.innerText.endsWith('/wt-a')); const text = li?.querySelector('span')?.innerText; const b = li?.querySelector('button'); const label = b?.innerText; b?.click(); await wait(2500); return { rowText: text, label };`));
-  m6.probeRemoveActive.dialogCalls = await app.ev("window.__baselineIpc.calls.filter((c) => c.cmd.startsWith('plugin:dialog')).map((c) => c.cmd)");
+  const dialogsAtYes = (await dialogs()).length;
+  await app.ev("(window.__baselineIpc.messageQueue.push('Ok'), true)");
+  m6.probeForceRemoveConfirmed = await clickRow("/wt-b");
+  m6.probeForceRemoveConfirmed.dialogCalls = (await dialogs()).slice(dialogsAtYes);
+  m6.probeForceRemoveConfirmed.worktreeGone = !existsSync(WT("wt-b"));
+  const dialogsAtActive = (await dialogs()).length;
+  m6.probeRemoveActive = await clickRow("/wt-a");
+  m6.probeRemoveActive.dialogCalls = (await dialogs()).slice(dialogsAtActive).map((d) => d.cmd);
   m6.probeRemoveActive.worktreeGone = !existsSync(A);
   m6.probeRemoveActive.engineCwds = processTree(inst.pid).filter((p) => /muse-bin/.test(p.command)).map((p) => { try { return execFileSync("lsof", ["-a", "-p", String(p.pid), "-d", "cwd", "-Fn"], { encoding: "utf8" }).split("\n").find((l) => l.startsWith("n"))?.slice(1); } catch { return null; } });
 
@@ -260,6 +273,10 @@ try {
     "M2-06.cleanUpRemovesOnlyEligible": !m6.afterCleanUp.D && m6.afterCleanUp.B && m6.afterCleanUp.A,
     "M2-06.cleanUpSparesAttachedViaSymlinkSpelling": m6.afterCleanUp.E,
     "M2-06.retentionPersistsPerRepository": m6.retentionAfterReload === "7" && Object.values(m6.retentionStored).includes(7),
+    "M2-06.forceRemoveAsksAndCancelKeeps": m6.probeForceRemoveDirty.label === "Force remove" && m6.probeForceRemoveDirty.dialogCalls.length === 1
+      && /uncommitted changes/.test(m6.probeForceRemoveDirty.dialogCalls[0]?.message ?? "") && !m6.probeForceRemoveDirty.worktreeGone && !m6.probeForceRemoveDirty.uncommittedFileLost,
+    "M2-06.forceRemoveOnlyAfterYes": m6.probeForceRemoveConfirmed.dialogCalls.length === 1 && m6.probeForceRemoveConfirmed.worktreeGone,
+    "M2-06.attachedRowNotRemovable": m6.probeRemoveActive.disabled && /attached to a conversation/.test(m6.probeRemoveActive.rowText ?? "") && !m6.probeRemoveActive.worktreeGone && m6.probeRemoveActive.dialogCalls.length === 0,
   };
   record.findings = {
     setupEnvironmentPassesAppVariables: m4.environment.planted,

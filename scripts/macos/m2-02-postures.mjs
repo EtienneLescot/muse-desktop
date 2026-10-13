@@ -40,6 +40,7 @@ import { join, resolve } from "node:path";
 import { INSTALL_IPC_TRACE, argValue, redactor, sleep, waitFor } from "../cdp-harness.mjs";
 import { launch, processTree } from "./test-instance.mjs";
 
+const BUILD = argValue("--build-commit", "08b291d");
 const EXE = resolve(argValue("--exe", "src-tauri/target/debug/muse-desktop"));
 const PORT = Number(argValue("--port", "9452"));
 const ID = Date.now().toString(36);
@@ -199,8 +200,8 @@ const record = {
   schema: "muse-desktop.m2-02-postures.macos.v1",
   ticket: "M2-02",
   date: new Date().toISOString().slice(0, 10),
-  commit: "08b291d",
-  platform: `macOS ${execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim()} (${execFileSync("sw_vers", ["-buildVersion"], { encoding: "utf8" }).trim()}), ${process.arch}, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge`,
+  commit: BUILD,
+  platform: `macOS ${execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim()} (${execFileSync("sw_vers", ["-buildVersion"], { encoding: "utf8" }).trim()}), ${process.arch}, Apple Silicon; debug build ${BUILD} with embedded frontend, WKWebView through the test bridge`,
   engine: null,
   liveTurns: 0,
   harness: `scripts/macos/m2-02-postures.mjs on scripts/macos/test-instance.mjs, bridge port ${PORT}`,

@@ -153,6 +153,35 @@ pub fn browser_args() -> Option<String> {
     ))
 }
 
+/// The relay's own argument naming the test folder. The engine starts the
+/// computer-use relay (`computer::RELAY_ARG`) with an environment of its own:
+/// measured on macOS 1.4.2 on 13/10/2026, the relay did not see
+/// `MUSE_DESKTOP_TEST_DATA_DIR` and fell back to the user's socket and level.
+/// The MCP entry therefore carries the folder in its argv.
+pub const RELAY_DIR_ARG: &str = "--test-data-dir";
+
+/// The arguments a test instance adds to its relay's MCP entry; none outside
+/// test mode.
+pub fn relay_args() -> Vec<String> {
+    data_dir()
+        .map(|dir| vec![RELAY_DIR_ARG.to_string(), dir.display().to_string()])
+        .unwrap_or_default()
+}
+
+/// Called first in a relay process: a test folder named in its argv becomes
+/// its test mode, so `data_dir()` (endpoint, level ceiling) answers as in the
+/// app that wrote the entry. A build that cannot enter test mode ignores it.
+pub fn adopt_relay_args(args: &[String]) {
+    #[cfg(all(debug_assertions, any(windows, target_os = "macos")))]
+    if let Some(index) = args.iter().position(|arg| arg == RELAY_DIR_ARG) {
+        if let Some(dir) = args.get(index + 1).filter(|dir| !dir.is_empty()) {
+            std::env::set_var(SWITCH, dir);
+        }
+    }
+    #[cfg(not(all(debug_assertions, any(windows, target_os = "macos"))))]
+    let _ = args;
+}
+
 /// The argv of every local engine. Fails closed: a test instance never starts a
 /// real local engine; a configured ssh:// target goes over the system ssh.
 pub fn sidecar_argv() -> Result<Vec<String>, String> {
