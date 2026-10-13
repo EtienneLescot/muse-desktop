@@ -44,6 +44,8 @@ export async function newProjectConversation(app, folder) {
 /** Types `text` and presses Enter, as a user would; returns the new session id. */
 export async function sendFirstMessage(app, text) {
   await app.send("Input.insertText", { text });
+  // React takes the text on its input event: Enter before that sends nothing.
+  await waitFor(() => app.ev(`(() => { const b = document.querySelector('button.welcome-send'); return document.activeElement?.value === ${JSON.stringify(text)} && b && !b.disabled; })()`), 10_000, 100);
   await app.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r" });
   await app.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter" });
   return waitFor(async () => {

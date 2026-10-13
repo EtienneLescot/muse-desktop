@@ -637,7 +637,7 @@ fn key_event(app: &AppHandle, label: &str, params: &Value) -> Result<Value, Stri
     let flags = modifier_flags(params["modifiers"].as_u64().unwrap_or(0));
     // The text CDP would type wins over the bare key (Shift+a gives "A").
     let characters = if text.is_empty() || flags & (COMMAND | CONTROL) != 0 { base.clone() } else { text };
-    on_main(app, label, move |web_view, window| unsafe {
+    on_main_async(app, label, move |web_view, window, tx| unsafe {
         focus(web_view, window);
         let number: isize = msg_send![window, windowNumber];
         let characters = NSString::from_str(&characters);
@@ -658,21 +658,29 @@ fn key_event(app: &AppHandle, label: &str, params: &Value) -> Result<Value, Stri
             keyCode: key_code
         ];
         if event.is_null() {
-            return Err("AppKit refused the key event".to_string());
+            let _ = tx.send(Err("AppKit refused the key event".to_string()));
+            return;
         }
-        // A Command shortcut goes through the menu first, as typed.
+        // A Command shortcut goes to the main menu first, then to the view's
+        // key equivalents, as AppKit does with a typed one. The call answers
+        // first: a menu item such as Quit may never return to it.
         if down && flags & COMMAND != 0 {
-            let handled: bool = msg_send![web_view, performKeyEquivalent: event];
-            if handled {
-                return Ok(json!({}));
+            let _ = tx.send(Ok(json!({})));
+            let application: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let menu: *mut AnyObject = msg_send![application, mainMenu];
+            let handled: bool = !menu.is_null() && msg_send![menu, performKeyEquivalent: event];
+            let handled = handled || msg_send![web_view, performKeyEquivalent: event];
+            if !handled {
+                let _: () = msg_send![web_view, keyDown: event];
             }
+            return;
         }
         if down {
             let _: () = msg_send![web_view, keyDown: event];
         } else {
             let _: () = msg_send![web_view, keyUp: event];
         }
-        Ok(json!({}))
+        let _ = tx.send(Ok(json!({})));
     })
 }
 
