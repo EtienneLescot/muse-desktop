@@ -2,8 +2,9 @@ name: Release
 
 # A version tag (v0.1.0-beta.2) builds the Windows installer and the macOS DMG,
 # tests them, and publishes both in one GitHub release. A pull request that
-# changes this workflow runs the same builds as a dry run: nothing is
-# published, the artifacts are kept for a week.
+# changes this workflow, or a manual run (workflow_dispatch, on any branch),
+# runs the same builds as a dry run: nothing is published, the artifacts are
+# kept for a week.
 #
 # macOS signing and notarization need every one of these secrets; with none of
 # them the DMG is ad-hoc signed (dry runs, forks), with only some the job fails:
@@ -17,6 +18,7 @@ on:
     tags: ["v*"]
   pull_request:
     paths: [".github/workflows/release.yml"]
+  workflow_dispatch:
 
 concurrency:
   group: muse-desktop-release-${{ github.ref }}
