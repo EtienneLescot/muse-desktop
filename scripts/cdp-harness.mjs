@@ -23,12 +23,12 @@ export function argValue(name, fallback) {
 }
 
 /** Open the app page; `ev` awaits promises; console errors are collected. */
-export async function openPage() {
-  const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
+export async function openPage(port = PORT) {
+  const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   const page = list.find((t) => t.type === "page" && typeof t.webSocketDebuggerUrl === "string"
     // WebView2 serves http://tauri.localhost, WKWebView tauri://localhost.
     && /tauri\.localhost|^tauri:\/\/localhost/.test(t.url));
-  if (!page) throw new Error(`no app page target on CDP ${PORT}`);
+  if (!page) throw new Error(`no app page target on CDP ${port}`);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   let nextId = 1;
   const pending = new Map();
