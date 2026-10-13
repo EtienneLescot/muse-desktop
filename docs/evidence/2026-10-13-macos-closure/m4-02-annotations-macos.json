@@ -1,0 +1,112 @@
+{
+  "schema": "muse-desktop.m4-02-annotations-macos.v1",
+  "ticket": "M4-02",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with embedded frontend, WKWebView through the test bridge",
+  "harness": "scripts/macos/m4-02-annotations.mjs on scripts/macos/test-instance.mjs",
+  "liveTurns": 2,
+  "method": "One isolated test instance (fresh data folder, its own WKWebView store, pinned engine with auto-update off). A conversation is opened with one live turn; the Browser panel shows local pages served on 127.0.0.1. Every action goes through the panel with the bridge's trusted AppKit events: the address and the comments are typed (Input.insertText) after a real click, Anchor, To prompt and × are clicked, the composer is sent with Enter. The store is read from localStorage, the list from the DOM, the sent text from the stored transcript and the reply from the engine.",
+  "limits": [
+    "The capture surface the 2026-09-15 plan describes (getDisplayMedia, region crop, zoom) is no longer in the panel; Windows closed M4-02 on the anchored comment, its list, the composer insertion and the removal, which are the criteria replayed here.",
+    "An anchored comment carries the page URL, not an element or a region: the panel passes an empty selection (App.tsx, addBrowserAnnotation(url, \"\", comment))."
+  ],
+  "checks": {
+    "anchor": {
+      "before": {
+        "listed": [],
+        "noteFieldShown": true
+      },
+      "onA": [
+        "M4-02 button contrast mv6g1twd",
+        "M4-02 header too tall mv6g1twd"
+      ],
+      "onB": [
+        "M4-02 page B note mv6g1twd"
+      ],
+      "backOnA": [
+        "M4-02 button contrast mv6g1twd",
+        "M4-02 header too tall mv6g1twd"
+      ],
+      "stored": [
+        {
+          "url": "http://127.0.0.1:9474/a.html",
+          "comment": "M4-02 header too tall mv6g1twd",
+          "selection": "",
+          "hasId": true,
+          "createdAt": true
+        },
+        {
+          "url": "http://127.0.0.1:9474/a.html",
+          "comment": "M4-02 button contrast mv6g1twd",
+          "selection": "",
+          "hasId": true,
+          "createdAt": true
+        },
+        {
+          "url": "http://127.0.0.1:9474/b.html",
+          "comment": "M4-02 page B note mv6g1twd",
+          "selection": "",
+          "hasId": true,
+          "createdAt": true
+        }
+      ],
+      "frameHits": 3
+    },
+    "toPrompt": {
+      "composerBefore": "",
+      "composerAfter": "M4-02 header too tall mv6g1twd (http://127.0.0.1:9474/a.html)"
+    },
+    "remove": {
+      "afterRemove": {
+        "listed": [
+          "M4-02 header too tall mv6g1twd"
+        ],
+        "stored": [
+          "M4-02 header too tall mv6g1twd",
+          "M4-02 page B note mv6g1twd"
+        ]
+      },
+      "afterReload": {
+        "listed": [
+          "M4-02 header too tall mv6g1twd"
+        ],
+        "stored": [
+          "M4-02 header too tall mv6g1twd",
+          "M4-02 page B note mv6g1twd"
+        ],
+        "address": "http://127.0.0.1:9474/a.html"
+      }
+    },
+    "sent": {
+      "draft": "M4-02 header too tall mv6g1twd (http://127.0.0.1:9474/a.html)\n\nAbove is a note I anchored to a web page. Reply with only the page URL it is anchored to, nothing else.",
+      "storedUserMessage": "M4-02 header too tall mv6g1twd (http://127.0.0.1:9474/a.html)\n\nAbove is a note I anchored to a web page. Reply with only the page URL it is anchored to, nothing else.",
+      "reply": "http://127.0.0.1:9474/a.html"
+    }
+  },
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "isolation": {
+    "data": "<proof>/data-mv6g1twd",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<3259ff96-b794-5d53-acb8-26a669269ee7>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "verdicts": {
+    "1 anchored comments persisted with the page URL": true,
+    "1 the list shows only the page's own annotations": true,
+    "2 To prompt inserts the comment and its URL": true,
+    "3 × removes exactly that annotation": true,
+    "3 the others survive a reload": true,
+    "4 the anchor is sent and read back by the engine": true,
+    "clean stop": true
+  },
+  "passed": true
+}

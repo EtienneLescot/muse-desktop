@@ -1,0 +1,236 @@
+{
+  "schema": "muse-desktop.m4-01-browser-macos.v1",
+  "ticket": "M4-01",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with embedded frontend, WKWebView through the test bridge",
+  "harness": "scripts/macos/m4-01-browser.mjs on scripts/macos/test-instance.mjs",
+  "liveTurns": 1,
+  "method": "One isolated test instance (fresh data folder, its own WKWebView store, pinned engine with auto-update off). A conversation is opened with one live turn, then the Browser work panel is driven with the bridge's trusted AppKit mouse and keyboard events: addresses typed into the address bar and Enter, Back, Forward, New tab, the tab buttons, Reload and Open in a browser window clicked. The framed pages come from a local Node server on 127.0.0.1 that logs every request with its Cookie header; each page posts its own location, origin and cookie to the app page, which a listener records. The native browser window is read through its own bridge WebSocket (/json/list lists every window). Close native and a second conversation's surface are invoked through the app's IPC (the panel has no Close button); the refusals of the native boundary likewise.",
+  "limits": [
+    "The pages are local (127.0.0.1): a public site's framing refusal (X-Frame-Options, CSP frame-ancestors) and a real network error are not measured here, nor on Windows.",
+    "Downloads are no longer in the panel (removed on 23/09): not replayed.",
+    "The bridge has no Network domain: the absence of a cookie is read from the test server's request log and from document.cookie, not from WebKit's cookie store.",
+    "Other proof agents run test instances in parallel on this Mac, so the number of stores under ~/Library/WebKit/muse-desktop/WebsiteDataStore is not attributable: the check is that this run's own store is deleted and the default stores unchanged."
+  ],
+  "checks": {
+    "panelOpened": true,
+    "navigation": {
+      "panel": {
+        "iframeSrc": "http://127.0.0.1:9472/a.html",
+        "sandbox": "allow-scripts allow-same-origin allow-forms allow-popups",
+        "address": "http://127.0.0.1:9472/a.html",
+        "notice": null,
+        "tabs": [
+          {
+            "title": "http://127.0.0.1:9472/a.html",
+            "selected": true
+          }
+        ],
+        "back": false,
+        "forward": false
+      },
+      "frameReported": {
+        "origin": "http://127.0.0.1:9472",
+        "m401": true,
+        "page": "a",
+        "href": "http://127.0.0.1:9472/a.html",
+        "title": "M4-01 a",
+        "cookie": "",
+        "ls": null,
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+      },
+      "serverHits": 1
+    },
+    "history": {
+      "afterB": {
+        "src": "http://127.0.0.1:9472/b.html",
+        "back": true,
+        "frame": "http://127.0.0.1:9472/b.html"
+      },
+      "afterBack": {
+        "src": "http://127.0.0.1:9472/a.html",
+        "forward": true,
+        "frame": "http://127.0.0.1:9472/a.html",
+        "serverHits": 1
+      },
+      "afterForward": {
+        "src": "http://127.0.0.1:9472/b.html",
+        "frame": "http://127.0.0.1:9472/b.html"
+      }
+    },
+    "tabs": {
+      "newTabBlank": {
+        "src": null,
+        "back": false,
+        "count": 2
+      },
+      "secondTab": {
+        "src": "http://127.0.0.1:9472/c.html",
+        "back": false,
+        "frame": "http://127.0.0.1:9472/c.html",
+        "count": 2
+      },
+      "firstTabAgain": {
+        "src": "http://127.0.0.1:9472/b.html",
+        "back": true,
+        "frame": "http://127.0.0.1:9472/b.html"
+      },
+      "stored": [
+        {
+          "key": "muse-desktop.browser.tabs.v1.session.b5482b18",
+          "tabs": [
+            {
+              "url": "http://127.0.0.1:9472/b.html",
+              "history": [
+                "http://127.0.0.1:9472/a.html",
+                "http://127.0.0.1:9472/b.html"
+              ],
+              "historyIndex": 1
+            },
+            {
+              "url": "http://127.0.0.1:9472/c.html",
+              "history": [
+                "http://127.0.0.1:9472/c.html"
+              ],
+              "historyIndex": 0
+            }
+          ]
+        }
+      ],
+      "storedUnderConversationKey": true,
+      "afterReload": {
+        "count": 2,
+        "titles": [
+          "http://127.0.0.1:9472/b.html",
+          "http://127.0.0.1:9472/c.html"
+        ]
+      }
+    },
+    "protocols": {
+      "panel": {
+        "file:///etc/hosts": {
+          "notice": "Enter an http or https address, or a local server such as localhost:5173.",
+          "iframeUnchanged": true
+        },
+        "javascript:alert(1)": {
+          "notice": "Enter an http or https address, or a local server such as localhost:5173.",
+          "iframeUnchanged": true
+        },
+        "tauri://localhost/index.html": {
+          "notice": "Enter an http or https address, or a local server such as localhost:5173.",
+          "iframeUnchanged": true
+        }
+      },
+      "nativeBoundary": {
+        "file:///etc/hosts": "only http and https URLs can open in the native browser",
+        "http://user:pw@127.0.0.1:9472/a.html": "browser URLs with embedded credentials are not allowed",
+        "javascript:alert(1)": "browser URL is not valid"
+      },
+      "windowsAfter": 1
+    },
+    "native": {
+      "opened": {
+        "label": "muse-browser-<hash>",
+        "title": "Muse Browser · 01a13476",
+        "url": "http://127.0.0.1:9472/n.html"
+      },
+      "firstLoad": {
+        "href": "http://127.0.0.1:9472/n.html",
+        "title": "M4-01 n",
+        "cookie": "",
+        "ls": null,
+        "webkit": true
+      },
+      "written": {
+        "cookie": "native401=kept",
+        "ls": "native"
+      },
+      "serverSawFirst": [
+        {
+          "cookie": null
+        },
+        {
+          "cookie": null
+        }
+      ],
+      "appIframeAfterNativeWrite": {
+        "frameCookie": "",
+        "serverCookie": [
+          {
+            "cookie": null
+          }
+        ]
+      },
+      "close1": {
+        "ok": true,
+        "value": true
+      },
+      "goneAfterClose": true,
+      "close2": {
+        "ok": true,
+        "value": false
+      },
+      "reopened": {
+        "sameLabel": true,
+        "url": "http://127.0.0.1:9472/n.html"
+      },
+      "afterReopen": {
+        "href": "http://127.0.0.1:9472/n.html",
+        "cookie": "",
+        "ls": null
+      },
+      "serverSawAfterReopen": [
+        {
+          "cookie": null
+        }
+      ],
+      "otherConversation": {
+        "open": {
+          "ok": true,
+          "value": "opened"
+        },
+        "onlyOneWindowAndNotTheFirst": true,
+        "close": {
+          "ok": true,
+          "value": true
+        },
+        "noneLeft": true
+      }
+    }
+  },
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "isolation": {
+    "data": "<proof>/data-mv6fzinz",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<87373ecf-4e63-5977-94f1-2e33d1ae2b5c>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "processes": [
+    "muse-desktop",
+    "muse-bin serve --sandbox-network restricted --trust-workspace"
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "verdicts": {
+    "1 navigation renders in the sandboxed iframe": true,
+    "2 history Back and Forward in the tab": true,
+    "3 second tab with its own history": true,
+    "3 tabs persisted under the conversation key and restored": true,
+    "4 unplanned protocols refused": true,
+    "5 Open native: a WKWebView muse-browser window on the page": true,
+    "5 native store private and distinct from the app's": true,
+    "5 native store non-persistent across Close native and reopen": true,
+    "5 Close native idempotent": true,
+    "5 one native window per conversation": true,
+    "isolation: test store deleted, default stores unchanged": true,
+    "clean stop": true
+  },
+  "passed": true
+}
