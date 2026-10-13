@@ -1,0 +1,256 @@
+{
+  "schema": "muse-desktop.m0-09-data-no-silent-failure.v1",
+  "ticket": "M0-09",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m0-09-data-no-silent-failure.mjs on scripts/macos/test-instance.mjs (launch), bridge port 9415",
+  "isolation": {
+    "data": "<proof>/m0-09/MV6H9UVY/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<03f77683-8aaf-5269-9293-57f93405d2b3>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": "One isolated instance on the pinned engine; a project conversation with one live turn. Buttons clicked with trusted AppKit mouse events, text typed with Input.insertText, reloads with Page.reload. The snapshot file is fed to the app's own hidden file inputs through a DataTransfer and a change event (the native open panel cannot be driven); everything after that is the app's code. ~/Downloads is only listed (names and times), never written by the harness.",
+  "scenarios": {
+    "export": {
+      "clicked": true,
+      "status": [
+        "Current posture: Ask for approval",
+        "Current isolation: Workspace only",
+        "Recovery snapshot downloaded."
+      ],
+      "anchor": [
+        {
+          "download": "muse-desktop-recovery-2026-10-13.json",
+          "href": "blob:tauri://localhost/2b99a4db-3458-424"
+        }
+      ],
+      "snapshotBuiltByPage": {
+        "bytes": 8693,
+        "format": "muse-desktop-storage",
+        "version": 1,
+        "checksum": "fnv1a-73ce520f",
+        "entries": 30
+      },
+      "newFilesInDownloads": [
+        {
+          "name": "muse-desktop-recovery-2026-10-13.json",
+          "mtimeMs": 1791883746123.5388
+        }
+      ],
+      "movedToProofFolder": [
+        "muse-desktop-recovery-2026-10-13.json"
+      ],
+      "newFilesInDataFolder": [],
+      "pageStillTheApp": true,
+      "appOutputAboutDownload": []
+    },
+    "roundTrip": {
+      "damaged": true,
+      "fed": true,
+      "preview": {
+        "title": "Choose data to restore",
+        "count": "30 entries",
+        "rows": 30,
+        "projectsRow": " muse-desktop.projects.v1 Durable data · Replace existing ",
+        "checkedByDefault": 0
+      },
+      "tickedProjects": true,
+      "selected": [
+        "muse-desktop.projects.v1"
+      ],
+      "restoreClicked": true,
+      "restored": true,
+      "projectNameAfter": [
+        "project"
+      ]
+    },
+    "checksum": {
+      "fed": true,
+      "status": [
+        "Current posture: Ask for approval",
+        "Current isolation: Workspace only",
+        "Recovery snapshot checksum mismatch; the file may be damaged."
+      ],
+      "previewShown": false,
+      "unchanged": true
+    },
+    "external": {
+      "panel": true,
+      "fed": true,
+      "stored": [
+        {
+          "id": "m09-cli-MV6H9UVY-1",
+          "title": "CLI session one"
+        },
+        {
+          "id": "m09-cli-MV6H9UVY-2",
+          "title": "CLI session two"
+        }
+      ],
+      "rows": [
+        "CLI session one",
+        "CLI session two"
+      ],
+      "notes": [
+        "2 session(s) found in config.json"
+      ],
+      "typedObservation": {
+        "valueIdentical": false,
+        "firstDifference": {
+          "sent": "on two\"}]}",
+          "got": "on two”}]}"
+        },
+        "notes": [
+          "2 session id(s) scanned in ~/.muse/config.json (non-JSON format)"
+        ]
+      }
+    },
+    "legacy": {
+      "currentBefore": null,
+      "clicked": true,
+      "status": [
+        "Current posture: Ask for approval",
+        "Current isolation: Workspace only",
+        "Migrated 1 legacy entry. Reloading Muse…"
+      ],
+      "migrated": true,
+      "legacyKept": true
+    },
+    "corruption": {
+      "keys": [
+        {
+          "key": "muse-desktop.projects.v1",
+          "originalBytes": 195,
+          "appAlive": true,
+          "outcome": "corrupted value kept (never overwritten)",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.sessions.v1",
+          "originalBytes": 315,
+          "appAlive": true,
+          "outcome": "replaced by valid JSON (288 B)",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.schedule-runs.v1",
+          "originalBytes": 2,
+          "appAlive": true,
+          "outcome": "reset to []",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.review-queue.v1",
+          "originalBytes": 2,
+          "appAlive": true,
+          "outcome": "reset to []",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.queued-turns.v1",
+          "originalBytes": 2,
+          "appAlive": true,
+          "outcome": "replaced by valid JSON (2 B)",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.connectors.v1",
+          "originalBytes": 2,
+          "appAlive": true,
+          "outcome": "reset to []",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.memory.v1",
+          "originalBytes": 2,
+          "appAlive": true,
+          "outcome": "reset to []",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.thread-projects.v1",
+          "originalBytes": 58,
+          "appAlive": true,
+          "outcome": "replaced by valid JSON (2 B)",
+          "conversationsShown": 1
+        },
+        {
+          "key": "muse-desktop.settings.v1",
+          "originalBytes": 67,
+          "appAlive": true,
+          "outcome": "replaced by valid JSON (67 B)",
+          "conversationsShown": 1
+        }
+      ],
+      "settingsWarning": {
+        "title": "Local data needs attention",
+        "items": [
+          "Corrupted data (muse-desktop.memory.v1)",
+          "Corrupted data (muse-desktop.projects.v1)"
+        ]
+      },
+      "restoredAfterwards": true
+    },
+    "quota": {
+      "filled": {
+        "keys": 56,
+        "error": "QuotaExceededError"
+      },
+      "draftWarning": "This draft could not be saved to local storage and will be lost if the app closes.",
+      "draftStored": false,
+      "settingsWarning": {
+        "title": "Local data needs attention",
+        "items": [
+          "Storage quota reached (muse-desktop.sessions.v1)",
+          "Storage quota reached (muse-desktop.draft.01a13497-0872-76f0-ad07-ce2cc565d0f9)"
+        ]
+      }
+    }
+  },
+  "checks": {
+    "exportStatusClaimsDownload": true,
+    "exportFileReachedDisk": true,
+    "exportSnapshotBuilt": true,
+    "recoveryRoundTrip": true,
+    "checksumRefused": true,
+    "externalImport": true,
+    "legacyMigration": true,
+    "corruptionNoCrash": true,
+    "projectsNeverOverwritten": true,
+    "corruptionReported": true,
+    "quotaVariantSaysSo": true,
+    "nothingLeft": true
+  },
+  "verdicts": {
+    "rescueExportReachesDisk": true,
+    "exportNeverClaimsWhatDidNotHappen": true,
+    "recoveryRoundTripWithPreview": true,
+    "checksumVerifiedBeforeRestore": true,
+    "externalFormatImport": true,
+    "legacyAliasMigration": true,
+    "corruptionNoCrashNoSilentErasure": true,
+    "quotaVariant": true,
+    "nothingLeft": true
+  },
+  "limits": [
+    "The export lands in ~/Downloads (WebKit's download destination for the app); the harness moves the new file to the proof folder right after, so the user's Downloads is left as found.",
+    "The file inputs are fed by DataTransfer, not through the native open panel (NSOpenPanel through wry's runOpenPanel): picking the file by hand stays unproven on macOS.",
+    "The engine's session store (~/.local/share/muse/sessions) is the user's, shared by the test instance (ADR 0003).",
+    "Debug build in test mode, not the release build."
+  ],
+  "start": "ready",
+  "firstTurn": true,
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "passed": true
+}
