@@ -1,0 +1,270 @@
+{
+  "schema": "muse-desktop.macos-m3-05-skill-invoke.v1",
+  "ticket": "M3-05",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 2,
+  "harness": "scripts/macos/m3-05-skill-invoke.mjs on scripts/macos/test-instance.mjs",
+  "criteria": "docs/plans/2026-09-15-agent-implementation-plan.md \u00a7M3-05 (a real invocation with a resource, a skill deleted between suggestion and sending, a refused permission; no double insertion on retry) and docs/ROADMAP.md \u00a7M3-05 (skill/list catalogue per session, /selector -> MSP skill part, skills_read_resources re-reading resources just before sending, <skill-resource> context, a resource error creating a system entry with no partial send)",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<f6a3e53e-661e-567b-8c75-198c7e958c75>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment) on the pinned engine; the proof project is both the default folder (Scan workspace) and the conversation's project.",
+    "The conversation is started with its first message refused by the harness (no turn), that unsent setup message discarded; every skill is then typed in the composer (CDP insertText) and sent with a real Enter.",
+    "send_input calls are read from the IPC trace (parts or text as sent). A send refused by the harness is the 'failed send' of the retry scenario: the outbox keeps it, the Unsent row's Retry resends it.",
+    "Each code (HOST-\u2026, CTX-\u2026) exists only in one file of the project, so a reply quoting it shows where the model's context came from.",
+    "Interpretation of 'a refused permission': the resource reader refuses a resource that resolves outside its skill directory (a symlink); the send never leaves."
+  ],
+  "phases": {
+    "setup": {
+      "scan": {
+        "summary": "4 discovered \u00b7 <proof>/project",
+        "errors": []
+      },
+      "conversation": {
+        "approvalMode": "promptUnmatched",
+        "firstMessageRefused": [
+          {
+            "blockedByHarness": true
+          }
+        ],
+        "setupMessage": {
+          "discarded": true,
+          "left": 0
+        }
+      },
+      "skillsPanel": [
+        "/g6-host",
+        "/g6-host (project)",
+        "/g6-ctx (repo)",
+        "/g6-gone (repo)",
+        "/g6-link-res (repo)"
+      ]
+    },
+    "gone": {
+      "typed": {
+        "secondEnter": true
+      },
+      "sends": [],
+      "logAdded": [
+        {
+          "role": "system",
+          "text": "skill /g6-gone resources unavailable: gone.txt: resource is unavailable: No such file or directory (os error 2)",
+          "clientMessageId": null
+        },
+        {
+          "role": "system",
+          "text": "skill /g6-gone resources unavailable: gone.txt: resource is unavailable: No such file or directory (os error 2)",
+          "clientMessageId": null
+        }
+      ],
+      "ui": {
+        "banners": [
+          "skill /g6-gone resources unavailable"
+        ],
+        "pending": [],
+        "progress": null
+      }
+    },
+    "refused": {
+      "typed": {
+        "secondEnter": true
+      },
+      "sends": [],
+      "logAdded": [
+        {
+          "role": "system",
+          "text": "skill /g6-link-res resources unavailable: linked.txt: resource is outside the skill directory or not a regular file",
+          "clientMessageId": null
+        }
+      ],
+      "ui": {
+        "banners": [
+          "skill /g6-link-res resources unavailable"
+        ],
+        "pending": []
+      }
+    },
+    "host": {
+      "typed": {
+        "secondEnter": true
+      },
+      "sends": [
+        {
+          "blockedByHarness": false,
+          "ok": true,
+          "sessionId": "01a13486-17fb-7aa3-a9ce-6c22ed1e66f0",
+          "parts": [
+            {
+              "type": "skill",
+              "selector": "g6-host"
+            }
+          ],
+          "text": "/g6-host"
+        }
+      ],
+      "logAdded": [
+        {
+          "role": "user",
+          "text": "/g6-host",
+          "clientMessageId": "e99e2884-9411-44c0-b708-424d698fd512"
+        },
+        {
+          "role": "assistant",
+          "text": "",
+          "clientMessageId": null
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "clientMessageId": null
+        },
+        {
+          "role": "assistant",
+          "text": "HOST-56148F",
+          "clientMessageId": null
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "clientMessageId": null
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "clientMessageId": null
+        }
+      ],
+      "approvals": [],
+      "finished": true,
+      "ms": 6027
+    },
+    "retry": {
+      "typed": {
+        "secondEnter": true
+      },
+      "failedState": {
+        "pending": [
+          "Unsent message: /g6-ctx send_input failed: blocked by the test harness Retry Discard"
+        ],
+        "banners": [
+          "Your message could not be sent. \u2014 blocked by the test harness"
+        ],
+        "users": 2
+      },
+      "retryClicked": true,
+      "sends": [
+        {
+          "blockedByHarness": true,
+          "ok": false,
+          "sessionId": "01a13486-17fb-7aa3-a9ce-6c22ed1e66f0",
+          "parts": [
+            {
+              "type": "text",
+              "text": "[g6-ctx] Reply with exactly the code written in the resource context.txt below, and nothing else. Do not call any tool.\n\nResources (loaded from .muse/skills/g6-ctx/SKILL.md):\n<skill-resource path=\".muse/skills/g6-ctx/context.txt\">\nCODE: CTX-6B8A1A\n\n</skill-resource>"
+            }
+          ],
+          "text": "[g6-ctx] Reply with exactly the code written in the resource context.txt below, and nothing else. Do not call any tool.\n\nResources (loaded from .muse/skills/g6-ctx/SKILL.md):\n<skill-resource path=\".muse/skills/g6-ctx/context.txt\">\nCODE: CTX-6B8A1A\n\n</skill-resource>"
+        },
+        {
+          "blockedByHarness": false,
+          "ok": true,
+          "sessionId": "01a13486-17fb-7aa3-a9ce-6c22ed1e66f0",
+          "parts": [
+            {
+              "type": "text",
+              "text": "[g6-ctx] Reply with exactly the code written in the resource context.txt below, and nothing else. Do not call any tool.\n\nResources (loaded from .muse/skills/g6-ctx/SKILL.md):\n<skill-resource path=\".muse/skills/g6-ctx/context.txt\">\nCODE: CTX-6B8A1A\n\n</skill-resource>"
+            }
+          ],
+          "text": "[g6-ctx] Reply with exactly the code written in the resource context.txt below, and nothing else. Do not call any tool.\n\nResources (loaded from .muse/skills/g6-ctx/SKILL.md):\n<skill-resource path=\".muse/skills/g6-ctx/context.txt\">\nCODE: CTX-6B8A1A\n\n</skill-resource>"
+        }
+      ],
+      "logAdded": [
+        {
+          "role": "system",
+          "text": "[skill invoke] /g6-ctx",
+          "clientMessageId": null
+        },
+        {
+          "role": "user",
+          "text": "[g6-ctx] Reply with exactly the code written in the resource context.txt below, and nothing else. Do not call any tool.\n\nResources (loaded from .muse/skills/g6-ctx/SKILL.md):\n<skill-resource path=\".muse/skills/g6-ctx/context.txt\">\nCODE: CTX-6B8A1A\n\n</skill-resource>",
+          "clientMessageId": "b1d844e6-7f6a-4a57-8994-f978bf7deb31"
+        },
+        {
+          "role": "assistant",
+          "text": "",
+          "clientMessageId": null
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "clientMessageId": null
+        },
+        {
+          "role": "assistant",
+          "text": "CTX-6B8A1A",
+          "clientMessageId": null
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "clientMessageId": null
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "clientMessageId": null
+        }
+      ],
+      "approvals": [],
+      "finished": true,
+      "pendingAfter": []
+    }
+  },
+  "verdicts": {
+    "catalogues": true,
+    "deletedBetweenScanAndSend": true,
+    "refusedResourceNoSend": true,
+    "hostSkillExecutedByHost": true,
+    "resourceInContextAndReply": true,
+    "noDoubleInsertionOnRetry": true,
+    "cleanExit": true,
+    "userEngineConfigUntouched": true
+  },
+  "limits": [
+    "The host catalogue of 1.4.2 also reads the user's own skill roots (a ~/.claude/skills skill appears with source 'user'): read-only, nothing written there.",
+    "The failed send is produced by the harness refusing send_input in the page, not by a host failure; the outbox and Retry paths are the app's.",
+    "The engine's session store is shared with the user (ADR 0003): the proof conversation stays there."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true,
+  "observations": [
+    "The harness presses Enter a second time when the composer still holds the command after the first (typed.secondEnter, true in all four cases): a completion or a refused send leaves the text in place. In 'gone' the two Enters gave two identical system lines and still no send_input; one line in 'refused'."
+  ]
+}
