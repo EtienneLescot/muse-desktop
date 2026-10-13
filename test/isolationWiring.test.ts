@@ -7,7 +7,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { projectOfFolder, type Project } from "../src/lib/projects.ts";
+import { projectOfFolder, projectOfFolderResolved, type Project } from "../src/lib/projects.ts";
 
 const read = (relative: string): string =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -62,11 +62,24 @@ describe("project isolation wiring", () => {
     assert.equal(projectOfFolder(projects, "G:\\work\\other"), undefined);
     const hook = read("../src/hooks/useMuseSessions.ts");
     const restart = hook.slice(hook.indexOf("const restartHost = useCallback("), hook.indexOf("const projectPosture = useCallback("));
-    assert.match(restart, /requested \?\? hostSandboxConfigForProject\(sandbox, projectOfFolder\(projects, target\)\)/);
+    assert.match(restart, /requested \?\? hostSandboxConfigForProject\(\s*sandbox,\s*await projectOfFolderResolved\(projects, target,/);
+    assert.match(restart, /"inspect_workspace_root"/);
     assert.match(hook, /host = \{ workspace: ws, sandbox: sandboxConfig, projectId: project\?\.id \};/);
     const app = read("../src/App.tsx");
     const retry = app.slice(app.indexOf("onRetry={() => {"), app.indexOf("onPickWorkspace={setWorkspace}"));
     assert.match(retry, /const failed = errorHost;/);
     assert.match(retry, /startSessionInWorkspace\(\s*failed\.workspace,[\s\S]*failed\.projectId,\s*\)/);
+  });
+
+  it("finds a project's folder by its resolved path when no spelling matches (M2-02, macOS symlinks)", async () => {
+    // On macOS /var is a link to /private/var: Settings' restart named the
+    // resolved spelling, the project the other, and a Read only project
+    // restarted at the global posture.
+    const projects: Project[] = [{ id: "ro", name: "ro", createdAt: 1, workspace: "/var/folders/x/proj", settings: { sandbox: "read-only" } }];
+    const disk: Record<string, string> = { "/var/folders/x/proj": "/private/var/folders/x/proj", "/private/var/folders/x/proj": "/private/var/folders/x/proj" };
+    const canonical = async (path: string) => disk[path] ?? null;
+    assert.equal((await projectOfFolderResolved(projects, "/private/var/folders/x/proj", canonical))?.id, "ro");
+    assert.equal((await projectOfFolderResolved(projects, "/var/folders/x/proj", async () => null))?.id, "ro", "a spelling match needs no disk");
+    assert.equal(await projectOfFolderResolved(projects, "/private/var/folders/x/other", canonical), undefined);
   });
 });

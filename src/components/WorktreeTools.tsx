@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { confirmAction } from "../lib/env";
 import { pathKey } from "../lib/paths";
 import { insideWorktree, mainRootOf } from "../lib/worktrees";
 
@@ -168,6 +169,12 @@ export function WorktreeTools({ workspace }: { workspace: string | null }) {
 
   const removeWorktree = async (path: string, force: boolean): Promise<void> => {
     if (repoRoot === null) return;
+    // A forced removal deletes uncommitted work: only after an explicit yes.
+    if (force && !(await confirmAction(
+      `${path} has uncommitted changes. Force remove deletes them with the worktree. Remove it anyway?`,
+    ))) {
+      return;
+    }
     try {
       await invoke("git_worktree_remove", { workspace: repoRoot, path, force });
       setCleanupResult(`Removed ${path}`);
@@ -352,6 +359,10 @@ export function WorktreeTools({ workspace }: { workspace: string | null }) {
                 {!inspection.isMain && (
                   <button
                     type="button"
+                    // A conversation's engine runs in an attached worktree:
+                    // never removed from under it, as Clean up already spares it.
+                    disabled={attached}
+                    title={attached ? "Attached to a conversation: move or close it first" : undefined}
                     onClick={() => void removeWorktree(inspection.path, !inspection.clean)}
                   >
                     {inspection.clean ? "Remove" : "Force remove"}

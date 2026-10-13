@@ -193,7 +193,7 @@ import {
   createProject as createProjectRow,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject as deleteProjectRow,
-  projectOfFolder,
+  projectOfFolderResolved,
   resolveProjectSettings,
   setProjectOverride as setProjectOverrideRow,
   updateProject as updateProjectRow,
@@ -4240,7 +4240,13 @@ export function useMuseSessions(): UseMuseSessions {
       return false;
     }
     // A folder a project owns restarts at that project's posture, not the global one.
-    const posture = requested ?? hostSandboxConfigForProject(sandbox, projectOfFolder(projects, target));
+    const posture = requested ?? hostSandboxConfigForProject(
+      sandbox,
+      await projectOfFolderResolved(projects, target, (path) =>
+        invoke<{ canonical_path?: string | null }>("inspect_workspace_root", { path })
+          .then((check) => check.canonical_path ?? null, () => null),
+      ),
+    );
     try {
       setError(null);
       await invoke("restart_host", {
