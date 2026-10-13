@@ -1,0 +1,511 @@
+{
+  "schema": "muse-desktop.macos-m3-08-run-review.v1",
+  "ticket": "M3-08",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 2,
+  "harness": "scripts/macos/m3-08-run-review.mjs on scripts/macos/test-instance.mjs (model: scripts/cdp-m3-07-08-runs.mjs)",
+  "criteria": "docs/plans/2026-09-15-agent-implementation-plan.md \u00a7M3-08 (no result presented before termination, a durable history and opening the right session after a restart) and docs/ROADMAP.md \u00a7M3-08 (status, preview, unread, link to the conversation, archiving, filters, extractive summary with next steps, each run anchored to its own turn, cancelled recorded as such)",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<5b296fdc-eeec-5464-9df0-a2237f9c255c>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "posture": "Ask only for more access (host onRequest), as on Windows; text-only prompts, no tool call expected",
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment) on the pinned engine. Test mode skips the launchd wake-up task; the in-app scheduler holds its native lease and fires the runs while the app is open.",
+    "Each run is read three ways: the renderer ledger (localStorage muse-desktop.schedule-runs.v1), the native mirror (scheduler_runs_read, app data) and the card on Automations. The host's turn events are read from the event poll (IPC trace), so a run is matched to the turn the host admitted (send_input ack) and to that turn's own terminal.",
+    "The restart closes the app from its window (Tauri window close), keeps the data folder and the WKWebView store, and relaunches the same exe on them."
+  ],
+  "phases": {
+    "setup": {
+      "posture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "defaultFolder": {
+        "clicked": true,
+        "stored": true,
+        "setWorkspace": true
+      },
+      "scheduler": {
+        "mode": "native",
+        "text": "Native scheduler active"
+      },
+      "wakeUp": "Native wake-up Native wake-up is unavailable; keep Muse open for automations."
+    },
+    "new": {
+      "schedule": {
+        "ok": true,
+        "threadReuse": "new",
+        "authorizationMode": "workspace",
+        "workspaceIsWs": true,
+        "triggerAt": 1791882900000,
+        "timeZone": "Europe/Paris",
+        "scheduledInMs": 47510
+      },
+      "timeline": [
+        {
+          "at": 55137,
+          "status": "queued",
+          "turnId": null,
+          "preview": null,
+          "summary": null,
+          "cardStatus": "Queued",
+          "cardPreview": null
+        },
+        {
+          "at": 55669,
+          "status": "running",
+          "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+          "preview": null,
+          "summary": null,
+          "cardStatus": "Running",
+          "cardPreview": null
+        },
+        {
+          "at": 65302,
+          "status": "completed",
+          "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+          "preview": "RUN-NEW-gs4iz Next steps: archive this run",
+          "summary": "RUN-NEW-gs4iz Next steps: archive this run",
+          "cardStatus": "Completed",
+          "cardPreview": "RUN-NEW-gs4iz Next steps: archive this run"
+        }
+      ],
+      "run": {
+        "local": {
+          "id": "run-mv6gtg6g-6gvw3",
+          "status": "completed",
+          "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+          "sessionId": "01a1348b-510c-7a53-9c35-03b0d6868db0",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791882900000,
+          "createdAt": 1791882907432,
+          "startedAt": 1791882908082,
+          "finishedAt": 1791882917725,
+          "resultPreview": "RUN-NEW-gs4iz Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-gs4iz Next steps: archive this run",
+            "assistantMessages": 1,
+            "nextSteps": [
+              "archive this run"
+            ]
+          },
+          "error": null
+        },
+        "native": {
+          "id": "run-mv6gtg6g-6gvw3",
+          "status": "completed",
+          "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+          "sessionId": "01a1348b-510c-7a53-9c35-03b0d6868db0",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791882900000,
+          "createdAt": 1791882907432,
+          "startedAt": 1791882908082,
+          "finishedAt": 1791882917725,
+          "resultPreview": "RUN-NEW-gs4iz Next steps: archive this run",
+          "summary": {
+            "headline": "RUN-NEW-gs4iz Next steps: archive this run",
+            "assistantMessages": 1,
+            "nextSteps": [
+              "archive this run"
+            ]
+          },
+          "error": null
+        },
+        "card": {
+          "status": "Completed",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "preview": "RUN-NEW-gs4iz Next steps: archive this run",
+          "summaryHeadline": "RUN-NEW-gs4iz Next steps: archive this run",
+          "summaryFacts": "1 response \u00b7 1 next step",
+          "nextStepsObserved": [
+            "archive this run"
+          ],
+          "error": null,
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Archive"
+          ]
+        }
+      },
+      "sendAck": {
+        "at": 55642,
+        "ok": true,
+        "disposition": "started",
+        "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332"
+      },
+      "hostEvents": [
+        {
+          "at": 56230,
+          "sid": "01a1348b-510c-7a53-9c35-03b0d6868db0",
+          "kind": "started",
+          "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+          "terminal": null,
+          "previewKeys": []
+        },
+        {
+          "at": 65233,
+          "sid": "01a1348b-510c-7a53-9c35-03b0d6868db0",
+          "kind": "completed",
+          "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+          "terminal": "completed",
+          "previewKeys": []
+        }
+      ],
+      "terminalAt": 65233,
+      "hostStructuredPreview": "none emitted by the host"
+    },
+    "stop": {
+      "schedule": {
+        "ok": true,
+        "threadReuse": "new",
+        "authorizationMode": "workspace",
+        "workspaceIsWs": true,
+        "triggerAt": 1791969300000,
+        "timeZone": "Europe/Paris"
+      },
+      "runClick": {
+        "clicked": true
+      },
+      "whileRunning": {
+        "id": "run-mv6gtqie-3si2n2",
+        "status": "running",
+        "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1",
+        "sessionId": "01a1348b-8398-78c1-b42c-5a6a96d208f4",
+        "threadReuse": "new",
+        "attempt": 1,
+        "unread": null,
+        "archived": null,
+        "recovery": null,
+        "occurrenceAt": 1791882920822,
+        "createdAt": 1791882920822,
+        "startedAt": 1791882921045,
+        "finishedAt": null,
+        "resultPreview": null,
+        "summary": null,
+        "error": null
+      },
+      "sendAck": {
+        "ok": true,
+        "disposition": "started",
+        "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1"
+      },
+      "stopClick": {
+        "clicked": true,
+        "msAfterRunStart": 3595
+      },
+      "cancelCall": {
+        "ok": true,
+        "carriedTurnId": true
+      },
+      "terminal": {
+        "kind": "cancelled",
+        "terminal": "cancelled",
+        "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1"
+      },
+      "final": {
+        "local": {
+          "id": "run-mv6gtqie-3si2n2",
+          "status": "cancelled",
+          "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1",
+          "sessionId": "01a1348b-8398-78c1-b42c-5a6a96d208f4",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791882920822,
+          "createdAt": 1791882920822,
+          "startedAt": 1791882921045,
+          "finishedAt": 1791882924785,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "native": {
+          "id": "run-mv6gtqie-3si2n2",
+          "status": "cancelled",
+          "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1",
+          "sessionId": "01a1348b-8398-78c1-b42c-5a6a96d208f4",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": null,
+          "recovery": null,
+          "occurrenceAt": 1791882920822,
+          "createdAt": 1791882920822,
+          "startedAt": 1791882921045,
+          "finishedAt": 1791882924785,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "card": {
+          "status": "Cancelled",
+          "newBadge": true,
+          "reviewNeeded": false,
+          "preview": null,
+          "summaryHeadline": null,
+          "summaryFacts": null,
+          "nextStepsObserved": [],
+          "error": null,
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Archive"
+          ]
+        }
+      }
+    },
+    "review": {
+      "open": {
+        "clicked": true,
+        "activeIsRunSession": true
+      },
+      "markRead": {
+        "clicked": true,
+        "N": {
+          "local": {
+            "id": "run-mv6gtg6g-6gvw3",
+            "status": "completed",
+            "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+            "sessionId": "01a1348b-510c-7a53-9c35-03b0d6868db0",
+            "threadReuse": "new",
+            "attempt": 1,
+            "unread": false,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791882900000,
+            "createdAt": 1791882907432,
+            "startedAt": 1791882908082,
+            "finishedAt": 1791882917725,
+            "resultPreview": "RUN-NEW-gs4iz Next steps: archive this run",
+            "summary": {
+              "headline": "RUN-NEW-gs4iz Next steps: archive this run",
+              "assistantMessages": 1,
+              "nextSteps": [
+                "archive this run"
+              ]
+            },
+            "error": null
+          },
+          "native": {
+            "id": "run-mv6gtg6g-6gvw3",
+            "status": "completed",
+            "turnId": "01a1348b-51b2-768e-8f27-74e2d567c332",
+            "sessionId": "01a1348b-510c-7a53-9c35-03b0d6868db0",
+            "threadReuse": "new",
+            "attempt": 1,
+            "unread": false,
+            "archived": null,
+            "recovery": null,
+            "occurrenceAt": 1791882900000,
+            "createdAt": 1791882907432,
+            "startedAt": 1791882908082,
+            "finishedAt": 1791882917725,
+            "resultPreview": "RUN-NEW-gs4iz Next steps: archive this run",
+            "summary": {
+              "headline": "RUN-NEW-gs4iz Next steps: archive this run",
+              "assistantMessages": 1,
+              "nextSteps": [
+                "archive this run"
+              ]
+            },
+            "error": null
+          },
+          "card": {
+            "status": "Completed",
+            "newBadge": false,
+            "reviewNeeded": false,
+            "preview": "RUN-NEW-gs4iz Next steps: archive this run",
+            "summaryHeadline": "RUN-NEW-gs4iz Next steps: archive this run",
+            "summaryFacts": "1 response \u00b7 1 next step",
+            "nextStepsObserved": [
+              "archive this run"
+            ],
+            "error": null,
+            "actions": [
+              "Open conversation",
+              "Archive"
+            ]
+          }
+        },
+        "unreadFilterHasN": false
+      },
+      "archive": {
+        "clicked": true,
+        "S": {
+          "local": {
+            "id": "run-mv6gtqie-3si2n2",
+            "status": "cancelled",
+            "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1",
+            "sessionId": "01a1348b-8398-78c1-b42c-5a6a96d208f4",
+            "threadReuse": "new",
+            "attempt": 1,
+            "unread": true,
+            "archived": true,
+            "recovery": null,
+            "occurrenceAt": 1791882920822,
+            "createdAt": 1791882920822,
+            "startedAt": 1791882921045,
+            "finishedAt": 1791882924785,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "native": {
+            "id": "run-mv6gtqie-3si2n2",
+            "status": "cancelled",
+            "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1",
+            "sessionId": "01a1348b-8398-78c1-b42c-5a6a96d208f4",
+            "threadReuse": "new",
+            "attempt": 1,
+            "unread": true,
+            "archived": true,
+            "recovery": null,
+            "occurrenceAt": 1791882920822,
+            "createdAt": 1791882920822,
+            "startedAt": 1791882921045,
+            "finishedAt": 1791882924785,
+            "resultPreview": null,
+            "summary": null,
+            "error": null
+          },
+          "card": null
+        },
+        "inActive": false,
+        "inArchived": {
+          "status": "Cancelled",
+          "actions": [
+            "Open conversation",
+            "Mark read",
+            "Restore"
+          ]
+        }
+      },
+      "restore": {
+        "clicked": true,
+        "S": {
+          "id": "run-mv6gtqie-3si2n2",
+          "status": "cancelled",
+          "turnId": "01a1348b-8455-7f88-8c38-5b7d280597b1",
+          "sessionId": "01a1348b-8398-78c1-b42c-5a6a96d208f4",
+          "threadReuse": "new",
+          "attempt": 1,
+          "unread": true,
+          "archived": false,
+          "recovery": null,
+          "occurrenceAt": 1791882920822,
+          "createdAt": 1791882920822,
+          "startedAt": 1791882921045,
+          "finishedAt": 1791882924785,
+          "resultPreview": null,
+          "summary": null,
+          "error": null
+        },
+        "inActive": true
+      }
+    },
+    "restart": {
+      "closed": {
+        "quitBy": "window closed",
+        "leftAfterQuit": []
+      },
+      "comparison": {
+        "N": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "completed",
+          "recovery": null
+        },
+        "S": {
+          "localUnchanged": true,
+          "nativeUnchanged": true,
+          "nativeEqualsLocal": true,
+          "status": "cancelled",
+          "recovery": null
+        }
+      },
+      "cardAfterRestart": {
+        "status": "Completed",
+        "newBadge": false,
+        "reviewNeeded": false,
+        "preview": "RUN-NEW-gs4iz Next steps: archive this run",
+        "summaryHeadline": "RUN-NEW-gs4iz Next steps: archive this run",
+        "summaryFacts": "1 response \u00b7 1 next step",
+        "nextStepsObserved": [
+          "archive this run"
+        ],
+        "error": null,
+        "actions": [
+          "Open conversation",
+          "Archive"
+        ]
+      },
+      "openAfterRestart": {
+        "clicked": true,
+        "activeIsRunSession": true
+      }
+    }
+  },
+  "verdicts": {
+    "firedWithoutClick": true,
+    "newConversationAnchoredToItsTurn": true,
+    "noResultBeforeTermination": true,
+    "completedReviewable": true,
+    "stoppedRunCancelledWithoutResult": true,
+    "openConversationIsRunSession": true,
+    "markRead": true,
+    "archiveRestore": true,
+    "durableHistory": true,
+    "cardRebuiltAfterRestart": true,
+    "rightSessionOpenedAfterRestart": true,
+    "cleanExit": true,
+    "userEngineConfigUntouched": true
+  },
+  "limits": [
+    "The runs fire from the in-app scheduler with the app open: test mode skips the launchd wake-up task, so a run while the app is closed (M3-06/07) is not covered here.",
+    "The host-structured preview winning over the local excerpt stays unit-tested only: 1.4.2's turn/completed carries no result field (hostStructuredPreview in the new phase).",
+    "Busy-thread anchoring, removal from the host queue and Retry now (Windows phases busy and retry) are shared renderer code not replayed here; this proof keeps to the plan acceptance and the review actions.",
+    "The engine's session store is shared with the user (ADR 0003): the proof conversations stay there."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true,
+  "previousRun": "A first run on the same build and engine (same day) passed every verdict but one, on a harness reading: it compared the run's turn id while the run was still being dispatched (the id lands right after the send_input ack); the settled run carried the acked turn and the cancel call carried it. Its two live turns are spent and not kept: 4 live turns in all for M3-08."
+}

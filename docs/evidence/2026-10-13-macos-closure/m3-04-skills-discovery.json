@@ -1,0 +1,245 @@
+{
+  "schema": "muse-desktop.macos-m3-04-skills-discovery.v1",
+  "ticket": "M3-04",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m3-04-skills-discovery.mjs on scripts/macos/test-instance.mjs",
+  "criteria": "docs/plans/2026-09-15-agent-implementation-plan.md §M3-04 (skills with the same name, a malformed file, a missing resource, project scope and a change on disk; exact provenance) and docs/ROADMAP.md §M3-04 (roots .agents/skills, .muse/skills, .claude/skills and skills, frontmatter requiring name and description, strictly relative resources, outbound symlinks ignored, precedence project > repo > team > builtin, explicit reload)",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<13ee6fab-43ed-52ce-9631-20c6c23d157e>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment); the proof project, in the proof folder, is the instance's default folder (Settings > Choose folder, the dialog answered by the IPC trace), which is the folder Scan workspace reads.",
+    "Every scan is the panel's Scan workspace button; the record holds what the panel shows (summary, errors, each skill's label, description and path) and the native scan's document list (path and source) from the IPC trace."
+  ],
+  "phases": {
+    "setup": {
+      "defaultFolder": {
+        "clicked": true,
+        "stored": true,
+        "setWorkspace": true
+      }
+    },
+    "firstScan": {
+      "summary": "4 discovered · <proof>/project",
+      "errors": [
+        ".muse/skills/g6-escape/SKILL.md: resources must be relative to the skill directory",
+        ".muse/skills/g6-nofm/SKILL.md: missing or unterminated YAML frontmatter",
+        "skills/g6-bad/SKILL.md: description is required and must be at most 500 characters"
+      ],
+      "rows": [
+        {
+          "label": "/g6-dup (project)",
+          "description": "Project copy of g6-dup.",
+          "path": ".agents/skills/g6-dup/SKILL.md"
+        },
+        {
+          "label": "/g6-missing-res (repo)",
+          "description": "Skill whose resource is missing.",
+          "path": ".claude/skills/g6-missing-res/SKILL.md"
+        },
+        {
+          "label": "/g6-res (repo)",
+          "description": "Skill with a resource.",
+          "path": ".muse/skills/g6-res/SKILL.md"
+        },
+        {
+          "label": "/g6-root (project)",
+          "description": "Root skill of the proof project.",
+          "path": "SKILL.md"
+        }
+      ],
+      "banners": [],
+      "native": {
+        "ok": true,
+        "documents": [
+          {
+            "path": ".agents/skills/g6-dup/SKILL.md",
+            "source": "project"
+          },
+          {
+            "path": ".claude/skills/g6-missing-res/SKILL.md",
+            "source": "repo"
+          },
+          {
+            "path": ".muse/skills/g6-dup/SKILL.md",
+            "source": "repo"
+          },
+          {
+            "path": ".muse/skills/g6-escape/SKILL.md",
+            "source": "repo"
+          },
+          {
+            "path": ".muse/skills/g6-nofm/SKILL.md",
+            "source": "repo"
+          },
+          {
+            "path": ".muse/skills/g6-res/SKILL.md",
+            "source": "repo"
+          },
+          {
+            "path": "SKILL.md",
+            "source": "project"
+          },
+          {
+            "path": "skills/g6-bad/SKILL.md",
+            "source": "repo"
+          }
+        ]
+      }
+    },
+    "missingResourceAtScan": {
+      "listed": true,
+      "error": null
+    },
+    "changeOnDisk": {
+      "beforeReload": {
+        "g6NewListed": false
+      },
+      "secondScan": {
+        "summary": "5 discovered · <proof>/project",
+        "errors": [
+          ".muse/skills/g6-escape/SKILL.md: resources must be relative to the skill directory",
+          ".muse/skills/g6-nofm/SKILL.md: missing or unterminated YAML frontmatter",
+          "skills/g6-bad/SKILL.md: description is required and must be at most 500 characters"
+        ],
+        "rows": [
+          {
+            "label": "/g6-new (project)",
+            "description": "Added after the first scan.",
+            "path": ".agents/skills/g6-new/SKILL.md"
+          },
+          {
+            "label": "/g6-missing-res (repo)",
+            "description": "Skill whose resource is missing.",
+            "path": ".claude/skills/g6-missing-res/SKILL.md"
+          },
+          {
+            "label": "/g6-dup (repo)",
+            "description": "Repo copy of g6-dup.",
+            "path": ".muse/skills/g6-dup/SKILL.md"
+          },
+          {
+            "label": "/g6-res (repo)",
+            "description": "Skill with a resource, edited on disk.",
+            "path": ".muse/skills/g6-res/SKILL.md"
+          },
+          {
+            "label": "/g6-root (project)",
+            "description": "Root skill of the proof project.",
+            "path": "SKILL.md"
+          }
+        ],
+        "banners": [],
+        "native": {
+          "ok": true,
+          "documents": [
+            {
+              "path": ".agents/skills/g6-new/SKILL.md",
+              "source": "project"
+            },
+            {
+              "path": ".claude/skills/g6-missing-res/SKILL.md",
+              "source": "repo"
+            },
+            {
+              "path": ".muse/skills/g6-dup/SKILL.md",
+              "source": "repo"
+            },
+            {
+              "path": ".muse/skills/g6-escape/SKILL.md",
+              "source": "repo"
+            },
+            {
+              "path": ".muse/skills/g6-nofm/SKILL.md",
+              "source": "repo"
+            },
+            {
+              "path": ".muse/skills/g6-res/SKILL.md",
+              "source": "repo"
+            },
+            {
+              "path": "SKILL.md",
+              "source": "project"
+            },
+            {
+              "path": "skills/g6-bad/SKILL.md",
+              "source": "repo"
+            }
+          ]
+        }
+      }
+    },
+    "deletedOnDisk": {
+      "thirdScan": {
+        "summary": "4 discovered · <proof>/project",
+        "rows": [
+          {
+            "label": "/g6-missing-res (repo)",
+            "description": "Skill whose resource is missing.",
+            "path": ".claude/skills/g6-missing-res/SKILL.md"
+          },
+          {
+            "label": "/g6-dup (repo)",
+            "description": "Repo copy of g6-dup.",
+            "path": ".muse/skills/g6-dup/SKILL.md"
+          },
+          {
+            "label": "/g6-res (repo)",
+            "description": "Skill with a resource, edited on disk.",
+            "path": ".muse/skills/g6-res/SKILL.md"
+          },
+          {
+            "label": "/g6-root (project)",
+            "description": "Root skill of the proof project.",
+            "path": "SKILL.md"
+          }
+        ]
+      },
+      "g6NewStillListed": false
+    }
+  },
+  "verdicts": {
+    "rootsAndScopes": true,
+    "symlinkOutsideIgnored": true,
+    "sameNameProjectWins": true,
+    "malformedReportedWithPath": true,
+    "projectScopeAndProvenance": true,
+    "changeOnDiskAfterExplicitReload": true,
+    "deletedSkillDropped": true,
+    "cleanExit": true,
+    "userEngineConfigUntouched": true
+  },
+  "limits": [
+    "A declared resource that is missing is not checked at scan time: the skill is listed, and the resource is read (and refused) just before sending, which is M3-05's proof.",
+    "Scan workspace reads the default folder (Settings), not the active conversation's project. The host's own catalogue (skill/list, M3-05) is a separate source: 1.4.2 lists .agents/skills and .claude/skills project skills, not .muse/skills or skills/."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true
+}
