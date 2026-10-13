@@ -1,0 +1,599 @@
+{
+  "schema": "muse-desktop.m0-08-engine-compat-macos.v1",
+  "ticket": "M0-08",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, debug build with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m0-08-engine-compat.mjs (+ scripts/macos/m0-07-08-fake-engine.mjs), port 9422",
+  "isolation": {
+    "data": "<run>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<22b229bc-1aa9-55d2-9eee-10acee89e6e8>",
+    "defaultStoresUnchangedAtStart": true,
+    "stopReal": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true
+    },
+    "stopFake": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    }
+  },
+  "method": {
+    "handshake": "No app. initialize sent directly to the pinned 1.4.2 and to the old 1.3.0-R3401.1 macOS binaries (MUSE_NO_AUTO_UPDATE=1, never through the ~/.local/bin/muse launcher), with the app's own workspace flags; each answer is judged by a mirror of main.rs validate_initialize_result and compared with the recorded fixtures src-tauri/tests/fixtures/initialize-*.json (recorded on Windows). An echo-provider turn (not billed) on 1.4.2 lists the notifications the client does not route (main.rs route_notification_with_emit arms).",
+    "app": "Isolated test instance (scripts/macos/test-instance.mjs) on the pinned 1.4.2: a project created from the welcome screen, a first message typed and sent with a real Enter, the reply in the stored transcript, then collect_diagnostics. The same data folder relaunched with MUSE_DESKTOP_TEST_SIDECAR pointing at m0-07-08-fake-engine.mjs: the silent boot resume of the conversation meets mode schema2; then each incompatible mode is met by a click on the conversation's Reconnect button; finally mode proxy runs the real pinned engine behind the fake, and the same Reconnect must reach Connected and clear the notice, in the same app process."
+  },
+  "phases": {
+    "handshake": {
+      "liveTurns": 0,
+      "engines": {
+        "1.4.2": {
+          "binary": "~/muse-proofs/engine/1.4.2-R4684.1/muse-bin",
+          "version": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+          "flags": [
+            "serve",
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ],
+          "serverInfo": {
+            "name": "muse",
+            "version": "1.4.2"
+          },
+          "schema": {
+            "version": 1,
+            "fingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2"
+          },
+          "platformOs": "macos",
+          "appRule": "accepted",
+          "fixture": {
+            "serverInfo": {
+              "name": "muse",
+              "version": "1.4.2"
+            },
+            "schema": {
+              "version": 1,
+              "fingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2"
+            },
+            "platformOs": "windows"
+          },
+          "sameVersionAsFixture": true,
+          "sameFingerprintAsFixture": true,
+          "initializeKeys": [
+            "experimentalApi",
+            "grantedCapabilities",
+            "museHome",
+            "platformFamily",
+            "platformOs",
+            "schema",
+            "serverInfo",
+            "sessionDurability",
+            "userAgent"
+          ]
+        },
+        "1.3.0": {
+          "binary": "~/.local/bin/muse-bin-1.3.0-R3401.1",
+          "version": "Muse Code 1.3.0 (1.3.0-R3401.1)",
+          "flags": [
+            "serve",
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ],
+          "serverInfo": {
+            "name": "muse",
+            "version": "1.3.0"
+          },
+          "schema": {
+            "version": 1,
+            "fingerprint": "sha256:7469c9e352e67def4a59df7e439984d7194fa351e1c8b7abb34060fd977ced81"
+          },
+          "platformOs": "macos",
+          "appRule": "accepted",
+          "fixture": {
+            "serverInfo": {
+              "name": "muse",
+              "version": "1.3.0"
+            },
+            "schema": {
+              "version": 1,
+              "fingerprint": "sha256:7469c9e352e67def4a59df7e439984d7194fa351e1c8b7abb34060fd977ced81"
+            },
+            "platformOs": "windows"
+          },
+          "sameVersionAsFixture": true,
+          "sameFingerprintAsFixture": true,
+          "initializeKeys": [
+            "experimentalApi",
+            "grantedCapabilities",
+            "museHome",
+            "platformFamily",
+            "platformOs",
+            "schema",
+            "serverInfo",
+            "sessionDurability",
+            "userAgent"
+          ]
+        }
+      },
+      "echoTap": {
+        "provider": "echo",
+        "billed": false,
+        "serverVersion": "1.4.2",
+        "terminal": "completed",
+        "allMethods": [
+          "item/completed",
+          "item/delta",
+          "item/started",
+          "session/started",
+          "session/statusChanged",
+          "session/tokenUsage",
+          "turn/completed",
+          "turn/started"
+        ],
+        "routedByClient": [
+          "approval/requested",
+          "approval/resolved",
+          "approval/updated",
+          "item/completed",
+          "item/delta",
+          "item/started",
+          "item/updated",
+          "session/approvalModeChanged",
+          "session/branchChanged",
+          "session/contextUsage",
+          "session/tokenUsage",
+          "skill/changed",
+          "turn/completed",
+          "turn/retracted",
+          "turn/retryScheduled",
+          "turn/started",
+          "turn/stopped",
+          "turn/unqueued",
+          "userInput/requested",
+          "userInput/settled"
+        ],
+        "ignoredByClient": [
+          "session/started",
+          "session/statusChanged"
+        ]
+      }
+    },
+    "app": {
+      "liveTurns": 1,
+      "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+      "isolation": {
+        "data": "<run>/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<22b229bc-1aa9-55d2-9eee-10acee89e6e8>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "start": "ready",
+      "reply": true,
+      "engineArgv": [
+        "muse-bin serve --sandbox-network restricted --trust-workspace"
+      ],
+      "diagnostics": {
+        "schema": "muse-desktop.native-diagnostics.v1",
+        "workspaceConfigured": true,
+        "hostCount": 1,
+        "sessionCount": 1,
+        "runningSessionCount": 1,
+        "pendingApprovalCount": 0,
+        "eventBufferCount": 17,
+        "hostEngines": [
+          {
+            "serverVersion": "1.4.2",
+            "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+            "platform": "macos"
+          }
+        ],
+        "testMode": true
+      },
+      "pillAfterTurn": {
+        "text": "Connected",
+        "title": null
+      },
+      "consoleErrorsRealEngine": [],
+      "stopReal": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "bootResume": {
+        "mode": "schema2",
+        "msToNotice": 511,
+        "surface": {
+          "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+          "pill": {
+            "text": "Disconnected",
+            "title": "MSP handshake failed (incompatible Muse host 9.9.9-fake: unsupported MSP schema version 2 (expected 1)). Host stderr:"
+          },
+          "notice": [
+            "MSP handshake failed (incompatible Muse host 9.9.9-fake: unsupported MSP schema version 2 (expected 1)). Host stderr:"
+          ],
+          "panel": [],
+          "banner": [],
+          "reconnect": {
+            "text": "Reconnect",
+            "disabled": false
+          }
+        },
+        "spawns": 1
+      },
+      "reconnects": [
+        {
+          "mode": "schema2",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2553,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (incompatible Muse host 9.9.9-fake: unsupported MSP schema version 2 (expected 1)). Host stderr:"
+            },
+            "notice": [
+              "MSP handshake failed (incompatible Muse host 9.9.9-fake: unsupported MSP schema version 2 (expected 1)). Host stderr:"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (incompatible Muse host 9.9.9-fake: unsupported MSP schema version 2 (expected 1)). Host stderr:. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "nofingerprint",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2571,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (incompatible Muse host: schema.fingerprint is missing or invalid). Host stderr:"
+            },
+            "notice": [
+              "MSP handshake failed (incompatible Muse host: schema.fingerprint is missing or invalid). Host stderr:"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (incompatible Muse host: schema.fingerprint is missing or invalid). Host stderr:. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "badfingerprint",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2559,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (incompatible Muse host: schema.fingerprint is missing or invalid). Host stderr:"
+            },
+            "notice": [
+              "MSP handshake failed (incompatible Muse host: schema.fingerprint is missing or invalid). Host stderr:"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (incompatible Muse host: schema.fingerprint is missing or invalid). Host stderr:. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "wrongname",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2558,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (incompatible Muse host: expected serverInfo.name `muse`, got `other`). Host stderr:"
+            },
+            "notice": [
+              "MSP handshake failed (incompatible Muse host: expected serverInfo.name `muse`, got `other`). Host stderr:"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (incompatible Muse host: expected serverInfo.name `muse`, got `other`). Host stderr:. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "noserverinfo",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2559,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (incompatible Muse host: initialize response has no serverInfo). Host stderr:"
+            },
+            "notice": [
+              "MSP handshake failed (incompatible Muse host: initialize response has no serverInfo). Host stderr:"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (incompatible Muse host: initialize response has no serverInfo). Host stderr:. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "exit",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2547,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (sidecar dropped the response). Host stderr: m0-08 fake engine: exiting before the handshake"
+            },
+            "notice": [
+              "MSP handshake failed (sidecar dropped the response). Host stderr: m0-08 fake engine: exiting before the handshake"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (sidecar dropped the response). Host stderr: m0-08 fake engine: exiting before the handshake. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "garbage",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 2557,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (sidecar dropped the response). Host stderr: unparsable frame: m0-08 fake engine: this is not JSON-RPC"
+            },
+            "notice": [
+              "MSP handshake failed (sidecar dropped the response). Host stderr: unparsable frame: m0-08 fake engine: this is not JSON-RPC"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (sidecar dropped the response). Host stderr: unparsable frame: m0-08 fake engine: this is not JSON-RPC. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "silent",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 121350,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connection error",
+              "title": "MSP handshake failed (MSP request timed out: initialize). Host stderr:"
+            },
+            "notice": [
+              "MSP handshake failed (MSP request timed out: initialize). Host stderr:"
+            ],
+            "panel": [
+              "Reconnect failed: MSP handshake failed (MSP request timed out: initialize). Host stderr:. Your saved messages are still available."
+            ],
+            "banner": [],
+            "reconnect": {
+              "text": "Reconnect",
+              "disabled": false
+            }
+          },
+          "fakeProcessesAlive": 0,
+          "appAlive": true
+        },
+        {
+          "mode": "proxy",
+          "clicked": true,
+          "spawned": true,
+          "msToSettle": 1538,
+          "surface": {
+            "activeSid": "01a13473-4230-7d71-99b3-e78500d81542",
+            "pill": {
+              "text": "Connected",
+              "title": null
+            },
+            "notice": [],
+            "panel": [],
+            "banner": [],
+            "reconnect": null
+          },
+          "fakeProcessesAlive": 1,
+          "appAlive": true
+        }
+      ],
+      "diagnosticsAfter": {
+        "schema": "muse-desktop.native-diagnostics.v1",
+        "workspaceConfigured": true,
+        "hostCount": 1,
+        "sessionCount": 1,
+        "runningSessionCount": 0,
+        "pendingApprovalCount": 0,
+        "eventBufferCount": 1,
+        "hostEngines": [
+          {
+            "serverVersion": "1.4.2",
+            "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+            "platform": "macos"
+          }
+        ],
+        "testMode": true
+      },
+      "spawnLog": [
+        {
+          "mode": "schema2",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "schema2",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "nofingerprint",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "badfingerprint",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "wrongname",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "noserverinfo",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "exit",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "garbage",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "silent",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        },
+        {
+          "mode": "proxy",
+          "appArgs": [
+            "--sandbox-network",
+            "restricted",
+            "--trust-workspace"
+          ]
+        }
+      ],
+      "consoleErrorsFake": [],
+      "stopFake": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      }
+    }
+  },
+  "verdicts": {
+    "handshake142MatchesFixture": true,
+    "handshake130MatchesFixture": true,
+    "echoTurnCompleted": true,
+    "ignoredAdditiveNotifications": [
+      "session/started",
+      "session/statusChanged"
+    ],
+    "liveTurnCompleted": true,
+    "diagnosticsName142": true,
+    "fingerprintMatchesFixture": true,
+    "noConsoleErrorOnRealEngine": true,
+    "bootResumeReasonShown": true,
+    "everyIncompatibleModeRefused": true,
+    "everyRefusalExplained": true,
+    "detectionBounded": true,
+    "noCrash": true,
+    "recoveryConnectedNoticeCleared": true,
+    "refusedEngineNotListed": true,
+    "cleanStop": true
+  },
+  "limits": [
+    "Engine builds before 1.3.0 cannot be obtained: the macOS version matrix is 1.3.0-R3401.1 (handshake only, no app session on it) and 1.4.2-R4684.1 (handshake, app turn).",
+    "The initialize fixtures were recorded on Windows (platformOs windows); the macOS binaries answer the same serverInfo.version and the same schema fingerprint, with platformOs macos.",
+    "A silent engine (never answers initialize) is detected by the bridge's initialize timeout: about 121 s on this run, bounded but long; the other incompatible modes settle in about 2.5 s.",
+    "The engine's session store is shared with the user (ADR 0003): the turn's conversation and the echo-tap session live there."
+  ]
+}
