@@ -2551,14 +2551,18 @@ name = "muse-desktop"
 version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
+ "block2",
  "chrono",
  "futures-util",
  "keyring",
  "notify",
+ "objc2",
+ "objc2-foundation",
  "portable-pty",
  "reqwest",
  "serde",
  "serde_json",
+ "sha1",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

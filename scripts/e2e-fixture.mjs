@@ -17,15 +17,21 @@
  * opens CDP. No WEBVIEW2_* variable reaches the app. Before driving anything
  * the runner checks that the exe reads the switch, that the app wrote its
  * test-mode marker and that the WebView2 browser runs on the test profile;
- * otherwise it kills the app. Windows only: CDP needs WebView2.
+ * otherwise it kills the app.
+ *
+ * macOS (amendment of 13/10/2026): WKWebView has no CDP; the debug build's
+ * test bridge (src-tauri/src/test_bridge.rs) serves the same calls. The
+ * window runs on a WKWebView data store of its own, named in the test folder
+ * (`webkit-store`): the runner checks that the app's default stores are left
+ * as they were, that the test store is the one written, and deletes it.
  *
  * Usage: npm run e2e:fixture [-- --exe <muse-desktop.exe>] [--keep]
  * Prints the verdict as JSON; exit code 1 when any check fails, or when the
  * watchdog stops a run that hangs.
  */
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +40,11 @@ process.env.MUSE_CDP_PORT ??= "9339";
 const { INSTALL_IPC_TRACE, argValue, browserCommandLines, openPage, redactor, sleep, under, waitFor, webviewProfile } = await import("./cdp-harness.mjs");
 
 const PORT = Number(process.env.MUSE_CDP_PORT);
-const EXE = resolve(argValue("--exe", join(process.env.CARGO_TARGET_DIR ?? join("src-tauri", "target"), "debug", "muse-desktop.exe")));
+const MAC = process.platform === "darwin";
+const EXE = resolve(argValue("--exe", join(process.env.CARGO_TARGET_DIR ?? join("src-tauri", "target"), "debug", MAC ? "muse-desktop" : "muse-desktop.exe")));
+// WebKit keeps an app's stores under ~/Library/WebKit/<bundle id or exe name>.
+const WEBKIT = join(homedir(), "Library", "WebKit");
+const WEBKIT_DEFAULTS = [join(WEBKIT, "com.muse.desktop"), join(WEBKIT, basename(EXE), "WebsiteData")];
 const FIXTURE = fileURLToPath(new URL("./muse-fixture.mjs", import.meta.url));
 const DONE = "the fixture turn resumed successfully";
 // test_mode.rs: the variable only a test-mode build reads, and the file its enter() writes.
@@ -187,12 +197,42 @@ async function scenario(app, dirs, report) {
   verdict.sendTextOnScreen = kept.onScreen;
   verdict.otherHostUnaffected = await pending(app, a).then(() => true, () => false);
 
-  verdict.isolatedWebviewProfile = existsSync(join(dirs.data, "WebView2", "EBWebView"));
-  verdict.isolatedAppData = readdirSync(dirs.data).some((name) => name !== "WebView2" && name !== MARKER);
+  if (MAC) {
+    verdict.isolatedWebviewProfile = existsSync(dirs.store) && sameTree(dirs.defaults, webkitDefaults());
+  } else {
+    verdict.isolatedWebviewProfile = existsSync(join(dirs.data, "WebView2", "EBWebView"));
+  }
+  verdict.isolatedAppData = readdirSync(dirs.data).some((name) => !["WebView2", MARKER, "webkit-store"].includes(name));
 }
+
+/** Every file of the app's default WKWebView stores with its size and mtime (macOS). */
+function webkitDefaults() {
+  const files = {};
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else try { const s = statSync(path); files[path] = `${s.size}:${s.mtimeMs}`; } catch { /* gone */ }
+    }
+  };
+  for (const dir of WEBKIT_DEFAULTS) walk(dir);
+  return files;
+}
+const sameTree = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /** What the runner can tell when the app does not answer: bounded, path-free once redacted. */
 async function diagnose(dirs) {
+  if (MAC) {
+    return {
+      listening: run("lsof", ["-nP", `-iTCP:${PORT}`, "-sTCP:LISTEN"]),
+      cdpTargets: await fetch(`http://127.0.0.1:${PORT}/json/list`, { signal: AbortSignal.timeout(5_000) }).then((r) => r.json())
+        .then((list) => list.map((t) => `${t.type} ${t.url}`.slice(0, 120)))
+        .catch((error) => `unreachable: ${error?.cause?.code ?? error?.message ?? error}`),
+      dataDir: existsSync(dirs.data) ? readdirSync(dirs.data) : null,
+    };
+  }
   const browser = browserCommandLines().slice(0, 20_000);
   return {
     webview2Runtime: run("reg", ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "/v", "pv"]),
@@ -207,7 +247,7 @@ async function diagnose(dirs) {
 }
 
 async function main() {
-  if (process.platform !== "win32") throw new Error("this check drives WebView2 over CDP: Windows only (ADR 0003)");
+  if (process.platform !== "win32" && !MAC) throw new Error("this check drives WebView2 over CDP or the WKWebView test bridge: Windows and macOS only (ADR 0003)");
   if (!existsSync(EXE)) throw new Error(`no app at ${EXE}: run cargo build --manifest-path src-tauri/Cargo.toml (or pass --exe)`);
   // A release build, or a debug build without the test mode, would run on the
   // user's own profile and engine: only an exe that reads the switch starts.
@@ -219,6 +259,7 @@ async function main() {
   const root = mkdtempSync(join(tmpdir(), "muse-e2e-"));
   const dirs = { data: join(root, "data"), A: join(root, "project-a"), B: join(root, "project-b") };
   for (const dir of [dirs.data, dirs.A, dirs.B]) mkdirSync(dir);
+  if (MAC) dirs.defaults = webkitDefaults();
   const report = { schema: "muse-desktop.e2e-fixture.v1", verdict: {} };
   const output = [];
   // No WEBVIEW2_* variable reaches the app: its profile and flags are the test mode's alone.
@@ -233,6 +274,8 @@ async function main() {
       MUSE_DESKTOP_TEST_CDP_PORT: String(PORT),
     },
     stdio: ["ignore", "pipe", "pipe"],
+    // Its own process group on macOS: the fixture engines stop with it.
+    detached: MAC,
   });
   const keep = (chunk) => {
     output.push(...String(chunk).split(/\r?\n/).filter(Boolean));
@@ -244,6 +287,10 @@ async function main() {
   child.once("error", (error) => keep(`spawn failed: ${error.message}`));
   const kill = () => {
     if (child.exitCode !== null) return;
+    if (MAC) {
+      try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
+      return;
+    }
     try { execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", timeout: 20_000 }); } catch { /* already gone */ }
   };
   const print = () => {
@@ -275,6 +322,18 @@ async function main() {
     // A cold runner creates the WebView2 profile first: give it time.
     app = await waitFor(() => (child.exitCode === null ? withTimeout(openPage(), 15_000, "CDP page").catch(() => null) : "exited"), 120_000, 1_000);
     if (!app || app === "exited") throw new Error(`the app exposed no page on CDP ${PORT} (exit code ${child.exitCode})`);
+    if (MAC) {
+      // Before driving anything: the window runs on the test store the app
+      // named, and neither default store moved.
+      const store = readFileSync(join(dirs.data, "webkit-store"), "utf8").trim().toLowerCase();
+      dirs.store = join(WEBKIT, basename(EXE), "WebsiteDataStore", store);
+      await app.ev("(localStorage.setItem('muse-e2e.store-probe', '1'), true)");
+      report.webviewStore = await waitFor(() => existsSync(dirs.store), 30_000, 500) ? "test store written" : null;
+      if (!report.webviewStore || !sameTree(dirs.defaults, webkitDefaults())) {
+        kill();
+        throw new Error("the WKWebView is not on the test store: stopped before driving the app");
+      }
+    } else {
     // Before driving anything: the browser runs on the test profile. An HKLM
     // WebView2 policy, honoured even for an elevated host, could move it.
     // WMI can answer late on a cold runner (null once in CI): read again for a minute.
@@ -283,6 +342,7 @@ async function main() {
       report.browserCommandLines = browserCommandLines().slice(0, 600);
       kill();
       throw new Error("the WebView2 browser is not on the test profile: stopped before driving the app");
+    }
     }
     await scenario(app, dirs, report);
   } catch (error) {
@@ -295,6 +355,7 @@ async function main() {
     await sleep(1_000);
     if (!process.argv.includes("--keep")) {
       try { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* a temp folder */ }
+      if (dirs.store) try { rmSync(dirs.store, { recursive: true, force: true }); } catch { /* WebKit may still hold it */ }
     }
   }
   clearTimeout(watchdog);

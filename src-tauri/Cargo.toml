@@ -40,6 +40,14 @@ windows = { version = "0.61.3", features = [
   "Win32_UI_Accessibility",
 ] }
 
+# The WKWebView test bridge (test_bridge.rs, debug builds only) and the test
+# instance's data store id. All of these are already in the tree through wry.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry"] }
+sha1 = "0.10"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
