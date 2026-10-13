@@ -1,0 +1,69 @@
+{
+  "schema": "muse-desktop.m1-05-quote-probe-macos.v1",
+  "ticket": "M1-05",
+  "date": "2026-10-13",
+  "commit": "3196ce2",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 3196ce2 with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m1-05-quote-probe.mjs on scripts/macos/test-instance.mjs, bridge port 9500",
+  "isolation": "own data folder and WKWebView store (test-instance.mjs); default stores unchanged at the end; nothing typed reaches a shell or the engine (send_input refused by the harness IPC guard, the pending message discarded)",
+  "method": "Three inputs appended to the app page (plain, spellcheck=false, spellcheck=false + autocorrect/autocapitalize off), then the app's own composers: the welcome screen's 'Your first message' field (EmptySessionScreen) and, after a conversation is started with a refused first message, the conversation's 'Message Muse' field (Composer). The same text is inserted one character at a time (as typing delivers it) and as one insertion, through Input.insertText (AppKit insertText:), and read back. System text-substitution settings left at the macOS defaults (NSAutomaticQuoteSubstitutionEnabled and NSAutomaticDashSubstitutionEnabled not set). Replay on 3196ce2 (spellCheck={false} on the terminal input and both composers): the composers are now expected to keep straight quotes and '--'; the plain probe input still substitutes (the system default, kept as the control).",
+  "checks": {
+    "plain": {
+      "perChar": "echo ‘a b’ “c d” — x",
+      "whole": "echo 'a b' \"c d\" -- x",
+      "spellcheckAttribute": null,
+      "changed": true
+    },
+    "spellcheck-false": {
+      "perChar": "echo 'a b' \"c d\" -- x",
+      "whole": "echo 'a b' \"c d\" -- x",
+      "spellcheckAttribute": "false",
+      "changed": false
+    },
+    "autocorrect-off": {
+      "perChar": "echo 'a b' \"c d\" -- x",
+      "whole": "echo 'a b' \"c d\" -- x",
+      "spellcheckAttribute": "false",
+      "changed": false
+    },
+    "composers": {
+      "welcomeReady": "ready",
+      "welcome": {
+        "perChar": "echo 'a b' \"c d\" -- x",
+        "whole": "echo 'a b' \"c d\" -- x",
+        "spellcheckAttribute": "false",
+        "changed": false
+      },
+      "sessionStarted": true,
+      "everySendRefusedByHarness": true,
+      "conversation": {
+        "perChar": "echo 'a b' \"c d\" -- x",
+        "whole": "echo 'a b' \"c d\" -- x",
+        "spellcheckAttribute": "false",
+        "changed": false
+      },
+      "sendInputCallsAfter": 1
+    }
+  },
+  "verdicts": {
+    "plainFieldSubstitutesTypedQuotes": true,
+    "spellcheckFalseKeepsTypedText": true,
+    "welcomeComposerKeepsTypedText": true,
+    "conversationComposerKeepsTypedText": true,
+    "nothingSent": true,
+    "isolationKept": true,
+    "all": true
+  },
+  "consoleErrors": [],
+  "limits": [
+    "The terminal field itself is measured in m1-05-terminal-macos*.json, check typed-quotes.",
+    "Input.insertText through the bridge, not a physical keyboard."
+  ],
+  "previousRun": {
+    "file": "docs/evidence/2026-10-13-macos-closure/m1-05-quote-probe-macos.json",
+    "commit": "08b291d",
+    "observed": "probe inputs only: a plain input turned `echo 'a b' \"c d\" -- x` typed per character into `echo ‘a b’ “c d” — x`; spellcheck=false kept it. The composers had no spellcheck attribute then and were not measured."
+  }
+}

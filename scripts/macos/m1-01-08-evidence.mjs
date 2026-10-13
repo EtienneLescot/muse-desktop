@@ -24,11 +24,11 @@ export function platform() {
  * Writes `<dir>/<file>` for each ticket entry and returns the redacted docs.
  * entries: [{ file, ticket, method, windowsReference, checks, verdicts, limits }]
  */
-export function writeEvidence({ dir, exe, base, record, harness, entries }) {
+export function writeEvidence({ dir, exe, base, record, harness, entries, commit = "08b291d" }) {
   const redact = redactor([[realpathSync(base), "<tmp>"], [base, "<tmp>"], [homedir(), "~"]]);
   const common = {
     date: record.date,
-    commit: "08b291d",
+    commit,
     build: { exe: exe.replace(homedir(), "~"), exeSha256: sha256(exe) },
     platform: platform(),
     engine: record.engine,
@@ -50,6 +50,7 @@ export function writeEvidence({ dir, exe, base, record, harness, entries }) {
       checks: entry.checks,
       verdicts: entry.verdicts,
       limits: entry.limits,
+      ...(entry.previousRun ? { previousRun: entry.previousRun } : {}),
       ...(record.failure ? { failure: record.failure } : {}),
     });
     writeFileSync(join(dir, entry.file), `${JSON.stringify(doc, null, 2)}\n`);

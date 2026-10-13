@@ -1,0 +1,914 @@
+{
+  "schema": "muse-desktop.m0-11-language-navigation-macos.v1",
+  "ticket": "M0-11",
+  "date": "2026-10-13",
+  "commit": "3196ce2",
+  "platform": "macOS 26.5 (25F71), arm64, debug build with embedded frontend, WKWebView through the test bridge",
+  "engine": "scripts/muse-fixture.mjs (protocol double, ADR 0003); no real engine and no model turn in this proof",
+  "pinnedEngineOnThisMachine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m0-11-language-navigation.mjs, port 9504",
+  "systemLocale": {
+    "AppleLocale": "en_FR"
+  },
+  "method": "Isolated test instance (scripts/macos/test-instance.mjs) on the protocol fixture. Two project conversations created from the welcome screen (folders answered by the IPC trace), each first message typed and sent with a real Enter, each fixture approval card answered with a real mouse click. Every surface audited in the DOM with the cdp-language-audit.mjs markers, over visible text and over title, aria-label and placeholder; every attribute naming a modifier collected. Shortcuts dispatched as key events through the bridge (Input.dispatchKeyEvent, Cmd = modifiers 4, Ctrl = 2): they reach the page's keydown handlers, as a real key press in the focused window would; the OS-level handling of Cmd+Tab (the app switcher) is outside the page. Zoom measured as window.innerWidth in CSS pixels. Search typed with Input.insertText in the Cmd+K dialog. Replay on 3196ce2 (capability core:webview:allow-set-webview-zoom; the sidebar hint says Ctrl+Tab on every OS): the zoom keys are now expected to change the page zoom with no 'not allowed' console error, and the switch hint to name Ctrl+Tab, the shortcut the app obeys. modifierHintsSayCmd now accepts the two hints that name a real Control shortcut on macOS (Ctrl+C in the terminal, Ctrl+Tab between conversations). If the zoom keys left the width unchanged, the capability is checked by the equivalent IPC call (plugin:webview|set_webview_zoom).",
+  "previousRun": {
+    "file": "docs/evidence/2026-10-13-macos-closure/m0-11-language-navigation.json",
+    "commit": "08b291d",
+    "defectsThen": [
+      "Sidebar hint said 'Cmd+Tab to switch conversations': Cmd+Tab left the conversation unchanged (and is the system app switcher), Ctrl+Tab switched (conversationSwitchMatchesItsHint false).",
+      "Cmd+Plus, Cmd+Minus, Cmd+0: innerWidth stayed 1280 and each key logged 'webview.set_webview_zoom not allowed. Permissions associated with this command: core:webview:allow-set-webview-zoom' (zoomKeysWork and noConsoleErrorBesidesResizeObserver false)."
+    ]
+  },
+  "surfaces": {
+    "home": {
+      "visibleStrings": 51,
+      "textHits": [],
+      "attributeHits": [],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Your ideas.\nA little further."
+      }
+    },
+    "conversation-with-approval-card": {
+      "visibleStrings": 69,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        },
+        {
+          "text": "<project 1>",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SPAN",
+          "cls": ""
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis réponds.",
+          "marker": null,
+          "functionWord": true,
+          "tag": "PRE",
+          "cls": ""
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "title",
+          "value": "<project 1>",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SPAN"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Électricité : vérifie le compteur, puis ré…"
+      }
+    },
+    "conversation": {
+      "visibleStrings": 60,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        },
+        {
+          "text": "<project 1>",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SPAN",
+          "cls": ""
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis réponds.",
+          "marker": null,
+          "functionWord": true,
+          "tag": "PRE",
+          "cls": ""
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "title",
+          "value": "<project 1>",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SPAN"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Électricité : vérifie le compteur, puis ré…"
+      }
+    },
+    "search": {
+      "visibleStrings": 65,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": true,
+        "heading": "Second conversation for the switch check."
+      }
+    },
+    "new-conversation": {
+      "visibleStrings": 57,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        },
+        {
+          "text": "<project 1>",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SMALL",
+          "cls": ""
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Your ideas.\nA little further."
+      }
+    },
+    "settings": {
+      "visibleStrings": 97,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": true,
+        "search": false,
+        "heading": "Settings"
+      }
+    },
+    "automations": {
+      "visibleStrings": 43,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Automations"
+      }
+    },
+    "extensions": {
+      "visibleStrings": 87,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Extensions"
+      }
+    },
+    "library": {
+      "visibleStrings": 34,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Library"
+      }
+    },
+    "archives": {
+      "visibleStrings": 21,
+      "textHits": [
+        {
+          "text": "projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "SUMMARY",
+          "cls": "project-group-header"
+        },
+        {
+          "text": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SPAN",
+          "cls": "session-title"
+        }
+      ],
+      "attributeHits": [
+        {
+          "attr": "aria-label",
+          "value": "Conversations in projet-électricité",
+          "marker": "Projet",
+          "functionWord": false,
+          "tag": "UL"
+        },
+        {
+          "attr": "title",
+          "value": "Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        },
+        {
+          "attr": "aria-label",
+          "value": "Actions for Électricité : vérifie le compteur, puis ré…",
+          "marker": null,
+          "functionWord": true,
+          "tag": "BUTTON"
+        }
+      ],
+      "modifierHints": [
+        {
+          "attr": "title",
+          "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+          "tag": "SPAN",
+          "cls": "brand-text"
+        },
+        {
+          "attr": "title",
+          "value": "New conversation · Cmd+N",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "Search · Cmd+K",
+          "tag": "BUTTON",
+          "cls": ""
+        },
+        {
+          "attr": "title",
+          "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+          "tag": "DIV",
+          "cls": "section-label threads-label"
+        }
+      ],
+      "surface": {
+        "settings": false,
+        "search": false,
+        "heading": "Archives"
+      }
+    }
+  },
+  "checks": {
+    "conversation1": {
+      "start": "ready",
+      "approve": {
+        "clicked": true,
+        "button": "Allow once",
+        "turnEnded": true
+      }
+    },
+    "displayPath": {
+      "shown": "<project 1>",
+      "title": "<project 1>",
+      "expected": "<project 1>"
+    },
+    "conversation2": {
+      "start": "ready",
+      "approve": {
+        "clicked": true,
+        "button": "Allow once",
+        "turnEnded": true
+      }
+    },
+    "search": {
+      "lower": {
+        "query": "électricité",
+        "results": [
+          "Électricité : vérifie le compteur, puis ré… Électricité : vérifie le compteur, p"
+        ],
+        "empty": false
+      },
+      "upper": {
+        "query": "ÉLECTRICITÉ",
+        "results": [
+          "Électricité : vérifie le compteur, puis ré… Électricité : vérifie le compteur, p"
+        ],
+        "empty": false
+      },
+      "unaccented": {
+        "query": "electricite",
+        "results": [],
+        "empty": true
+      }
+    },
+    "conversationSwitch": {
+      "hint": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+      "order": [
+        "conversation 1",
+        "conversation 2"
+      ],
+      "before": "conversation 1",
+      "afterCmdTab": "conversation 1 (unchanged)",
+      "afterCtrlTab": "conversation 2 (switched)"
+    },
+    "zoom": {
+      "hint": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+      "width0": 1280,
+      "afterCmdPlus": 1066,
+      "afterTwoCmdMinus": 1600,
+      "afterCmd0": 1280,
+      "keyDeniedErrors": 0
+    },
+    "shortcuts": {
+      "cmdK": true,
+      "escapeClosesSearch": true,
+      "cmdN": true,
+      "cmdComma": true,
+      "cmdCommaCloses": true,
+      "cmdB": true,
+      "cmdBRestores": true
+    },
+    "windowChrome": {
+      "customCaptionButtons": 0,
+      "platformMacosClass": true,
+      "dragRegions": 0,
+      "brandDragHandler": true
+    }
+  },
+  "isolation": {
+    "data": "<run>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<07e0dc51-1db4-5417-a4d9-34cacc237600>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "webview": {
+    "language": "en-GB",
+    "languages": [
+      "en-GB"
+    ],
+    "platform": "MacIntel"
+  },
+  "consoleErrors": [
+    "ResizeObserver loop completed with undelivered notifications."
+  ],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "modifierHints": [
+    {
+      "attr": "title",
+      "value": "Zoom window: Cmd+Plus enlarge, Cmd+Minus shrink, Cmd+0 reset zoom",
+      "tag": "SPAN",
+      "cls": "brand-text"
+    },
+    {
+      "attr": "title",
+      "value": "New conversation · Cmd+N",
+      "tag": "BUTTON",
+      "cls": ""
+    },
+    {
+      "attr": "title",
+      "value": "Search · Cmd+K",
+      "tag": "BUTTON",
+      "cls": ""
+    },
+    {
+      "attr": "title",
+      "value": "↑↓ to navigate · Ctrl+Tab to switch conversations",
+      "tag": "DIV",
+      "cls": "section-label threads-label"
+    }
+  ],
+  "verdicts": {
+    "everySurfaceReached": true,
+    "noFrenchChrome": true,
+    "modifierHintsSayCmd": true,
+    "cmdShortcutsWork": true,
+    "conversationSwitchMatchesItsHint": true,
+    "zoomKeysWork": true,
+    "zoomCapabilityGranted": true,
+    "searchCaseInsensitiveUnderSystemLocale": true,
+    "displayPathReadable": true,
+    "nativeTrafficLights": true,
+    "noConsoleErrorBesidesResizeObserver": true,
+    "cleanStop": true
+  },
+  "defects": [],
+  "limits": [
+    "No model turn: the conversation surfaces are the fixture's (approval card, tool lane, reply), the real engine's own texts are covered by the other macOS proofs (M0-05, M0-08).",
+    "Key events are delivered to the WKWebView by the bridge without activating the app: menu shortcuts and OS shortcuts (Cmd+Tab app switcher, Cmd+Q) are not exercised; in particular the OS takes Cmd+Tab before any app sees it.",
+    "Search is case-insensitive under the webview language (en-GB, system locale en_FR) and not accent-insensitive ('electricite' finds nothing): not a criterion of the ticket, recorded only.",
+    "Light/dark captures at the target desktop sizes are not committed (the header shows the temp folder path); the theme surfaces are M0-12's."
+  ]
+}
