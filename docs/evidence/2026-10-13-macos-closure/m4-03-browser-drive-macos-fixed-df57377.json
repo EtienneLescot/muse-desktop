@@ -1,0 +1,282 @@
+{
+  "schema": "muse-desktop.m4-03-browser-drive-macos.v1",
+  "ticket": "M4-03",
+  "date": "2026-10-13",
+  "commit": "df57377",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with embedded frontend, WKWebView through the test bridge",
+  "harness": "scripts/macos/m4-03-browser-drive.mjs on scripts/macos/test-instance.mjs (macOS replay of scripts/cdp-m4-03-acceptance.mjs)",
+  "liveTurns": 1,
+  "method": "One isolated test instance (fresh data folder and WKWebView store, pinned engine, its own computer-use socket named after the data folder). Settings > Computer use is driven with the bridge's trusted mouse: \"Observe and act\", then \"Attach the user's browser\". The service command line is read from ps. A Google Chrome is started by the harness on a temporary --user-data-dir (--use-mock-keychain, --password-store=basic, --remote-debugging-port in the proof range) with a decoy tab and a target tab served on 127.0.0.1; the harness refuses to start when any other Chrome runs, so the driver cannot bind the user's. A new conversation is started from the welcome screen with the instruction typed and sent with Enter; the model drives the browser through the app's computer-use relay. The outcome is read from Chrome's own DevTools list and from the test server's request log, neither of which goes through the driver or the model. Turn off and revoke ends it.",
+  "limits": [
+    "The browser is a Chrome started by the harness on a temporary profile, not the user's own signed-in browser: the attach consent and the binding are proved, the user's real profile (and Chrome's per-profile remote-debugging consent page, which a profile started without --remote-debugging-port would need) is Étienne's to try.",
+    "Defect found on 08b291d (test mode, macOS, engine 1.4.2) and fixed in df57377: the engine starts MCP stdio servers with a filtered environment, so the computer-use relay did not receive MUSE_DESKTOP_TEST_DATA_DIR and fell back to the user's default endpoint and level record; a test turn could have acted through the user's own service. Since df57377 the test instance's MCP entry names its folder in the relay's argv (--test-data-dir, test_mode::relay_args), and the relay check below reads it there. On 08b291d the model path stayed unproved and only the harness-driven driver half (3b) was shown; from df57377 the model drives the workflow and 3b is moot",
+    "Driver 0.28.2 on macOS refuses browser_click on the trusted route (Input.dispatchMouseEvent), by coordinates or by ref, even with the window brought to front: {effect: refused, escalation: route_unavailable}. The DOM route (input_route dom_event, a ref from get_browser_state mode snapshot) clicks and the page navigates; the driver reports that effect as unverifiable, so the outcome is read from Chrome. browser_navigate also works. Unlike the Windows note, snapshot refs do materialize here. A newer driver (0.34.1) is announced; not installed (nothing downloaded).",
+    "list_windows answers the model with a count only (\"Found N window(s)\"): the records are in structuredContent, which the host drops, and the relay surfaces snapshot and browser ids but not windows. get_accessibility_tree carries pid and window_id in its text, so the instruction names it (the first trial with list_windows ended with no window found).",
+    "Accessibility and Screen Recording were already granted to CuaDriver (com.trycua.driver) on this Mac; the grant itself is not part of this proof."
+  ],
+  "checks": {
+    "chromeBefore": {
+      "tabs": [
+        {
+          "title": "M4-03 Drive Target MV6I29W1",
+          "url": "http://127.0.0.1:9409/target.html"
+        },
+        {
+          "title": "M4-03 Decoy MV6I29W1",
+          "url": "http://127.0.0.1:9409/decoy.html"
+        }
+      ],
+      "processes": 1
+    },
+    "consent": {
+      "initial": {
+        "state": "Off",
+        "summary": "Muse cannot control this computer.",
+        "level": null,
+        "attach": false,
+        "busy": false,
+        "probes": []
+      },
+      "granted": {
+        "state": "Granted",
+        "summary": "Muse can use this computer, only through the granted tools, until you turn it off.",
+        "level": "act",
+        "attach": false,
+        "busy": false,
+        "probes": []
+      },
+      "attached": {
+        "state": "Granted",
+        "summary": "Muse can use this computer, only through the granted tools, until you turn it off.",
+        "level": "act",
+        "attach": true,
+        "busy": false,
+        "probes": []
+      },
+      "services": [
+        {
+          "parent": "launchd (open -n -g -a CuaDriver.app)",
+          "argv": "/Applications/CuaDriver.app/Contents/MacOS/cua-driver serve --socket <tmp>/muse-desktop-computer-test-77b5c289602767f0.sock --permission-mode standard --grant existing-profile"
+        }
+      ],
+      "recorded": true
+    },
+    "turn": {
+      "completed": true,
+      "ms": 109326,
+      "approvals": [
+        {
+          "title": "mcp__computer_use__get_accessibility_tree",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__browser_prepare",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__browser_prepare",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__browser_click",
+          "detail": ""
+        },
+        {
+          "title": "mcp__computer_use__get_browser_state",
+          "detail": ""
+        }
+      ],
+      "tools": [
+        "Approval requested: mcp__computer_use__get_accessibility_tree",
+        "Computer use · get accessibility tree 10 running app(s), 7 visible window(s) [inventory omitted]",
+        "Approval requested: mcp__computer_use__browser_prepare",
+        "Computer use · browser prepare browser_prepare: endpoint available — Attached to the approved existing Chromium profile. Bind the native window again before using browser capabilities.",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state bound target bt-20a71414-f334-4e49-80ea-32e0b1e29983 (exact) with 2 tab(s) target_id: bt-20a71414-f334-4e49-80ea-32e0b1e29983 browser tabs: - M4-03 Drive Target MV6I29W1 | tab_id: tab-42247647-a866-405f-8393",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state tool failed: confirmation provider failed: the browser operation requires an explicit session",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state tool failed: confirmation provider failed: target bt-20a71414-f334-4e49-80ea-32e0b1e29983 is not a live binding in this session — re-run get_browser_state with pid + window_id",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state refused (browser_consent_required): this standalone browser profile requires explicit existing-profile approval before Cua can inspect its DevTools endpoint",
+        "Approval requested: mcp__computer_use__browser_prepare",
+        "Computer use · browser prepare browser_prepare: endpoint available — Attached to the approved existing Chromium profile. Bind the native window again before using browser capabilities.",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state bound target bt-1a04ba3b-e5a2-4518-8a26-0b79b0edd8b6 (exact) with 2 tab(s) target_id: bt-1a04ba3b-e5a2-4518-8a26-0b79b0edd8b6 browser tabs: - M4-03 Drive Target MV6I29W1 | tab_id: tab-4687e404-8929-4776-a6af",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state snapshot p1 of http://127.0.0.1:9409/target.html: 1 interactive element(s) snapshot_id: p1 (pass it with element_index, for example click {pid, window_id, element_index, snapshot_id})",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state semantic snapshot p2 of http://127.0.0.1:9409/target.html: 1 action ref(s), 1 content ref(s)",
+        "Approval requested: mcp__computer_use__browser_click",
+        "Computer use · browser click dispatched synthetic DOM click on p2:0 in tab-4687e404-8929-4776-a6af-52135800ced5; application effect not verified (trust-gated controls may ignore untrusted events). Refresh page state and verify the expected ",
+        "Approval requested: mcp__computer_use__get_browser_state",
+        "Computer use · get browser state semantic snapshot p3 of http://127.0.0.1:9409/unexpected.html: 0 action ref(s), 2 content ref(s)"
+      ],
+      "screenSteps": [
+        "Computer use · get browser state"
+      ],
+      "reply": "Done. Used only computer-use tools, decoy tab untouched.\n\n1. `get_accessibility_tree`: Chrome pid `2991`, window `5552` titled 'M4-03 Drive Target MV6I29W1'\n2. `browser_prepare` pid 2991/window 5552, `existing_profile`: attached\n3. `get_browser_state` bind (session `m4-03`): target `bt-1a04ba3b-e5a2-4518-8a26-0b79b0edd8b6`, tabs:\n   - target `tab-4687e404-8929-4776-a6af-52135800ced5` (`target.html`)\n   - decoy `tab-ac4d1471-f10e-42c6-a689-cfea65820076` (left alone)\n4. `get_browser_state` snapshot target tab: `p1` (1 interactive), `p2` semantic (1 action, 1 content)\n5. `browser_click` `target_id=bt-1a04ba3b-e5a2-4518-8a26-0b79b0edd8b6`, `tab_id=tab-4687e404-8929-4776-a6af-52135800ced5`, `ref=p2:0`, `input_route=dom_event`: dispatched synthetic DOM click, effect unverified\n6. `get_browser_st",
+      "replyMentionsUnexpected": true,
+      "engineErrors": []
+    },
+    "relay": {
+      "relays": [
+        {
+          "pid": 3302,
+          "parent": "muse-bin serve",
+          "seesTestDataDir": true,
+          "seesTestSidecar": false,
+          "driverProxies": [
+            "<home>/.local/bin/cua-driver mcp --socket <tmp>/muse-desktop-computer-test-77b5c289602767f0.sock"
+          ],
+          "proxyOnDefaultSocket": false
+        }
+      ],
+      "servicesDuringTurn": [
+        {
+          "onTheUsersDefaultSocket": false,
+          "testSocket": true,
+          "argv": "/Applications/CuaDriver.app/Contents/MacOS/cua-driver serve --socket <tmp>/muse-desktop-computer-test-77b5c289602767f0.sock --permission-mode standard --grant existing-profile"
+        }
+      ]
+    },
+    "chromeAfter": {
+      "tabs": [
+        {
+          "title": "Unexpected Landing MV6I29W1",
+          "url": "http://127.0.0.1:9409/unexpected.html"
+        },
+        {
+          "title": "M4-03 Decoy MV6I29W1",
+          "url": "http://127.0.0.1:9409/decoy.html"
+        }
+      ],
+      "serverHits": [
+        "/unexpected.html"
+      ]
+    },
+    "driverHalf": {
+      "socket": "the instance's own test socket (the service the app started, --grant existing-profile)",
+      "tabsBefore": [
+        {
+          "title": "Unexpected Landing MV6I29W1",
+          "url": "http://127.0.0.1:9409/unexpected.html"
+        },
+        {
+          "title": "M4-03 Decoy MV6I29W1",
+          "url": "http://127.0.0.1:9409/decoy.html"
+        }
+      ],
+      "window": null,
+      "prepare": null,
+      "state": null,
+      "trustedCoordinateClick": null,
+      "tabsAfterTrustedClick": [
+        {
+          "title": "Unexpected Landing MV6I29W1",
+          "url": "http://127.0.0.1:9409/unexpected.html"
+        },
+        {
+          "title": "M4-03 Decoy MV6I29W1",
+          "url": "http://127.0.0.1:9409/decoy.html"
+        }
+      ],
+      "snapshotRefs": null,
+      "domEventRefClick": null,
+      "tabsAfter": [
+        {
+          "title": "Unexpected Landing MV6I29W1",
+          "url": "http://127.0.0.1:9409/unexpected.html"
+        },
+        {
+          "title": "M4-03 Decoy MV6I29W1",
+          "url": "http://127.0.0.1:9409/decoy.html"
+        }
+      ],
+      "serverHits": []
+    },
+    "revoked": {
+      "panel": {
+        "state": "Off",
+        "summary": "Muse cannot control this computer.",
+        "level": null,
+        "attach": false,
+        "busy": false,
+        "probes": []
+      },
+      "testServicesLeft": []
+    }
+  },
+  "preflight": {
+    "chromeVersion": "Google Chrome 155.0.8059.40",
+    "driverVersion": "cua-driver 0.28.2",
+    "otherChromesRunning": 0,
+    "driverServicesBefore": 0,
+    "serviceOnTheUsersDefaultSocketBefore": false
+  },
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "isolation": {
+    "data": "<proof>/data-mv6i29w1",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<c4610f59-0f2f-58fe-ae8d-5d23c411b37f>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "cleanup": {
+    "chromeLeft": 0,
+    "testServicesLeft": 0,
+    "serviceOnTheUsersDefaultSocket": false,
+    "profileDeleted": true
+  },
+  "verdicts": {
+    "1 consent recorded and the service restarted with --grant existing-profile": true,
+    "2 turn completed": true,
+    "2 browser_prepare called by the model": true,
+    "2 existing profile attached for the model (not refused)": true,
+    "2 get_browser_state bound the tabs for the model": true,
+    "2 browser_click executed": true,
+    "2 model reported the navigation": true,
+    "3 unexpected navigation happened (Chrome's own list)": true,
+    "3 decoy untouched": true,
+    "4 turn off and revoke stops the service": true,
+    "3b driver half on macOS: bind exact, a DOM-route ref click navigates the target, decoy untouched (harness-driven, when the model path failed)": true,
+    "isolation: the relay reaches the instance's own service, never the user's socket": true,
+    "clean stop": true
+  },
+  "passed": true
+}
