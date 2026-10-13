@@ -1,0 +1,1351 @@
+{
+  "schema": "muse-desktop.m2-05-handoff.macos.v1",
+  "ticket": "M2-05",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon, APFS (case-insensitive); debug build 08b291d with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "git": "git version 2.50.1 (Apple Git-155)",
+  "liveTurns": 2,
+  "harness": "scripts/macos/m2-05-handoff.mjs on scripts/macos/test-instance.mjs, bridge port 9455",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<53068481-96e0-5382-9fb9-3f29dee2cf3b>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": [
+    "Two isolated instances on the same data folder and WKWebView store; the first closed from its window (a real restart).",
+    "The conversation is started with the Projects panel's New conversation here (start_session, no turn), in a fresh Git repository with a local user config.",
+    "The Move action is the conversation's Actions dialog; its question is the dialog plugin's message box (plugin:dialog|message on macOS), answered Cancel or Ok by the IPC trace, which records the text it asked.",
+    "Both folders hashed (sha256/16 of every file, .git and .muse left out), git status --porcelain -uall and the index read outside the app before and after every step; Local watched with fs.watch (FSEvents) during the failing moves.",
+    "Windows' held-open file has no macOS equivalent (unlink succeeds on an open file): the immutable flag (chflags uchg) makes Git fail where a held file did, and is cleared after.",
+    "send_input is refused by the harness outside the two live turns, so no turn can start by accident."
+  ],
+  "phases": {
+    "setup": {
+      "start": {
+        "workspacePath": "<local>",
+        "ok": true
+      },
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<local>",
+          "host_workspace": null
+        },
+        "header": "<local>",
+        "logEntries": 0,
+        "lastSystemNotes": []
+      },
+      "repoClean": true
+    },
+    "move": {
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            "A  added.txt",
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [
+            "A\tadded.txt",
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "build.log": "3d8c2c24d7e7c53a",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "header": "<local>"
+      },
+      "cancelled": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true,
+          "label": "Move to worktree"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 5,
+            "untracked": 2
+          }
+        },
+        "move": null,
+        "moveCalls": 0,
+        "questions": [
+          {
+            "text": "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 5 changed files (staged changes arrive unstaged)\n• 2 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there.",
+            "answeredByHarness": true,
+            "answer": "Cancel"
+          }
+        ],
+        "worktreeCreated": [],
+        "ms": 6117,
+        "banner": null
+      },
+      "afterCancel": {
+        "localUnchanged": true,
+        "refs": 0,
+        "checkouts": 1
+      },
+      "action": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true,
+          "label": "Move to worktree"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 5,
+            "untracked": 2
+          }
+        },
+        "move": {
+          "target": "<worktree 1>",
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": "refs/muse/handoff/1791883114215",
+            "source": "<local>",
+            "target": "<worktree 1>",
+            "tracked": 5,
+            "untracked": 2
+          }
+        },
+        "moveCalls": 1,
+        "questions": [
+          {
+            "text": "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 5 changed files (staged changes arrive unstaged)\n• 2 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there.",
+            "answeredByHarness": true,
+            "answer": "Ok"
+          }
+        ],
+        "worktreeCreated": [
+          {
+            "ok": true,
+            "result": {
+              "repoRoot": "<local>",
+              "path": "<worktree 1>",
+              "branch": "muse/repo-gxveu",
+              "base": "HEAD",
+              "createdAt": 1791883113832
+            }
+          }
+        ],
+        "ms": 2427,
+        "banner": null
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "e71d970d34a50031",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-gxveu",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target"
+        ]
+      },
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<worktree 1>",
+          "host_workspace": "<local>"
+        },
+        "header": "<worktree 1>",
+        "logEntries": 1,
+        "lastSystemNotes": [
+          "Moved 5 changed files and 2 untracked files to <worktree 1>; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883114215."
+        ]
+      },
+      "lost": [],
+      "verdict": {
+        "cancelMovesNothing": true,
+        "questionGivesCounts": true,
+        "counts": {
+          "tracked": 5,
+          "untracked": 2,
+          "ignored": 1
+        },
+        "sameSession": true,
+        "worktreeBytesIdentical": true,
+        "localClean": true,
+        "ignoredStayed": true,
+        "stagingArrivesUnstaged": true,
+        "snapshotRefs": true,
+        "conversationFollows": true,
+        "noWorkLost": true
+      }
+    },
+    "turn1": {
+      "turn": {
+        "prompt": "M2-05 macOS proof, step 1. Use your shell tool to run pwd. Then use your file-reading tool to read notes/todo.md. Reply with two lines: the exact path pwd printed, then the first line of that file.",
+        "sendInput": {
+          "sessionId": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+          "ok": true
+        },
+        "finished": true,
+        "ms": 19399,
+        "approvals": [
+          {
+            "choices": [
+              "Allow once [approved/once]",
+              "Always allow in this workspace: pwd ... [approvedPolicyAmendment/localPersistent]",
+              "Reject [abort/once]"
+            ],
+            "clicked": "Allow once",
+            "ok": true
+          }
+        ],
+        "onCard": {
+          "moveWhileTurnRuns": {
+            "clicked": false,
+            "reason": "disabled",
+            "label": "Move back to local",
+            "title": "Muse is still responding: stop the response before moving this conversation."
+          },
+          "moveCallsSoFar": 1
+        },
+        "entries": [
+          {
+            "role": "user",
+            "text": "M2-05 macOS proof, step 1. Use your shell tool to run pwd. Then use your file-reading tool to read notes/todo.md. Reply with two lines: the exact path pwd printed, then the first line of that file."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: bash: pwd"
+          },
+          {
+            "role": "assistant",
+            "text": "<worktree 1>\n"
+          },
+          {
+            "role": "tool",
+            "text": "bash · Print working directory path"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "tool",
+            "text": "read_file · notes/todo.md\nRead text file `notes/todo.md`.\n1|- [ ] untracked note, only in the worktree after the move"
+          },
+          {
+            "role": "assistant",
+            "text": "<worktree 1>\n- [ ] untracked note, only in the worktree after the move\n"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "verdict": {
+        "finished": true,
+        "sameSessionId": true,
+        "shellInWorktree": true,
+        "fileToolReadWorktreeOnlyFile": true,
+        "moveRefusedWhileTurnRuns": true
+      }
+    },
+    "restart": {
+      "stopRun1": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "storedAtBoot": {
+        "workspace": "<worktree 1>",
+        "host_workspace": "<local>"
+      },
+      "resume": null,
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<worktree 1>",
+          "host_workspace": "<local>"
+        },
+        "header": "<worktree 1>",
+        "logEntries": 23,
+        "lastSystemNotes": [
+          "Moved 5 changed files and 2 untracked files to <worktree 1>; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883114215."
+        ]
+      },
+      "turn": {
+        "prompt": "M2-05 macOS proof, step 2, after an app restart. Use your shell tool to run pwd now, then reply with only the exact path it printed.",
+        "sendInput": {
+          "sessionId": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+          "ok": true
+        },
+        "finished": true,
+        "ms": 12088,
+        "approvals": [
+          {
+            "choices": [
+              "Allow once [approved/once]",
+              "Always allow in this workspace: pwd ... [approvedPolicyAmendment/localPersistent]",
+              "Reject [abort/once]"
+            ],
+            "clicked": "Allow once",
+            "ok": true
+          }
+        ],
+        "onCard": null,
+        "entries": [
+          {
+            "role": "user",
+            "text": "M2-05 macOS proof, step 2, after an app restart. Use your shell tool to run pwd now, then reply with only the exact path it printed."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: bash: pwd"
+          },
+          {
+            "role": "assistant",
+            "text": "<worktree 1>\n"
+          },
+          {
+            "role": "tool",
+            "text": "bash · Print working directory path"
+          },
+          {
+            "role": "assistant",
+            "text": "<worktree 1>"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "verdict": {
+        "closedFromWindow": true,
+        "storedInWorktree": true,
+        "resumedSameSession": true,
+        "resumedInWorktree": true,
+        "turnFinished": true,
+        "shellInWorktree": true
+      }
+    },
+    "back": {
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "e71d970d34a50031",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-gxveu",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target"
+        ]
+      },
+      "action": {
+        "label": "Move back to local",
+        "click": {
+          "clicked": true,
+          "label": "Move back to local"
+        },
+        "preview": {
+          "target": "<local>",
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 0,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<worktree 1>",
+            "target": "<local>",
+            "tracked": 4,
+            "untracked": 3
+          }
+        },
+        "move": {
+          "target": "<local>",
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 0,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": "refs/muse/handoff/1791883245526",
+            "source": "<worktree 1>",
+            "target": "<local>",
+            "tracked": 4,
+            "untracked": 3
+          }
+        },
+        "moveCalls": 1,
+        "questions": [
+          {
+            "text": "Move all the uncommitted work in this folder to Local, including changes made outside this conversation?\n\n• 4 changed files (staged changes arrive unstaged)\n• 3 untracked files\n• 0 ignored items left where they are\n\nThe conversation moves with them: its next message runs there.",
+            "answeredByHarness": true,
+            "answer": "Ok"
+          }
+        ],
+        "worktreeCreated": [],
+        "ms": 2753,
+        "banner": null
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "build.log": "3d8c2c24d7e7c53a",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-gxveu",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "e71d970d34a50031",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target",
+          "refs/muse/handoff/1791883245526/source",
+          "refs/muse/handoff/1791883245526/target"
+        ]
+      },
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<local>",
+          "host_workspace": "<local>"
+        },
+        "header": "<local>",
+        "logEntries": 24,
+        "lastSystemNotes": [
+          "Moved 5 changed files and 2 untracked files to <worktree 1>; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883114215.",
+          "Moved 4 changed files and 3 untracked files to <local>; 0 ignored items stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883245526."
+        ]
+      },
+      "lost": [],
+      "verdict": {
+        "questionAsked": true,
+        "moved": true,
+        "roundTripBytesIdentical": true,
+        "worktreeClean": true,
+        "stagingNotRestored": {
+          "before": [
+            "A  added.txt",
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "after": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ]
+        },
+        "conversationHome": true,
+        "snapshotRefs": true,
+        "noWorkLost": true
+      }
+    },
+    "conflict": {
+      "setupMove": {
+        "ok": true,
+        "counts": {
+          "tracked": 4,
+          "untracked": 20003
+        },
+        "during": {
+          "moveInFlightSeen": true,
+          "atMs": 16126,
+          "fieldDisabled": true,
+          "composerReason": null,
+          "moveStillInFlightAfterTry": true
+        },
+        "sendInputCalls": []
+      },
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M src/app.txt"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "51472b29b7717441",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "w2": {
+          "branch": "muse/repo-h14gz",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target",
+          "refs/muse/handoff/1791883245526/source",
+          "refs/muse/handoff/1791883245526/target",
+          "refs/muse/handoff/1791883272695/source",
+          "refs/muse/handoff/1791883272695/target"
+        ]
+      },
+      "ui": {
+        "label": "Move back to local",
+        "click": {
+          "clicked": true,
+          "label": "Move back to local"
+        },
+        "preview": {
+          "target": "<local>",
+          "ok": true,
+          "result": {
+            "conflicts": [
+              "src/app.txt"
+            ],
+            "ignored": 0,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>/.muse/worktrees/repo-h14gz",
+            "target": "<local>",
+            "tracked": 4,
+            "untracked": 3
+          }
+        },
+        "move": null,
+        "moveCalls": 0,
+        "questions": [],
+        "worktreeCreated": [],
+        "ms": 6375,
+        "banner": "Nothing was moved: 1 file would conflict in Local (src/app.txt). Commit, discard or move them there first."
+      },
+      "direct": {
+        "ok": false,
+        "error": "nothing was moved: 1 file(s) would conflict in the target: src/app.txt"
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M src/app.txt"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "51472b29b7717441",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "w2": {
+          "branch": "muse/repo-h14gz",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target",
+          "refs/muse/handoff/1791883245526/source",
+          "refs/muse/handoff/1791883245526/target",
+          "refs/muse/handoff/1791883272695/source",
+          "refs/muse/handoff/1791883272695/target"
+        ]
+      },
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<local>/.muse/worktrees/repo-h14gz",
+          "host_workspace": "<local>"
+        },
+        "header": "<local>/.muse/worktrees/repo-h14gz",
+        "logEntries": 25,
+        "lastSystemNotes": [
+          "Moved 4 changed files and 3 untracked files to <local>; 0 ignored items stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883245526.",
+          "Moved 4 changed files and 20003 untracked files to <local>/.muse/worktrees/repo-h14gz; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883272695."
+        ]
+      },
+      "lost": [],
+      "verdict": {
+        "sendDuringMoveNotTaken": true,
+        "previewConflict": true,
+        "refusedBeforeQuestion": true,
+        "supervisorRefuses": true,
+        "localUnchanged": true,
+        "worktreeUnchanged": true,
+        "noSnapshotRef": true,
+        "conversationStays": true,
+        "noWorkLost": true
+      }
+    },
+    "failure": {
+      "immutable": "src/app.txt (chflags uchg)",
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "e71d970d34a50031",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "w2": {
+          "branch": "muse/repo-h14gz",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target",
+          "refs/muse/handoff/1791883245526/source",
+          "refs/muse/handoff/1791883245526/target",
+          "refs/muse/handoff/1791883272695/source",
+          "refs/muse/handoff/1791883272695/target"
+        ]
+      },
+      "action": {
+        "label": "Move back to local",
+        "click": {
+          "clicked": true,
+          "label": "Move back to local"
+        },
+        "preview": {
+          "target": "<local>",
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 0,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>/.muse/worktrees/repo-h14gz",
+            "target": "<local>",
+            "tracked": 4,
+            "untracked": 3
+          }
+        },
+        "move": {
+          "target": "<local>",
+          "ok": false,
+          "result": "the target could not receive the changes; both sides were restored as they were: error: unable to unlink old 'src/app.txt': Operation not permitted"
+        },
+        "moveCalls": 1,
+        "questions": [
+          {
+            "text": "Move all the uncommitted work in this folder to Local, including changes made outside this conversation?\n\n• 4 changed files (staged changes arrive unstaged)\n• 3 untracked files\n• 0 ignored items left where they are\n\nThe conversation moves with them: its next message runs there.",
+            "answeredByHarness": true,
+            "answer": "Ok"
+          }
+        ],
+        "worktreeCreated": [],
+        "ms": 2731,
+        "banner": "The conversation was not moved: the target could not receive the changes; both sides were restored as they were: error: unable to unlink old 'src/app.txt': Operation not permitted"
+      },
+      "writtenPaths": [
+        "added.txt",
+        "assets/blob.bin",
+        "assets/new.bin",
+        "deleted.txt",
+        "notes",
+        "notes/todo.md",
+        "src/app.txt",
+        "staged.txt"
+      ],
+      "eventCount": 21,
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "deleted.txt": "7e01229da5a84bad",
+            "src/app.txt": "e71d970d34a50031",
+            "staged.txt": "bed8629d7d01a692"
+          }
+        },
+        "w2": {
+          "branch": "muse/repo-h14gz",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target",
+          "refs/muse/handoff/1791883245526/source",
+          "refs/muse/handoff/1791883245526/target",
+          "refs/muse/handoff/1791883272695/source",
+          "refs/muse/handoff/1791883272695/target",
+          "refs/muse/handoff/1791883298367/source",
+          "refs/muse/handoff/1791883298367/target"
+        ]
+      },
+      "newRefs": [
+        "refs/muse/handoff/1791883298367/source",
+        "refs/muse/handoff/1791883298367/target"
+      ],
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<local>/.muse/worktrees/repo-h14gz",
+          "host_workspace": "<local>"
+        },
+        "header": "<local>/.muse/worktrees/repo-h14gz",
+        "logEntries": 25,
+        "lastSystemNotes": [
+          "Moved 4 changed files and 3 untracked files to <local>; 0 ignored items stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883245526.",
+          "Moved 4 changed files and 20003 untracked files to <local>/.muse/worktrees/repo-h14gz; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883272695."
+        ]
+      },
+      "lost": [],
+      "verdict": {
+        "questionAsked": true,
+        "moveFailed": true,
+        "honestMessage": true,
+        "namesTheFile": true,
+        "wroteThenUndid": true,
+        "localRestored": true,
+        "worktreeUntouched": true,
+        "snapshotKept": true,
+        "conversationStays": true,
+        "noWorkLost": true
+      }
+    },
+    "held": {
+      "homeFirst": {
+        "ok": true,
+        "banner": null
+      },
+      "immutable": "notes/todo.md (chflags uchg, untracked)",
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "build.log": "3d8c2c24d7e7c53a",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": 10,
+        "checkouts": 3
+      },
+      "action": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true,
+          "label": "Move to worktree"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 4,
+            "untracked": 3
+          }
+        },
+        "move": {
+          "target": "<local>/.muse/worktrees/repo-h1yec",
+          "ok": false,
+          "result": "the source could not be cleaned (Git could not delete notes/todo.md) and restoring failed too (could not remove notes/todo.md: Operation not permitted (os error 1)); both sides are kept in refs/muse/handoff/1791883304810; the new worktree .muse/worktrees/repo-h1yec was kept: it holds files that are not in its checkout (branch muse/repo-h1yec)"
+        },
+        "moveCalls": 1,
+        "questions": [
+          {
+            "text": "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 4 changed files (staged changes arrive unstaged)\n• 3 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there.",
+            "answeredByHarness": true,
+            "answer": "Ok"
+          }
+        ],
+        "worktreeCreated": [
+          {
+            "ok": true,
+            "result": {
+              "repoRoot": "<local>",
+              "path": "<local>/.muse/worktrees/repo-h1yec",
+              "branch": "muse/repo-h1yec",
+              "base": "HEAD",
+              "createdAt": 1791883304331
+            }
+          }
+        ],
+        "ms": 2727,
+        "banner": "The conversation was not moved: the source could not be cleaned (Git could not delete notes/todo.md) and restoring failed too (could not remove notes/todo.md: Operation not permitted (os error 1)); both sides are kept in refs/muse/handoff/1791883304810; the new worktree .muse/worktrees/repo-h1yec was kept: it holds files that are not in its checkout (branch muse/repo-h1yec)"
+      },
+      "eventCount": 24,
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "README.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "build.log": "3d8c2c24d7e7c53a",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": [
+          "refs/muse/handoff/1791883114215/source",
+          "refs/muse/handoff/1791883114215/target",
+          "refs/muse/handoff/1791883245526/source",
+          "refs/muse/handoff/1791883245526/target",
+          "refs/muse/handoff/1791883272695/source",
+          "refs/muse/handoff/1791883272695/target",
+          "refs/muse/handoff/1791883298367/source",
+          "refs/muse/handoff/1791883298367/target",
+          "refs/muse/handoff/1791883302268/source",
+          "refs/muse/handoff/1791883302268/target",
+          "refs/muse/handoff/1791883304810/source",
+          "refs/muse/handoff/1791883304810/target"
+        ],
+        "museBranches": [
+          "muse/repo-gxveu",
+          "muse/repo-h14gz",
+          "muse/repo-h1yec"
+        ],
+        "checkouts": 4,
+        "targetExists": true
+      },
+      "view": {
+        "active": "01a1348e-4ee2-7ff1-b00e-01df02feeeaf",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<local>",
+          "host_workspace": "<local>"
+        },
+        "header": "<local>",
+        "logEntries": 26,
+        "lastSystemNotes": [
+          "Moved 4 changed files and 20003 untracked files to <local>/.muse/worktrees/repo-h14gz; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883272695.",
+          "Moved 4 changed files and 3 untracked files to <local>; 0 ignored items stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791883302268."
+        ]
+      },
+      "lost": [],
+      "verdict": {
+        "homeFirst": true,
+        "questionAsked": true,
+        "worktreeMadeForTheMove": true,
+        "moveFailed": true,
+        "honestMessage": true,
+        "namesTheFile": true,
+        "worktreeFateAsSaid": true,
+        "worktreeOutcome": "kept, as the message says",
+        "localByteIdentical": true,
+        "conversationStays": true,
+        "noWorkLost": true
+      }
+    },
+    "case": {
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            "R  README.md -> Readme.md",
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [
+            "R100\tREADME.md\tReadme.md"
+          ],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "Readme.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "build.log": "3d8c2c24d7e7c53a",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": 12,
+        "museBranches": [
+          "muse/repo-gxveu",
+          "muse/repo-h14gz",
+          "muse/repo-h1yec"
+        ],
+        "checkouts": 4
+      },
+      "ui": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true,
+          "label": "Move to worktree"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 6,
+            "untracked": 3
+          }
+        },
+        "move": {
+          "target": "<local>/.muse/worktrees/repo-h21gb",
+          "ok": false,
+          "result": "nothing was moved: 2 file(s) would conflict in the target: Readme.md, README.md; the new worktree .muse/worktrees/repo-h21gb was removed with its branch muse/repo-h21gb, as nothing was left in it"
+        },
+        "moveCalls": 1,
+        "questions": [
+          {
+            "text": "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 6 changed files (staged changes arrive unstaged)\n• 3 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there.",
+            "answeredByHarness": true,
+            "answer": "Ok"
+          }
+        ],
+        "worktreeCreated": [
+          {
+            "ok": true,
+            "result": {
+              "repoRoot": "<local>",
+              "path": "<local>/.muse/worktrees/repo-h21gb",
+              "branch": "muse/repo-h21gb",
+              "base": "HEAD",
+              "createdAt": 1791883308289
+            }
+          }
+        ],
+        "ms": 2427,
+        "banner": "The conversation was not moved: nothing was moved: 2 file(s) would conflict in the target: Readme.md, README.md; the new worktree .muse/worktrees/repo-h21gb was removed with its branch muse/repo-h21gb, as nothing was left in it"
+      },
+      "eventCount": 0,
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            "R  README.md -> Readme.md",
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? added.txt",
+            "?? assets/new.bin",
+            "?? notes/todo.md"
+          ],
+          "staged": [
+            "R100\tREADME.md\tReadme.md"
+          ],
+          "files": {
+            ".gitignore": "318d9a16533732a6",
+            "Readme.md": "b9183aa27f831a92",
+            "added.txt": "7ef8bf7a81e5523a",
+            "assets/blob.bin": "a0de622643324c73",
+            "assets/new.bin": "b3789bd66f7c5909",
+            "build.log": "3d8c2c24d7e7c53a",
+            "notes/todo.md": "9aa7f5eb70550a44",
+            "src/app.txt": "f609eeb3d78ac0cd",
+            "staged.txt": "32340b4414efab22"
+          }
+        },
+        "refs": 12,
+        "museBranches": [
+          "muse/repo-gxveu",
+          "muse/repo-h14gz",
+          "muse/repo-h1yec"
+        ],
+        "checkouts": 4,
+        "worktreeExists": false
+      },
+      "lost": [],
+      "verdict": {
+        "outcome": "refused at the move",
+        "refusedWithoutLoss": true,
+        "worktreeRemovedIfMade": true,
+        "noLocalFileEvent": true,
+        "noWorkLost": true
+      }
+    }
+  },
+  "w1": "<worktree 1>",
+  "stopRun1": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true
+  },
+  "finalLocalMatchesWork": true,
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "verdicts": {
+    "move.cancelMovesNothing": true,
+    "move.questionGivesCounts": true,
+    "move.sameSession": true,
+    "move.worktreeBytesIdentical": true,
+    "move.localClean": true,
+    "move.ignoredStayed": true,
+    "move.stagingArrivesUnstaged": true,
+    "move.snapshotRefs": true,
+    "move.conversationFollows": true,
+    "move.noWorkLost": true,
+    "turn1.finished": true,
+    "turn1.sameSessionId": true,
+    "turn1.shellInWorktree": true,
+    "turn1.fileToolReadWorktreeOnlyFile": true,
+    "turn1.moveRefusedWhileTurnRuns": true,
+    "restart.closedFromWindow": true,
+    "restart.storedInWorktree": true,
+    "restart.resumedSameSession": true,
+    "restart.resumedInWorktree": true,
+    "restart.turnFinished": true,
+    "restart.shellInWorktree": true,
+    "back.questionAsked": true,
+    "back.moved": true,
+    "back.roundTripBytesIdentical": true,
+    "back.worktreeClean": true,
+    "back.conversationHome": true,
+    "back.snapshotRefs": true,
+    "back.noWorkLost": true,
+    "conflict.sendDuringMoveNotTaken": true,
+    "conflict.previewConflict": true,
+    "conflict.refusedBeforeQuestion": true,
+    "conflict.supervisorRefuses": true,
+    "conflict.localUnchanged": true,
+    "conflict.worktreeUnchanged": true,
+    "conflict.noSnapshotRef": true,
+    "conflict.conversationStays": true,
+    "conflict.noWorkLost": true,
+    "failure.questionAsked": true,
+    "failure.moveFailed": true,
+    "failure.honestMessage": true,
+    "failure.namesTheFile": true,
+    "failure.wroteThenUndid": true,
+    "failure.localRestored": true,
+    "failure.worktreeUntouched": true,
+    "failure.snapshotKept": true,
+    "failure.conversationStays": true,
+    "failure.noWorkLost": true,
+    "held.homeFirst": true,
+    "held.questionAsked": true,
+    "held.worktreeMadeForTheMove": true,
+    "held.moveFailed": true,
+    "held.honestMessage": true,
+    "held.namesTheFile": true,
+    "held.worktreeFateAsSaid": true,
+    "held.localByteIdentical": true,
+    "held.conversationStays": true,
+    "held.noWorkLost": true,
+    "case.refusedWithoutLoss": true,
+    "case.worktreeRemovedIfMade": true,
+    "case.noLocalFileEvent": true,
+    "case.noWorkLost": true
+  },
+  "limits": [
+    "Staging arrives unstaged, as the question says (same as Windows).",
+    "The confirmation box and the folder dialog are answered through the IPC trace; the native NSAlert is not driven.",
+    "The immutable flag stands in for Windows' held-open file: on macOS an open file does not stop Git.",
+    "Engine session store and Keychain shared with the user (ADR 0003 amendment)."
+  ],
+  "passed": true
+}
