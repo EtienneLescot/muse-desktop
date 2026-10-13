@@ -1,0 +1,149 @@
+{
+  "schema": "muse-desktop.m4-05-rich-docs-macos.v1",
+  "ticket": "M4-05",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with embedded frontend, WKWebView through the test bridge",
+  "harness": "scripts/macos/m4-05-rich-docs.mjs on scripts/macos/test-instance.mjs",
+  "liveTurns": 1,
+  "method": "One isolated test instance (fresh data folder, its own WKWebView store, pinned engine with auto-update off). The DOCX, XLSX, PDF and PNG are built by the script (stored ZIP with OOXML parts, a one-page PDF, a zlib PNG) in the project folder. A blue PNG is attached to the first message on the welcome screen and sent with Enter (one live turn): the model is asked for its colour. The Files work panel then opens each file with the bridge's trusted mouse; the preview is read from the DOM (table cells, the PDF <object> and whether its fallback text is laid out, the image's decoded size). Last, a DOCX is put on the conversation composer's file input. NSOpenPanel cannot be driven over the bridge and the bridge has no DOM.setFileInputFiles, so the files reach <input type=file> through its files setter (a DataTransfer built in the page from the same bytes) and its change event.",
+  "limits": [
+    "The file picker itself (NSOpenPanel, and whether it greys out files outside the input's accept list) is not driven: the files enter at the input's files setter.",
+    "The PDF reader is checked through the DOM (the <object> keeps its size and its fallback text is not laid out, so WebKit's PDF view took it); its pixels are not compared.",
+    "The composer refuses a DOCX on every platform at 08b291d: readAttachment (src/lib/attachments.ts) takes images and text extensions only and the input's accept list has no office type. The Windows run of cdp-m4-05-rich-docs.mjs that the roadmap cites (m4-05-rich-docs.json) is not in the repository; its verdict tested the transcript tail against /could not be read/, which the refusal text does not match. The criterion is recorded here as measured, false.",
+    "Model variance, measured while writing this proof: with a 48x32 PNG the model answered blue once, white once and once started a shell tool to look for the file; with the 256x192 PNG of the recorded run it answered blue. The image part was on the wire (send_input carried an image part) every time.",
+    "Generation of an image or a document by the engine is not part of the criteria and is not measured; neither is Open in app (it would open another application on the desktop)."
+  ],
+  "checks": {
+    "imageRead": {
+      "attach": "set 1",
+      "chips": {
+        "chips": [
+          "▧ m4-05.png ×"
+        ],
+        "error": null
+      },
+      "sentParts": [
+        {
+          "cmd": "send_input",
+          "parts": [
+            "\"type\":\"text\"",
+            "\"type\":\"image\""
+          ]
+        }
+      ],
+      "userEntryAttachments": null,
+      "answer": "blue",
+      "transcriptRoles": [
+        "user:The image is attached inline to this message; look at it dir",
+        "assistant:",
+        "subagent:Reminder child session",
+        "assistant:blue",
+        "subagent:Reminder child session",
+        "subagent:Reminder child session"
+      ],
+      "runningDot": "false"
+    },
+    "files": {
+      "m4-05.xlsx": {
+        "head": "m4-05.xlsx",
+        "label": "XLSX preview · 2 KB",
+        "table": [
+          [
+            "Ticket",
+            "Result"
+          ],
+          [
+            "M4-05",
+            "QUALIF-mv6gi42w"
+          ]
+        ],
+        "caption": "Structured preview of m4-05.xlsx",
+        "text": "m4-05.xlsx XLSX preview · 2 KB Open in app XLSX · 1 rows Structured preview of m4-05.xlsx Ticket Result M4-05 QUALIF-mv6gi42w",
+        "pdfObject": null,
+        "image": null
+      },
+      "m4-05.docx": {
+        "head": "m4-05.docx",
+        "label": "DOCX preview · 1 KB",
+        "table": [
+          [
+            "Paragraph"
+          ],
+          [
+            "M4-05 DOCX BODY mv6gi42w"
+          ],
+          [
+            "Second paragraph"
+          ]
+        ],
+        "caption": "Structured preview of m4-05.docx",
+        "text": "m4-05.docx DOCX preview · 1 KB Open in app DOCX · 2 rows Structured preview of m4-05.docx Paragraph M4-05 DOCX BODY mv6gi42w Second paragraph",
+        "pdfObject": null,
+        "image": null
+      },
+      "m4-05.pdf": {
+        "head": "m4-05.pdf",
+        "label": "PDF preview · 592 B",
+        "table": null,
+        "caption": null,
+        "text": "m4-05.pdf PDF preview · 592 B Open in app PDF preview · 592 B",
+        "pdfObject": {
+          "type": "application/pdf",
+          "width": 173,
+          "height": 360,
+          "fallbackRendered": false
+        },
+        "image": null
+      },
+      "m4-05.png": {
+        "head": "m4-05.png",
+        "label": "Image preview · 660 B",
+        "table": null,
+        "caption": null,
+        "text": "m4-05.png Image preview · 660 B Open in app Image preview · image/png",
+        "pdfObject": null,
+        "image": {
+          "naturalWidth": 256,
+          "naturalHeight": 192,
+          "complete": true
+        }
+      }
+    },
+    "screenshots": {
+      "taken": true,
+      "keptOutsideTheRepository": "the screenshots show the temp folder path, so they stay in the proof folder; on the 13/10 run the PDF screenshot showed the PDF's own text drawn in the Files preview"
+    },
+    "composerDocx": {
+      "attach": "set 1",
+      "chips": [],
+      "error": "m4-05.docx: only text files and images can be attached",
+      "acceptList": "image/*,text/*,.md,.mdx,.ts,.tsx,.js,.jsx,.json,.css,.html,.rs,.py,.go,.java,.sh,.yaml,.yml,.toml"
+    }
+  },
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "isolation": {
+    "data": "<proof>/data-mv6gi42w",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<5f6df3d2-2df1-590e-8ea0-ee2ad8f5830c>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "verdicts": {
+    "1 an attached image is read by the engine": true,
+    "2 XLSX: structured office preview in Files": true,
+    "2 DOCX: structured office preview in Files": true,
+    "3 PDF: rendered by WKWebView's reader": true,
+    "3 PNG: rendered as an image": true,
+    "4 DOCX on the composer: accepted as an attachment": false,
+    "clean stop": true
+  },
+  "passed": false
+}
