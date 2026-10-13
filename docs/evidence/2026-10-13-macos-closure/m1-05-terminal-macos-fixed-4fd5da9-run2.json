@@ -1,0 +1,350 @@
+{
+  "schema": "muse-desktop.m1-05-terminal-macos.v1",
+  "ticket": "M1-05",
+  "date": "2026-10-13",
+  "commit": "4fd5da9",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 4fd5da9 with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m1-05-terminal.mjs (+ m1-05-terminal-lib.mjs) on scripts/macos/test-instance.mjs, bridge port 9403",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<9c8fa57e-7e5f-559e-abff-edd73aa4c7d9>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": "One isolated instance (own data folder, own WKWebView store, default stores compared before and after). A project folder under the proof's temp folder (git repo with four fixtures). Its conversation is created from the welcome screen; the first message is refused by the harness IPC guard (send_input blocked) then discarded: no turn reaches the engine. The Terminal work tab opens the app's PTY (portable-pty, /dev/ptmx) with the app's shell ($SHELL); ZDOTDIR points at a proof folder with a one-line .zshrc (prompt '[m1p <cwd>]% '), so ~/.zshrc and ~/.zsh_history are never touched. Input goes through the panel's own field: CDP Input.insertText, then a real Enter; Ctrl+C/D/L, Tab and Escape are AppKit key events delivered by the bridge (isTrusted). Output is read twice: the DOM the user sees and the raw terminal_read stream tapped on the page's fetch. Processes are identified by PID and start time (ps lstart); the server is requested from outside by the harness (node fetch to 127.0.0.1).",
+  "env": {
+    "LANG": null,
+    "LC_ALL": null,
+    "LC_CTYPE": null,
+    "SHELL": "/bin/zsh"
+  },
+  "checks": {
+    "conversation": {
+      "sessionCreated": true,
+      "sends": 1,
+      "everySendRefusedByHarness": true
+    },
+    "shell-in-cwd": {
+      "terminalOpen": {
+        "shell": "/bin/zsh",
+        "cwd": "<project>",
+        "cols": 100,
+        "rows": 28,
+        "ms": 10
+      },
+      "promptShown": true,
+      "shellProcess": "/bin/zsh",
+      "shellIsChildOfApp": true,
+      "pwdOutput": [
+        "<project>",
+        "<project>"
+      ]
+    },
+    "ansi": {
+      "ran": true,
+      "rawHasSgr": true,
+      "colours": {
+        "ANSI-RED": {
+          "color": "rgb(239, 68, 68)",
+          "weight": "400"
+        },
+        "ANSI-GREEN": {
+          "color": "rgb(34, 197, 94)",
+          "weight": "400"
+        },
+        "ANSI-C256": {
+          "color": "rgb(255, 135, 0)",
+          "weight": "400"
+        },
+        "ANSI-RGB": {
+          "color": "rgb(10, 120, 250)",
+          "weight": "400"
+        },
+        "ANSI-BOLD": {
+          "color": "rgb(214, 231, 245)",
+          "weight": "600"
+        },
+        "plainColor": "rgb(214, 231, 245)"
+      }
+    },
+    "unicode-echo": {
+      "ok": true,
+      "lines": [
+        "e\becho é€😀",
+        "é€😀"
+      ],
+      "outputLineExact": true,
+      "replacementChars": 0,
+      "domShowsIt": true,
+      "backspacesInDom": 7
+    },
+    "unicode-locale": {
+      "shellLocale": [
+        "LANG=\"en_US.UTF-8\"",
+        "LC_CTYPE=\"en_US.UTF-8\""
+      ],
+      "echoedCommandAsHandedOver": "e\becho é€😀",
+      "lsAsHandedOver": "name-é€😀.txt",
+      "utf8SubshellStarted": true,
+      "echoedCommandUnderUtf8": "e\becho é€😀; ls name-*.txt",
+      "lsUnderUtf8": "name-é€😀.txt"
+    },
+    "unicode-input": {
+      "ok": true,
+      "read": "e9,20ac,1f600",
+      "expected": "e9,20ac,1f600"
+    },
+    "unicode-long": {
+      "shortRun": true,
+      "wideRun": true,
+      "rawChars": 137503,
+      "rawBytesApprox": 297503,
+      "exactUnicodeLines": 1500,
+      "exactWideLines": 4000,
+      "rawReplacementChars": 0,
+      "rawLoneSurrogates": 0,
+      "domChars": 139564,
+      "domReplacementChars": 0,
+      "domHasLastLine": true,
+      "brokenRawLines": []
+    },
+    "python-repl": {
+      "started": true,
+      "process": "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Conten",
+      "underShell": true,
+      "typed": [
+        {
+          "line": "python3 -q",
+          "inputBeforeEnter": "python3 -q",
+          "sent": true
+        },
+        {
+          "line": "6*7",
+          "inputBeforeEnter": "6*7",
+          "sent": true
+        },
+        {
+          "line": "name = input(chr(78) + chr(63) + chr(32))",
+          "inputBeforeEnter": "name = input(chr(78) + chr(63) + chr(32))",
+          "sent": true
+        },
+        {
+          "line": "interactive-ok",
+          "inputBeforeEnter": "interactive-ok",
+          "sent": true
+        },
+        {
+          "line": "print(name.upper())",
+          "inputBeforeEnter": "print(name.upper())",
+          "sent": true
+        }
+      ],
+      "sixTimesSeven": true,
+      "inputPrompt": true,
+      "inputDelivered": true,
+      "readBack": true,
+      "ctrlDBackToShell": true,
+      "replGoneAfterCtrlD": true,
+      "transcript": [
+        "p\bpython3 -q",
+        ">>> 6*7",
+        "42",
+        ">>> name = input(chr(78) + chr(63) + chr(32)) \b",
+        "N? interactive-ok",
+        ">>> print(name.upper())",
+        "INTERACTIVE-OK",
+        ">>> ^D",
+        "%                                             [m1p <project>]% "
+      ]
+    },
+    "ctrl-c": {
+      "pingReplies": true,
+      "pingProcessSeen": true,
+      "statisticsPrinted": true,
+      "caretShown": true,
+      "pingGone": true,
+      "tail": [
+        "^C",
+        "--- 127.0.0.1 ping statistics ---",
+        "3 packets transmitted, 3 packets received, 0.0% packet loss",
+        "round-trip min/avg/max/stddev = 0.063/0.197/0.311/0.102 ms",
+        "%                                             [m1p <project>]% "
+      ]
+    },
+    "resize": {
+      "window": {
+        "height": 800,
+        "left": 320,
+        "top": 71,
+        "width": 1280,
+        "windowState": "normal"
+      },
+      "base": {
+        "rows": 24,
+        "cols": 45,
+        "label": "45×24"
+      },
+      "bigger": {
+        "rows": 34,
+        "cols": 64,
+        "label": "64×34"
+      },
+      "manual": {
+        "rows": 34,
+        "cols": 74,
+        "label": "74×34"
+      },
+      "manualLater": {
+        "rows": 34,
+        "cols": 74,
+        "label": "74×34"
+      },
+      "restored": {
+        "rows": 24,
+        "cols": 45,
+        "label": "45×24"
+      }
+    },
+    "typed-quotes": {
+      "typed": "echo 'q1 q2' \"q3\" -- end",
+      "fieldValue": "echo 'q1 q2' \"q3\" -- end",
+      "shellOutput": [
+        "q1 q2 q3 -- end"
+      ],
+      "inputAttributes": {
+        "spellcheck": "false",
+        "autocorrect": null,
+        "autocomplete": "off"
+      }
+    },
+    "shortcuts-informational": {
+      "escapeClearsInput": true,
+      "tab": {
+        "raw": "\"    \"",
+        "inputValue": "cat serv"
+      },
+      "ctrlLClearSequence": true,
+      "ctrlLRaw": "\"\\u001b[H\\u001b[2J\\u001b[0m\\u001b[27m\\u001b[24m\\u001b[J[m1p <proof>/proj\""
+    },
+    "server-across-views": {
+      "listening": true,
+      "serverUnderShell": true,
+      "requests": [
+        {
+          "path": "/visible-1",
+          "status": 200,
+          "error": null
+        },
+        {
+          "path": "/hidden-tab-1",
+          "status": 200,
+          "error": null
+        },
+        {
+          "path": "/hidden-page-1",
+          "status": 200,
+          "error": null
+        },
+        {
+          "path": "/visible-2",
+          "status": 200,
+          "error": null
+        }
+      ],
+      "settingsPageShown": true,
+      "sameTerminalAfterReturn": true,
+      "terminalOpensOnReturn": [],
+      "readsOfThatTerminal": 175,
+      "serverStillSameProcess": true,
+      "ticksShown": 11,
+      "maxTick": 11,
+      "missingTicks": [],
+      "hitsShown": [
+        "1 /visible-1",
+        "2 /hidden-tab-1",
+        "3 /hidden-page-1",
+        "4 /visible-2"
+      ]
+    },
+    "close-no-orphan": {
+      "closeOk": true,
+      "treeBeforeClose": [
+        "<home>/muse-proofs/engine/1.4.2-R4684.1/muse-bin serve --sandbox-network rest",
+        "/bin/zsh",
+        "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/"
+      ],
+      "shellGone": true,
+      "serverGone": true,
+      "within10s": true,
+      "serverPortAfterClose": "ECONNREFUSED",
+      "panelAfterClose": "No terminal running Open one to start a shell in this workspace. Open terminal",
+      "treeAfterClose": [
+        "<home>/muse-proofs/engine/1.4.2-R4684.1/muse-bin serve --sandbox-network rest"
+      ]
+    },
+    "restart-and-exit": {
+      "newTerminal": true,
+      "sameCwd": true,
+      "promptShown": true,
+      "newShellProcess": true,
+      "exitTyped": "e\bexit\n",
+      "processExitedShown": true,
+      "shellGoneAfterExit": true
+    },
+    "quit-no-orphan": {
+      "quitBy": "window closed",
+      "shellGone": true,
+      "serverGone": true,
+      "serverPortAfterQuit": "ECONNREFUSED",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": []
+    },
+    "everyWatchedProcessGone": {
+      "watched": 6,
+      "survivors": []
+    }
+  },
+  "verdicts": {
+    "shellInProjectCwd": true,
+    "ansiRendered": true,
+    "unicodeProgramOutputAndInput": true,
+    "unicodeShellEcho": true,
+    "interactiveRepl": true,
+    "ctrlCInterrupts": true,
+    "resizeFollowsPane": true,
+    "typedQuotesReachShell": true,
+    "serverAcrossViews": true,
+    "closeLeavesNoOrphan": true,
+    "closeRestart": true,
+    "quitLeavesNoOrphan": true,
+    "noOrphanAtEnd": true,
+    "isolationKept": true,
+    "all": true
+  },
+  "previousRun": {
+    "file": "docs/evidence/2026-10-13-macos-closure/m1-05-terminal-macos.json",
+    "commit": "08b291d",
+    "defectsThen": [
+      "unicodeShellEcho false: the PTY shell had no LANG (GUI app environment), zsh ran under LC_CTYPE=C, echoed typed UTF-8 as U+FFFD and <0082>-style escapes, and `ls` printed a non-ASCII name as '?????????'.",
+      "typedQuotesReachShell false: typed one key at a time, `echo 'q1 q2' \"q3\" -- end` reached zsh as `echo ‘q1 q2’ “q3” — end` (system smart quotes and dashes on an input with no spellcheck attribute)."
+    ],
+    "expectationNow": "Replay on 4fd5da9 (terminal.rs sets LANG=en_US.UTF-8 when no locale is set; spellCheck={false} on the terminal input): both verdicts are expected true, with the same checks and the same harness environment (no LANG, LC_ALL or LC_CTYPE, as a Finder launch)."
+  },
+  "findings": [],
+  "limits": [
+    "Typing goes through Input.insertText (AppKit insertText:, the path typed characters take) and AppKit key events from the bridge; no physical keyboard. The checks other than typed-quotes insert a whole line at once, which WKWebView does not substitute.",
+    "ZDOTDIR points at a proof folder: the user's own ~/.zshrc (prompt themes, plugins) is not exercised, and is not read or written.",
+    "The app inherits the harness's environment (no LANG, as a Finder launch); a launch from a terminal that exports LANG would hide the locale defect.",
+    "The panel is a log-style view, not a screen emulator: full-screen programs are out of reach (same limit as on Windows), and zsh's backspace after the first typed character shows as a control glyph (backspacesInDom)."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  }
+}
