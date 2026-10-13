@@ -191,7 +191,9 @@ report.limits = [
   "No UI was driven in the installed app (the agent was not granted control of it): the real turn in the packaged app, the two-project scenario of M0-01 and the Gatekeeper box of a quarantined download are Étienne's (docs/plans/2026-10-13-macos-sessions-with-etienne.md, step 7).",
   "The DMGs were downloaded with the GitHub CLI, which sets no quarantine attribute: spctl checks the signature and the notarisation, not the first-open dialog.",
   "Entries the app rewrites at launch are listed under `changed`; an entry or a file is lost only if it is under `missing`.",
+  "The app relaunches the user's own computer-use service from the saved level; closing it with SIGTERM skips its exit handler, so a service left on the default socket is reported in `servicesLeft` and must be stopped (`cua-driver stop --socket …`).",
 ];
+report.servicesLeft = shAll("pgrep", ["-fl", "cua-driver serve"]).split("\n").filter(Boolean).map(redact);
 report.passed = Object.values(report.verdicts).every(Boolean);
 writeFileSync(OUT, `${redact(JSON.stringify(report, null, 2))}\n`);
 console.log(JSON.stringify({ passed: report.passed, verdicts: report.verdicts }, null, 2));

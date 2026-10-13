@@ -164,7 +164,8 @@
   "limits": [
     "No UI was driven in the installed app (the agent was not granted control of it): the real turn in the packaged app, the two-project scenario of M0-01 and the Gatekeeper box of a quarantined download are Étienne's (docs/plans/2026-10-13-macos-sessions-with-etienne.md, step 7).",
     "The DMGs were downloaded with the GitHub CLI, which sets no quarantine attribute: spctl checks the signature and the notarisation, not the first-open dialog.",
-    "Entries the app rewrites at launch are listed under `changed`; an entry or a file is lost only if it is under `missing`."
+    "Entries the app rewrites at launch are listed under `changed`; an entry or a file is lost only if it is under `missing`.",
+    "Observed after the run: launching the installed app restarted the user's own computer-use service from the level saved in the user's profile (cua-driver serve on the default socket, computer-manifest.json rewritten at 14:54), and closing the app with SIGTERM, which skips the app's exit handler, left that service running under launchd. It was stopped with `cua-driver stop` after the run; none ran before. Whether it also outlives a normal Cmd+Q is to check in Étienne's session (step 7)."
   ],
   "passed": true
 }
