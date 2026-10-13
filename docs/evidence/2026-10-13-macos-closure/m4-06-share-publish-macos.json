@@ -1,0 +1,276 @@
+{
+  "schema": "muse-desktop.macos-m4-06-share-publish.v1",
+  "ticket": "M4-06",
+  "date": "2026-10-13",
+  "commit": "df57377",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build df57377 with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m4-06-share-publish.mjs on scripts/macos/test-instance.mjs, with the reference server scripts/share-server.mjs (unchanged) bound to 127.0.0.1 by scripts/macos/m4-06-loopback.mjs (G9 ports 9490-9499)",
+  "criteria": "docs/ROADMAP.md §M4-06 (Windows ◐, 30/09/2026, docs/evidence/2026-09-27-m4-closure/m4-06-publish-proof.json): endpoint configured, snapshot, publish with a bounded duration, the URL shown only after the server's real 201, a second client reads it without any token, Revoke, then 404 for every client; honest error copy (403 token, service unreachable). Remaining by design: a real LAN/VPS host and a second device.",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<f1562bb2-17b7-5cf4-b2a5-498f80a716e0>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment): fresh data folder, its own WKWebView store, the pinned engine with MUSE_NO_AUTO_UPDATE=1, CDP through the test bridge.",
+    "The reference server runs as the user would run it (SHARE_TOKEN, --port, --state), its listen moved to 127.0.0.1 by a preload; lsof reads the bind back. The publish token and the wrong token are drawn here and never recorded.",
+    "A page tap on window.fetch records the webview's requests to the service (method, path, whether an Authorization header left, status or error, answer time); the page records when the URL appears, so 'URL after the 201' is an order of measured times.",
+    "The second client is curl (a separate program, no cookie, no token); the revoked link is read without and with the token.",
+    "Fingerprint (size, mtime) of ~/.config/muse and ~/.local/share/muse/{plugins,skills} before and after."
+  ],
+  "steps": {
+    "turn": {
+      "replied": true,
+      "entries": [
+        {
+          "role": "user",
+          "chars": 52
+        },
+        {
+          "role": "assistant",
+          "chars": 0
+        },
+        {
+          "role": "subagent",
+          "chars": 22
+        },
+        {
+          "role": "assistant",
+          "chars": 15
+        },
+        {
+          "role": "subagent",
+          "chars": 22
+        },
+        {
+          "role": "subagent",
+          "chars": 22
+        }
+      ]
+    },
+    "snapshot": {
+      "endpointBefore": null,
+      "before": 0,
+      "after": 1,
+      "said": null,
+      "bundle": {
+        "title": "Reply with exactly SHARE-G9-6C15FE and not…",
+        "meta": "13/10/2026, 11:59:57 · markdown",
+        "url": null,
+        "notes": [
+          "Configure a service above to publish this bundle."
+        ],
+        "buttons": []
+      },
+      "verdict": {
+        "noServiceAtStart": true,
+        "oneBundle": true,
+        "notPublishedYet": true
+      }
+    },
+    "server": {
+      "banner": "share mini-server listening on :9493 (token set)",
+      "listening": [
+        "127.0.0.1:9493"
+      ]
+    },
+    "refusals": {
+      "unreachable": {
+        "configured": "Configured: http://127.0.0.1:9494 (token set)",
+        "clicked": true,
+        "durationHours": 24,
+        "clickedAtMs": 841,
+        "urlAtMs": null,
+        "bundles": [
+          {
+            "title": "Reply with exactly SHARE-G9-6C15FE and not…",
+            "meta": "13/10/2026, 11:59:57 · markdown",
+            "url": null,
+            "notes": [],
+            "buttons": [
+              "Publish"
+            ]
+          }
+        ],
+        "alerts": [
+          "the share service did not answer: TypeError: Load failed"
+        ],
+        "requests": [
+          {
+            "atMs": 842,
+            "port": 9494,
+            "path": "/muse-share/share-9gj0vkqk",
+            "method": "PUT",
+            "authorization": true,
+            "error": "Load failed",
+            "answeredAtMs": 867
+          }
+        ]
+      },
+      "wrongToken": {
+        "configured": "Configured: http://127.0.0.1:9493 (token set)",
+        "clicked": true,
+        "durationHours": 24,
+        "clickedAtMs": 2305,
+        "urlAtMs": null,
+        "bundles": [
+          {
+            "title": "Reply with exactly SHARE-G9-6C15FE and not…",
+            "meta": "13/10/2026, 11:59:57 · markdown",
+            "url": null,
+            "notes": [],
+            "buttons": [
+              "Publish"
+            ]
+          }
+        ],
+        "alerts": [
+          "the service refused the token (403)"
+        ],
+        "requests": [
+          {
+            "atMs": 2306,
+            "port": 9493,
+            "path": "/muse-share/share-9gj0vkqk",
+            "method": "PUT",
+            "authorization": true,
+            "status": 403,
+            "answeredAtMs": 2331
+          }
+        ],
+        "secondClientAfter": {
+          "status": 404
+        }
+      },
+      "verdict": {
+        "serverOnLoopbackOnly": true,
+        "unreachableHonest": true,
+        "wrongTokenHonest": true,
+        "nothingPublished": true
+      }
+    },
+    "publish": {
+      "configured": "Configured: http://127.0.0.1:9493 (token set)",
+      "storedEndpointHasToken": true,
+      "durationHours": 24,
+      "clickedAtMs": 3554,
+      "urlAtMs": 3657,
+      "put": {
+        "atMs": 3555,
+        "port": 9493,
+        "path": "/muse-share/share-9gj0vkqk",
+        "method": "PUT",
+        "authorization": true,
+        "status": 201,
+        "answeredAtMs": 3563
+      },
+      "url": "<server>/muse-share/share-9gj0vkqk",
+      "alerts": [],
+      "buttons": [
+        "Copy link",
+        "Revoke"
+      ],
+      "secondClient": {
+        "client": "curl, no token",
+        "status": 200,
+        "carriesNonce": true,
+        "format": "markdown",
+        "title": "Reply with exactly SHARE-G9-6C15FE and not…",
+        "bodyChars": 334,
+        "redacted": null,
+        "expiresInHours": 24
+      },
+      "verdict": {
+        "configured": true,
+        "putAnswered201": true,
+        "urlShownAfterThe201": true,
+        "urlIsTheServers": true,
+        "secondClientReadsWithoutToken": true,
+        "boundedDuration": true
+      }
+    },
+    "revoke": {
+      "clicked": true,
+      "notes": [
+        "Revoked — the link returns 404 for every client."
+      ],
+      "urlStillShown": null,
+      "buttons": [],
+      "alerts": [],
+      "requests": [
+        {
+          "atMs": 3990,
+          "port": 9493,
+          "path": "/muse-share/share-9gj0vkqk",
+          "method": "DELETE",
+          "authorization": true,
+          "status": 204,
+          "answeredAtMs": 4001
+        }
+      ],
+      "secondClientAfter": {
+        "withoutToken": 404,
+        "withToken": 404
+      },
+      "verdict": {
+        "deleteAnswered204": true,
+        "uiSaysRevoked": true,
+        "noRepublishOffered": true,
+        "secondClient404": true,
+        "evenWithToken404": true
+      }
+    },
+    "forget": {
+      "clicked": true,
+      "configured": null,
+      "stored": "null",
+      "verdict": {
+        "cleared": true
+      }
+    }
+  },
+  "verdicts": {
+    "live turn: a conversation with messages": true,
+    "snapshot: one local bundle, not published": true,
+    "no URL before a real 201 (service unreachable, wrong token 403)": true,
+    "publish: 201, then the server's URL shown; a second client reads it without token; 24 h expiry": true,
+    "revoke: 204, UI says Revoked, 404 for every client": true,
+    "forget clears the service": true,
+    "clean exit, server stopped, no process left": true,
+    "user engine settings untouched": true
+  },
+  "limits": [
+    "Loopback only (rule of this proof): the service runs on this Mac at 127.0.0.1. A real LAN/VPS host and a second device (Étienne's phone) stay to be done, as on Windows.",
+    "The publish runs from WKWebView in the debug executable, which has no app bundle: whether App Transport Security lets the installed, bundled app publish over plain HTTP to a LAN address or a named host is not exercised here.",
+    "The engine's session store is shared with the user (ADR 0003): the proof conversation stays there."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "serverStop": {
+    "stoppedBy": "SIGINT",
+    "listenersAfter": []
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true
+}
