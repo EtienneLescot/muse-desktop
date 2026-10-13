@@ -1,0 +1,456 @@
+{
+  "schema": "muse-desktop.m2-01-project-roots.macos.v1",
+  "ticket": "M2-01",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m2-01-project-roots.mjs on scripts/macos/test-instance.mjs, bridge port 9451",
+  "method": "Two isolated instances on the same data folder and WKWebView store (a real restart: the first window closed, the process gone). The OS folder dialog is answered by the IPC trace (plugin:dialog|open) with the folder a user would pick; the root-less project is written in the pre-root format to localStorage, then the page reloads. Roots live under the resolved temp folder (/private/var/...), the spelling a macOS open panel returns.",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<70cc9cb9-cb38-53f3-9b68-58ea877ff1f8>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "run1": {
+    "create": {
+      "pickerSays": "4 folders selected",
+      "stored": {
+        "id": "mv6fusyc-addjjm",
+        "workspace": "<root A>",
+        "workspaces": [
+          "<root A>",
+          "<root B>",
+          "<root C>",
+          "<root D>"
+        ],
+        "workspaceReviewed": true
+      },
+      "panel": {
+        "summary": "macos-m2-01 0 conversations",
+        "folders": [
+          {
+            "path": "<root A>",
+            "health": null,
+            "reason": null
+          },
+          {
+            "path": "<root B>",
+            "health": null,
+            "reason": null
+          },
+          {
+            "path": "<root C>",
+            "health": null,
+            "reason": null
+          },
+          {
+            "path": "<root D>",
+            "health": null,
+            "reason": null
+          }
+        ]
+      }
+    },
+    "legacyBefore": {
+      "notice": "1 project need a folder",
+      "row": {
+        "summary": "macos-m2-01-legacy 0 conversations folder needed",
+        "folders": []
+      }
+    },
+    "legacyAfter": {
+      "notice": null,
+      "stored": {
+        "workspace": "<root E>",
+        "workspaceReviewed": true
+      },
+      "panel": {
+        "summary": "macos-m2-01-legacy 0 conversations",
+        "folders": [
+          {
+            "path": "<root E>",
+            "health": null,
+            "reason": null
+          }
+        ]
+      }
+    },
+    "checkAllPresent": {
+      "summary": "macos-m2-01 0 conversations",
+      "folders": [
+        {
+          "path": "<root A>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root B>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root C>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root D>",
+          "health": "Available",
+          "reason": "Folder is available."
+        }
+      ]
+    },
+    "inspectCalls": [
+      {
+        "path": "<root A>",
+        "ok": true,
+        "result": {
+          "path": "<root A>",
+          "exists": true,
+          "is_directory": true,
+          "canonical_path": "<root A>",
+          "reason": "Folder is available."
+        }
+      },
+      {
+        "path": "<root B>",
+        "ok": true,
+        "result": {
+          "path": "<root B>",
+          "exists": true,
+          "is_directory": true,
+          "canonical_path": "<root B>",
+          "reason": "Folder is available."
+        }
+      },
+      {
+        "path": "<root C>",
+        "ok": true,
+        "result": {
+          "path": "<root C>",
+          "exists": true,
+          "is_directory": true,
+          "canonical_path": "<root C>",
+          "reason": "Folder is available."
+        }
+      },
+      {
+        "path": "<root D>",
+        "ok": true,
+        "result": {
+          "path": "<root D>",
+          "exists": true,
+          "is_directory": true,
+          "canonical_path": "<root D>",
+          "reason": "Folder is available."
+        }
+      }
+    ],
+    "startHere": {
+      "selected": "<root A>",
+      "clicked": true,
+      "startSession": {
+        "workspacePath": "<root A>",
+        "ok": true,
+        "sessionId": "01a13472-ba94-7173-b77f-f1ce182c4b29"
+      },
+      "after": {
+        "attachedTo": "mv6fusyc-addjjm",
+        "workspace": "<root A>",
+        "logEntries": 0
+      }
+    },
+    "welcomeB": {
+      "picked": true,
+      "note": "Runs in root-b. The agent reads the rules of that folder.",
+      "startSession": {
+        "workspacePath": "<root B>",
+        "projectId": null,
+        "ok": true,
+        "sessionId": "01a13472-cc89-79d0-ac48-ef9f8aea807b"
+      },
+      "replyStored": true,
+      "after": {
+        "attachedTo": "mv6fusyc-addjjm",
+        "workspace": "<root B>"
+      }
+    },
+    "engineProcesses": [
+      {
+        "argv": "muse-bin serve --sandbox-network restricted --trust-workspace",
+        "cwd": "<root A>"
+      },
+      {
+        "argv": "muse-bin serve --sandbox-network restricted --trust-workspace",
+        "cwd": "<root B>"
+      }
+    ],
+    "checkAfterMove": {
+      "summary": "macos-m2-01 2 conversations",
+      "folders": [
+        {
+          "path": "<root A>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root B>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root C>",
+          "health": "Missing",
+          "reason": "The configured folder could not be found."
+        },
+        {
+          "path": "<root D>",
+          "health": "Not a folder",
+          "reason": "The configured path is a file, not a folder."
+        }
+      ]
+    },
+    "storedRoots": {
+      "workspace": "<root A>",
+      "workspaces": [
+        "<root A>",
+        "<root B>",
+        "<root C>",
+        "<root D>"
+      ]
+    },
+    "macosSpellings": {
+      "varSpelling": {
+        "path": "<proof>/root-a",
+        "exists": true,
+        "is_directory": true,
+        "canonical_path": "<root A>",
+        "reason": "Folder is available."
+      },
+      "caseChanged": {
+        "path": "<root A>",
+        "exists": true,
+        "is_directory": true,
+        "canonical_path": "<root A>",
+        "reason": "Folder is available."
+      },
+      "varSpellingGiven": true,
+      "varSpellingCanonicalIsRootA": true,
+      "caseChangedAvailable": true,
+      "caseChangedCanonicalExactlyRootA": true,
+      "caseChangedPathKeptAsGiven": true
+    },
+    "verdict": {
+      "multiRootStored": true,
+      "panelListsFourRoots": true,
+      "legacyNoticeShown": true,
+      "legacyMigrated": true,
+      "allAvailable": true,
+      "startHereInRootA": true,
+      "welcomeStartInRootB": true,
+      "liveTurnAnsweredInRootB": true,
+      "engineRunsInRootB": true,
+      "observationsDistinct": true,
+      "rootsNotRewritten": true
+    }
+  },
+  "consoleErrorsRun1": [],
+  "stopRun1": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true
+  },
+  "run2": {
+    "stored": {
+      "project": {
+        "id": "mv6fusyc-addjjm",
+        "workspace": "<root A>",
+        "workspaces": [
+          "<root A>",
+          "<root B>",
+          "<root C>",
+          "<root D>"
+        ],
+        "workspaceReviewed": true
+      },
+      "legacy": {
+        "id": "macos-legacy-mv6fur60",
+        "workspace": "<root E>",
+        "workspaceReviewed": true
+      },
+      "attached": [
+        {
+          "sid": "01a13472-ba94-7173-b77f-f1ce182c4b29",
+          "workspace": "<root A>"
+        },
+        {
+          "sid": "01a13472-cc89-79d0-ac48-ef9f8aea807b",
+          "workspace": "<root B>"
+        }
+      ]
+    },
+    "panel": {
+      "notice": null,
+      "project": {
+        "summary": "macos-m2-01 2 conversations",
+        "folders": [
+          {
+            "path": "<root A>",
+            "health": null,
+            "reason": null
+          },
+          {
+            "path": "<root B>",
+            "health": null,
+            "reason": null
+          },
+          {
+            "path": "<root C>",
+            "health": null,
+            "reason": null
+          },
+          {
+            "path": "<root D>",
+            "health": null,
+            "reason": null
+          }
+        ]
+      },
+      "legacy": {
+        "summary": "macos-m2-01-legacy 0 conversations",
+        "folders": [
+          {
+            "path": "<root E>",
+            "health": null,
+            "reason": null
+          }
+        ]
+      }
+    },
+    "checkAfterRestart": {
+      "summary": "macos-m2-01 2 conversations",
+      "folders": [
+        {
+          "path": "<root A>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root B>",
+          "health": "Available",
+          "reason": "Folder is available."
+        },
+        {
+          "path": "<root C>",
+          "health": "Missing",
+          "reason": "The configured folder could not be found."
+        },
+        {
+          "path": "<root D>",
+          "health": "Not a folder",
+          "reason": "The configured path is a file, not a folder."
+        }
+      ]
+    },
+    "picker": [
+      {
+        "optionId": "mv6fusyc-addjjm:0",
+        "label": "macos-m2-01 · root-a",
+        "workspace": "<root A>"
+      },
+      {
+        "optionId": "mv6fusyc-addjjm:1",
+        "label": "macos-m2-01 · root-b",
+        "workspace": "<root B>"
+      },
+      {
+        "optionId": "mv6fusyc-addjjm:2",
+        "label": "macos-m2-01 · root-c",
+        "workspace": "<root C>"
+      },
+      {
+        "optionId": "mv6fusyc-addjjm:3",
+        "label": "macos-m2-01 · root-d",
+        "workspace": "<root D>"
+      }
+    ],
+    "startInMissingRoot": {
+      "picked": true,
+      "note": "Runs in root-c. The agent reads the rules of that folder.",
+      "alerts": [
+        "This conversation could not be started. — workspace is not a directory: <root C>"
+      ],
+      "sessionsAdded": 0,
+      "draftKept": true,
+      "calls": [
+        {
+          "cmd": "start_session",
+          "ok": false,
+          "blockedByHarness": false,
+          "result": "\"workspace is not a directory: <root C>\""
+        }
+      ]
+    },
+    "verdict": {
+      "rootsPersisted": true,
+      "migrationPersisted": true,
+      "observationsAfterRestart": true,
+      "conversationsStillAttached": true,
+      "pickerOptionIds": [
+        "<projectId>:0",
+        "<projectId>:1",
+        "<projectId>:2",
+        "<projectId>:3"
+      ],
+      "pickerOffersEveryRoot": true,
+      "missingRootStartRefused": true,
+      "choiceKeptAfterFailedStart": true
+    }
+  },
+  "consoleErrorsRun2": [],
+  "stopRun2": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "verdicts": {
+    "multiRootStored": true,
+    "panelListsFourRoots": true,
+    "legacyNoticeShown": true,
+    "legacyMigrated": true,
+    "allAvailable": true,
+    "startHereInRootA": true,
+    "welcomeStartInRootB": true,
+    "liveTurnAnsweredInRootB": true,
+    "engineRunsInRootB": true,
+    "observationsDistinct": true,
+    "rootsNotRewritten": true,
+    "afterRestart.rootsPersisted": true,
+    "afterRestart.migrationPersisted": true,
+    "afterRestart.observationsAfterRestart": true,
+    "afterRestart.conversationsStillAttached": true,
+    "afterRestart.pickerOffersEveryRoot": true,
+    "afterRestart.missingRootStartRefused": true,
+    "afterRestart.choiceKeptAfterFailedStart": true
+  },
+  "checks": {
+    "pickerOptionIds": [
+      "<projectId>:0",
+      "<projectId>:1",
+      "<projectId>:2",
+      "<projectId>:3"
+    ]
+  },
+  "passed": true,
+  "limits": [
+    "The folder dialog is answered by the harness: the native NSOpenPanel is not driven (no Accessibility grant); the paths given are those it would return.",
+    "Engine session store and Keychain are shared with the user, as on Windows (ADR 0003 amendment)."
+  ]
+}
