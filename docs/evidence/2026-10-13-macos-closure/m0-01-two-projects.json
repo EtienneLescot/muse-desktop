@@ -1,0 +1,319 @@
+{
+  "schema": "muse-desktop.m0-01-two-projects.v1",
+  "ticket": "M0-01",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 3,
+  "harness": "scripts/macos/m0-01-two-projects.mjs on scripts/macos/test-instance.mjs (launch), bridge port 9411",
+  "isolation": {
+    "data": "<proof>/m0-01/MV6FXNHS/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<b06c1761-491a-5df9-97c5-c09a40b6f1d2>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": "One isolated instance on the pinned engine (MUSE_NO_AUTO_UPDATE=1). Project A and project B are two fresh folders under the proof folder, each created from the welcome screen (folder dialog answered by the IPC trace) with a real Enter. A long counting turn in A; while it streams, a long counting turn in B. Both rows show Working at once and both transcripts grow. B's engine host, found as the muse-bin serve child of the app whose working directory (lsof) is B, gets SIGKILL mid-turn. Then: what B shows and the host list over 12 s, A finishing on the same host pid, a new turn in A, B's transcript, and the window closed with nothing left (app pid and every host pid gone).",
+  "steps": [
+    {
+      "label": "A/start",
+      "at": "08:50:25.652",
+      "ui": "ready"
+    },
+    {
+      "label": "A/sent",
+      "at": "08:50:26.974",
+      "sidA": "01a13474-b622-7d11-82e3-e68f7a7b2f47"
+    },
+    {
+      "label": "A/streaming",
+      "at": "08:50:32.522",
+      "aFirstText": true
+    },
+    {
+      "label": "B/start",
+      "at": "08:50:32.628",
+      "ui": "ready"
+    },
+    {
+      "label": "B/sent",
+      "at": "08:50:33.147",
+      "sidB": "01a13474-cf64-7431-a1cc-ceb9333dc925"
+    },
+    {
+      "label": "both/running",
+      "at": "08:50:46.644",
+      "bothRunning": true,
+      "growth": [
+        {
+          "a": 4206,
+          "b": 105
+        },
+        {
+          "a": 4218,
+          "b": 604
+        },
+        {
+          "a": 4218,
+          "b": 988
+        },
+        {
+          "a": 4218,
+          "b": 1436
+        }
+      ],
+      "hosts": [
+        {
+          "pid": 44988,
+          "ppid": 44957,
+          "cwd": "<proof>/m0-01/MV6FXNHS/project-a",
+          "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+        },
+        {
+          "pid": 45047,
+          "ppid": 44957,
+          "cwd": "<proof>/m0-01/MV6FXNHS/project-b",
+          "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+        }
+      ]
+    },
+    {
+      "label": "B/host-killed",
+      "at": "08:50:46.647",
+      "pid": 45047,
+      "aRunning": true
+    },
+    {
+      "label": "B/after-kill",
+      "at": "08:51:01.405",
+      "honestStatus": {
+        "sid": "01a13474-cf64-7431-a1cc-ceb9333dc925",
+        "title": "Count from 1 to 3000, one number per line,…",
+        "state": "Ready",
+        "connection": "Connecting",
+        "notice": null,
+        "reconnect": [
+          "Reconnect"
+        ],
+        "composer": {
+          "value": "",
+          "disabled": true
+        },
+        "stop": null,
+        "hostEndedLine": true,
+        "msAfterKill": 285
+      },
+      "timeline": [
+        {
+          "ms": 3,
+          "state": "Working",
+          "connection": "Connected",
+          "hostEndedLine": false,
+          "reconnect": [],
+          "hosts": [
+            {
+              "pid": 44988,
+              "project": "A"
+            }
+          ]
+        },
+        {
+          "ms": 285,
+          "state": "Ready",
+          "connection": "Connecting",
+          "hostEndedLine": true,
+          "reconnect": [
+            "Reconnect"
+          ],
+          "hosts": [
+            {
+              "pid": 44988,
+              "project": "A"
+            },
+            {
+              "pid": 45187,
+              "project": "B"
+            }
+          ]
+        },
+        {
+          "ms": 920,
+          "state": "Ready",
+          "connection": "Connected",
+          "hostEndedLine": true,
+          "reconnect": [],
+          "hosts": [
+            {
+              "pid": 44988,
+              "project": "A"
+            },
+            {
+              "pid": 45187,
+              "project": "B"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "A/after-kill",
+      "at": "08:51:01.473",
+      "view": {
+        "sid": "01a13474-b622-7d11-82e3-e68f7a7b2f47",
+        "title": "Count from 1 to 3000, one number per line,…",
+        "state": "Working",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": {
+          "text": "Stop",
+          "disabled": false
+        },
+        "hostEndedLine": false
+      }
+    },
+    {
+      "label": "A/done",
+      "at": "08:51:23.699",
+      "msAfterKill": 37052,
+      "view": {
+        "sid": "01a13474-b622-7d11-82e3-e68f7a7b2f47",
+        "title": "Count from 1 to 3000, one number per line,…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "roles": [
+        "user",
+        "assistant",
+        "subagent",
+        "thinking",
+        "assistant",
+        "subagent",
+        "subagent"
+      ]
+    },
+    {
+      "label": "A/new-turn",
+      "at": "08:51:42.266",
+      "replied": true,
+      "sends": [
+        {
+          "sessionId": "01a13474-b622-7d11-82e3-e68f7a7b2f47",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "label": "hosts/after",
+      "at": "08:51:42.381",
+      "hosts": [
+        {
+          "pid": 44988,
+          "ppid": 44957,
+          "cwd": "<proof>/m0-01/MV6FXNHS/project-a",
+          "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+        },
+        {
+          "pid": 45187,
+          "ppid": 44957,
+          "cwd": "<proof>/m0-01/MV6FXNHS/project-b",
+          "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+        }
+      ],
+      "bView": {
+        "sid": "01a13474-cf64-7431-a1cc-ceb9333dc925",
+        "title": "Count from 1 to 3000, one number per line,…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": true
+      },
+      "bRoles": [
+        "assistant",
+        "user",
+        "subagent",
+        "thinking",
+        "assistant",
+        "system",
+        "system",
+        "subagent"
+      ]
+    },
+    {
+      "label": "sessions",
+      "at": "08:51:42.385",
+      "sessions": [
+        {
+          "sid": "01a13474-b622-7d11-82e3-e68f7a7b2f47",
+          "workspace": "<proof>/m0-01/MV6FXNHS/project-a"
+        },
+        {
+          "sid": "01a13474-cf64-7431-a1cc-ceb9333dc925",
+          "workspace": "<proof>/m0-01/MV6FXNHS/project-b"
+        }
+      ]
+    }
+  ],
+  "checks": {
+    "twoHostsTwoFolders": true,
+    "bothWorkingAtOnce": true,
+    "streamsInterleaved": true,
+    "aNotDoneBeforeKill": true,
+    "bHonestStatus": true,
+    "bNotRunning": true,
+    "bTurnNotFinished": true,
+    "aRunningThroughBDeath": true,
+    "aStillWorkingAfterKill": true,
+    "aFinishedAfterKill": true,
+    "aNoErrorNoHostEnd": true,
+    "aSameHost": true,
+    "aNewTurn": true,
+    "bTranscriptKept": true,
+    "bKilledTurnNotReplayed": true,
+    "identitiesKept": true,
+    "nothingLeftAfterClose": true,
+    "ourProcessesGone": true
+  },
+  "verdicts": {
+    "concurrentTurnsInTwoProjects": true,
+    "onlyBDisconnected": true,
+    "aFinishesAfterBDies": true,
+    "aKeepsIdentityAndRequests": true,
+    "bKeepsItsTranscript": true,
+    "nothingLeftAfterClose": true
+  },
+  "limits": [
+    "The engine's session store (~/.local/share/muse/sessions) is the user's, shared by the test instance (ADR 0003).",
+    "Debug build in test mode, not the notarised release build: the packaged repetition stays with the DMG (M4-09 session)."
+  ],
+  "observations": {
+    "bHostRespawnedByResumeOnOpenAtMs": 285
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "passed": true
+}
