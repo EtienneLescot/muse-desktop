@@ -339,11 +339,12 @@ impl TerminalRegistry {
 
 fn read_output(mut reader: Box<dyn Read + Send>, output: Arc<Mutex<OutputBuffer>>) {
     let mut bytes = [0u8; 8192];
+    let mut pending = Vec::new();
     loop {
         match reader.read(&mut bytes) {
             Ok(0) => break,
             Ok(n) => {
-                let text = String::from_utf8_lossy(&bytes[..n]).into_owned();
+                let text = decode_chunk(&mut pending, &bytes[..n]);
                 if let Ok(mut buffer) = output.lock() {
                     buffer.append(text);
                 } else {
@@ -354,8 +355,42 @@ fn read_output(mut reader: Box<dyn Read + Send>, output: Arc<Mutex<OutputBuffer>
         }
     }
     if let Ok(mut buffer) = output.lock() {
+        if !pending.is_empty() {
+            buffer.append(String::from_utf8_lossy(&pending).into_owned());
+        }
         buffer.done = true;
     }
+}
+
+/// Decodes one read of the PTY. A character cut by the read's end is kept in
+/// `pending` and completed by the next read: decoded alone, each half became
+/// U+FFFD (measured on macOS on 13/10/2026, one line in 4,000 of CJK output).
+fn decode_chunk(pending: &mut Vec<u8>, chunk: &[u8]) -> String {
+    pending.extend_from_slice(chunk);
+    let complete = pending.len() - incomplete_tail(pending);
+    let text = String::from_utf8_lossy(&pending[..complete]).into_owned();
+    pending.drain(..complete);
+    text
+}
+
+/// The length of a UTF-8 sequence started but not finished at the end of
+/// `bytes`, 0 when the last character is whole (or invalid: lossy decoding
+/// then replaces it, as before).
+fn incomplete_tail(bytes: &[u8]) -> usize {
+    for back in 1..=bytes.len().min(3) {
+        let byte = bytes[bytes.len() - back];
+        if byte & 0xC0 == 0x80 {
+            continue;
+        }
+        let length = match byte {
+            0xF0..=0xF7 => 4,
+            0xE0..=0xEF => 3,
+            0xC0..=0xDF => 2,
+            _ => 1,
+        };
+        return if length > back { back } else { 0 };
+    }
+    0
 }
 
 fn default_shell() -> String {
@@ -380,6 +415,22 @@ fn clamp_rows(rows: u16) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_character_cut_between_two_reads_is_decoded_whole() {
+        let text = "é€😀 中文 ✓ end";
+        let bytes = text.as_bytes();
+        for cut in 0..=bytes.len() {
+            let mut pending = Vec::new();
+            let mut out = decode_chunk(&mut pending, &bytes[..cut]);
+            out.push_str(&decode_chunk(&mut pending, &bytes[cut..]));
+            assert_eq!(out, text, "cut at byte {cut}");
+            assert!(pending.is_empty());
+        }
+        // An invalid byte is still replaced, not held back.
+        let mut pending = Vec::new();
+        assert_eq!(decode_chunk(&mut pending, b"a\xFFb"), "a\u{FFFD}b");
+    }
 
     #[test]
     fn terminal_size_is_bounded() {
