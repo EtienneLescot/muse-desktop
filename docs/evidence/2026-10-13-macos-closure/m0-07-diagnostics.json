@@ -1,0 +1,607 @@
+{
+  "schema": "muse-desktop.m0-07-diagnostics-macos.v1",
+  "ticket": "M0-07",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, debug build with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m0-07-diagnostics.mjs (+ scripts/macos/m0-07-08-fake-engine.mjs, mode flood), port 9421",
+  "isolation": {
+    "data": "<test data>",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<75b2fb81-d29e-5ec7-8047-0c1af0c8474c>",
+    "defaultStoresUnchangedAtStart": true,
+    "stops": {
+      "reject": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "stderr": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "verify": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      }
+    }
+  },
+  "method": {
+    "forgedRejection": "Pinned 1.4.2, no turn. A project conversation created from the welcome screen; its first message typed and sent with a real Enter. The first send_input, the Retry and a composer follow-up are answered with forged engine rejections: the page-side fetch layer (Tauri's IPC transport, ipc://localhost on WKWebView) re-points the request at a session id the bridge does not know, keeps the bridge's own error envelope and replaces only its body with the text msp.rs returns for an MSP error frame (RpcError Display). Message A: 5,316 chars, emoji/CJK/combining marks, an emoji pair across unit 500 of the renderer's bound, token=SYNTH-SECRET-<hex> before and after. Message B: 5,315 chars, the secret value itself across unit 500 before redaction.",
+    "stderrFlood": "The same data folder relaunched on scripts/macos/m0-07-08-fake-engine.mjs (mode flood): 237,616 bytes of stderr (420 lines, one of 105,448 bytes, 423 secrets), one non-JSON stdout line, the first request read, exit 3; the real bridge pump, push_stderr, the 20-line tail and the handshake error carry it. The silent boot resume and an explicit Reconnect fail through that path. Emoji placed across UTF-8 byte 1000 of a line and byte 8000 of the tail (bridge cuts), unit 216 of the notice, unit 499 of the exported error and unit 3999 of the recovery panel; the bridge's message is compared with the harness model.",
+    "exportAndStorage": "Settings > Export diagnostics after each scenario: the Blob the page builds is read through URL.createObjectURL; collect_diagnostics read directly. localStorage and sessionStorage scanned live; at the end, after a graceful quit, the test data folder and the test WKWebView store on disk byte-scanned as UTF-8, UTF-16LE and UTF-16BE for the sentinel."
+  },
+  "verdicts": {
+    "forgedRejection": {
+      "verdict": "pass",
+      "failed": []
+    },
+    "stderrFlood": {
+      "verdict": "pass",
+      "failed": []
+    },
+    "exportAndStorage": {
+      "verdict": "pass",
+      "failed": []
+    }
+  },
+  "limits": [
+    "The export's save to disk is not driven: the anchor click that would download the file is swallowed so that nothing is written to ~/Downloads (out of bounds for these proofs). The content checked is the Blob the page hands to that click.",
+    "Not driven natively, as on Windows: the turn/completed failure card (unit-tested) and the skill lane detail.",
+    "No model turn; the engine's session store is shared with the user (ADR 0003): the test conversation lives there, its unsent probes discarded."
+  ],
+  "run": {
+    "at": "2026-10-13T08:53:09.019Z",
+    "sentinelShape": "token=SYNTH-SECRET-<12 hex>",
+    "phases": {
+      "reject": {
+        "liveTurns": 0,
+        "forged": {
+          "A": {
+            "chars": 5316,
+            "sentinels": 5,
+            "emojiAcrossUnit500": true,
+            "secretAcrossUnit500BeforeRedaction": false,
+            "rendererBound": 500
+          },
+          "B": {
+            "chars": 5315,
+            "sentinels": 5,
+            "emojiAcrossUnit500": false,
+            "secretAcrossUnit500BeforeRedaction": true,
+            "rendererBound": 501
+          }
+        },
+        "isolation": {
+          "data": "<test data>",
+          "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<75b2fb81-d29e-5ec7-8047-0c1af0c8474c>",
+          "defaultStoresUnchangedAtStart": true
+        },
+        "project": "ready",
+        "sessionStarted": true,
+        "startedInTestFolder": true,
+        "afterA": {
+          "activeSid": "01a13477-3709-7393-8ecd-f6f91d9fd8e8",
+          "banner": [
+            {
+              "units": 515,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "Your message could not be sent. — MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "pending": [
+            {
+              "units": 500,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字 é ä ñ क्ष Z",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "composerBlocked": [],
+          "pillTitle": null,
+          "pillText": "Connected",
+          "alerts": [
+            {
+              "units": 515,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "Your message could not be sent. — MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "domSentinel": false,
+          "conversationLoneSurrogates": 0
+        },
+        "afterB": {
+          "activeSid": "01a13477-3709-7393-8ecd-f6f91d9fd8e8",
+          "banner": [
+            {
+              "units": 516,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "Your message could not be sent. — MSP error -32000: M0-07 forged engine rejection, retry 診断情報境界検査中文字",
+              "end": "rr 診断 engine rejection token=[redacted]…"
+            }
+          ],
+          "pending": [
+            {
+              "units": 501,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection, retry 診断情報境界検査中文字符測試資料漢字 é ä n",
+              "end": "rr 診断 engine rejection token=[redacted]…"
+            }
+          ],
+          "composerBlocked": [],
+          "pillTitle": null,
+          "pillText": "Connected",
+          "alerts": [
+            {
+              "units": 516,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "Your message could not be sent. — MSP error -32000: M0-07 forged engine rejection, retry 診断情報境界検査中文字",
+              "end": "rr 診断 engine rejection token=[redacted]…"
+            }
+          ],
+          "domSentinel": false,
+          "conversationLoneSurrogates": 0
+        },
+        "followUp": {
+          "sent": true
+        },
+        "afterComposer": {
+          "activeSid": "01a13477-3709-7393-8ecd-f6f91d9fd8e8",
+          "banner": [
+            {
+              "units": 515,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "Your message could not be sent. — MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "pending": [
+            {
+              "units": 501,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection, retry 診断情報境界検査中文字符測試資料漢字 é ä n",
+              "end": "rr 診断 engine rejection token=[redacted]…"
+            },
+            {
+              "units": 500,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字 é ä ñ क्ष Z",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "composerBlocked": [
+            {
+              "units": 500,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字 é ä ñ क्ष Z",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "pillTitle": null,
+          "pillText": "Connected",
+          "alerts": [
+            {
+              "units": 515,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "Your message could not be sent. — MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            },
+            {
+              "units": 500,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字 é ä ñ क्ष Z",
+              "end": "gnostics stderr 診断 engine rejection x😀😀…"
+            }
+          ],
+          "domSentinel": false,
+          "conversationLoneSurrogates": 0
+        },
+        "envelopes": [
+          {
+            "status": 200,
+            "tauriResponse": "error",
+            "contentType": "application/json",
+            "realBody": "\"conversation engine is unavailable — start or restore the conversation first\"",
+            "forgedUnits": 5316
+          },
+          {
+            "status": 200,
+            "tauriResponse": "error",
+            "contentType": "application/json",
+            "realBody": "\"conversation engine is unavailable — start or restore the conversation first\"",
+            "forgedUnits": 5315
+          },
+          {
+            "status": 200,
+            "tauriResponse": "error",
+            "contentType": "application/json",
+            "realBody": "\"conversation engine is unavailable — start or restore the conversation first\"",
+            "forgedUnits": 5316
+          }
+        ],
+        "sendCalls": [
+          {
+            "ok": false,
+            "sessionRedirected": true
+          },
+          {
+            "ok": false,
+            "sessionRedirected": true
+          },
+          {
+            "ok": false,
+            "sessionRedirected": true
+          }
+        ],
+        "storage": {
+          "localStorage": {
+            "keys": 32,
+            "units": 5264,
+            "sentinelKeys": [],
+            "loneSurrogateKeys": []
+          },
+          "sessionStorage": {
+            "keys": 3,
+            "units": 102,
+            "sentinelKeys": [],
+            "loneSurrogateKeys": []
+          }
+        },
+        "outboxMirror": {
+          "files": 7,
+          "bytes": 2795,
+          "unreadable": 0,
+          "hits": []
+        },
+        "export": {
+          "label": "after forged rejection B",
+          "behavior": "Blob captured from URL.createObjectURL; anchor click swallowed",
+          "downloadName": "muse-desktop-diagnostics-<date>.json",
+          "blobBytes": 1626,
+          "schema": "muse-desktop.diagnostics.v1",
+          "keys": [
+            "schema",
+            "generatedAt",
+            "platform",
+            "userAgent",
+            "workspaceConfigured",
+            "counts",
+            "backend",
+            "lastError",
+            "native"
+          ],
+          "file": {
+            "sentinel": false,
+            "replacementChars": 0,
+            "escapedLoneSurrogates": 0,
+            "rawLoneSurrogates": 0
+          },
+          "lastError": {
+            "units": 500,
+            "bounded": true,
+            "loneSurrogates": 0,
+            "replacementChars": 0,
+            "sentinel": false,
+            "redactedMarks": 1,
+            "head": "send_input failed: MSP error -32000: M0-07 forged engine rejection 診断情報境界検査中文字符測試資料漢字 é ä ñ क्ष Z",
+            "end": "gnostics stderr 診断 engine rejection x😀😀…"
+          },
+          "native": {
+            "schema": "muse-desktop.native-diagnostics.v1",
+            "hostEngines": [
+              {
+                "serverVersion": "1.4.2",
+                "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+                "platform": "macos"
+              }
+            ],
+            "sentinel": false,
+            "loneSurrogates": 0,
+            "error": null
+          }
+        },
+        "afterDiscard": {
+          "localStorage": {
+            "keys": 32,
+            "units": 2878,
+            "sentinelKeys": [],
+            "loneSurrogateKeys": []
+          },
+          "sessionStorage": {
+            "keys": 3,
+            "units": 102,
+            "sentinelKeys": [],
+            "loneSurrogateKeys": []
+          }
+        },
+        "consoleErrors": [],
+        "stop": {
+          "quitBy": "window closed",
+          "leftAfterQuit": [],
+          "groupLeftAfterQuit": [],
+          "exitCode": 0,
+          "defaultStoresUnchangedAtEnd": true
+        }
+      },
+      "stderr": {
+        "liveTurns": 0,
+        "payload": {
+          "stderrBytes": 237616,
+          "stderrLines": 420,
+          "longestLineBytes": 105448,
+          "stdoutBytes": 892,
+          "sentinels": 423,
+          "predictedMessageUnits": 7289,
+          "predictedTailBytes": 8000,
+          "emojiAcrossNoticeUnit216": true,
+          "emojiAcrossExportUnit499": true,
+          "emojiAcrossPanelUnit3999": true,
+          "emojiAcrossLineByte1000": true,
+          "emojiAcrossTailByte8000": true
+        },
+        "bootNotice": true,
+        "afterBootResume": {
+          "activeSid": "01a13477-3709-7393-8ecd-f6f91d9fd8e8",
+          "notice": [
+            {
+              "units": 217,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tail head token=[reda",
+              "end": "ngine rejection unicode é volume x😀😀😀😀…"
+            }
+          ],
+          "pillTitle": {
+            "units": 217,
+            "bounded": true,
+            "loneSurrogates": 0,
+            "replacementChars": 0,
+            "sentinel": false,
+            "redactedMarks": 1,
+            "head": "MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tail head token=[reda",
+            "end": "ngine rejection unicode é volume x😀😀😀😀…"
+          },
+          "pillText": "Disconnected",
+          "alerts": [],
+          "domSentinel": false,
+          "conversationLoneSurrogates": 0
+        },
+        "afterReconnect": {
+          "activeSid": "01a13477-3709-7393-8ecd-f6f91d9fd8e8",
+          "notice": [
+            {
+              "units": 217,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 1,
+              "head": "MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tail head token=[reda",
+              "end": "ngine rejection unicode é volume x😀😀😀😀…"
+            }
+          ],
+          "panel": [
+            {
+              "units": 3999,
+              "bounded": true,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 10,
+              "head": "Reconnect failed: MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tai",
+              "end": "volume probe host ä bounded x😀😀😀😀😀😀😀😀😀😀"
+            }
+          ],
+          "banner": [],
+          "pillTitle": {
+            "units": 217,
+            "bounded": true,
+            "loneSurrogates": 0,
+            "replacementChars": 0,
+            "sentinel": false,
+            "redactedMarks": 1,
+            "head": "MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tail head token=[reda",
+            "end": "ngine rejection unicode é volume x😀😀😀😀…"
+          },
+          "pillText": "Connection error",
+          "alerts": [
+            {
+              "units": 4327,
+              "loneSurrogates": 0,
+              "replacementChars": 0,
+              "sentinel": false,
+              "redactedMarks": 10,
+              "head": "Could not start the Muse sidecarReconnect failed: MSP handshake failed (sidecar dropped the response",
+              "end": "ailable.Try againChoose workspace folder"
+            }
+          ],
+          "domSentinel": false,
+          "conversationLoneSurrogates": 0
+        },
+        "bridgeError": {
+          "units": 7289,
+          "loneSurrogates": 0,
+          "replacementChars": 0,
+          "sentinel": false,
+          "redactedMarks": 20,
+          "head": "MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tail head token=[reda",
+          "end": "nostics 👩‍💻 flood engine 👍🏽 unicode x😀😀…",
+          "utf8Bytes": 8066,
+          "tailUtf8Bytes": 8000,
+          "equalsPrediction": true
+        },
+        "export": {
+          "label": "after the failed Reconnect",
+          "behavior": "Blob captured from URL.createObjectURL; anchor click swallowed",
+          "downloadName": "muse-desktop-diagnostics-<date>.json",
+          "blobBytes": 1446,
+          "schema": "muse-desktop.diagnostics.v1",
+          "keys": [
+            "schema",
+            "generatedAt",
+            "platform",
+            "userAgent",
+            "workspaceConfigured",
+            "counts",
+            "backend",
+            "lastError",
+            "native"
+          ],
+          "file": {
+            "sentinel": false,
+            "replacementChars": 0,
+            "escapedLoneSurrogates": 0,
+            "rawLoneSurrogates": 0
+          },
+          "lastError": {
+            "units": 500,
+            "bounded": true,
+            "loneSurrogates": 0,
+            "replacementChars": 0,
+            "sentinel": false,
+            "redactedMarks": 1,
+            "head": "Reconnect failed: MSP handshake failed (sidecar dropped the response). Host stderr: M0-07 stderr tai",
+            "end": "ion unicode ä volume probe host 𩸽 😀😀😀😀…"
+          },
+          "native": {
+            "schema": "muse-desktop.native-diagnostics.v1",
+            "hostEngines": [],
+            "sentinel": false,
+            "loneSurrogates": 0,
+            "error": null
+          }
+        },
+        "appAliveAfterFlood": true,
+        "fakeSpawns": 2,
+        "consoleErrors": [],
+        "stop": {
+          "quitBy": "window closed",
+          "leftAfterQuit": [],
+          "groupLeftAfterQuit": [],
+          "exitCode": 0,
+          "defaultStoresUnchangedAtEnd": true
+        }
+      },
+      "verify": {
+        "liveTurns": 0,
+        "reconnected": true,
+        "afterReconnect": {
+          "activeSid": "01a13477-3709-7393-8ecd-f6f91d9fd8e8",
+          "notice": [],
+          "pillTitle": null,
+          "pillText": "Connected",
+          "alerts": [],
+          "domSentinel": false,
+          "conversationLoneSurrogates": 0
+        },
+        "webStorage": {
+          "localStorage": {
+            "keys": 32,
+            "units": 2934,
+            "sentinelKeys": [],
+            "loneSurrogateKeys": []
+          },
+          "sessionStorage": {
+            "keys": 3,
+            "units": 7,
+            "sentinelKeys": [],
+            "loneSurrogateKeys": []
+          }
+        },
+        "consoleErrors": [],
+        "appFiles": {
+          "files": 27,
+          "bytes": 655016,
+          "unreadable": 0,
+          "hits": []
+        },
+        "stop": {
+          "quitBy": "window closed",
+          "leftAfterQuit": [],
+          "groupLeftAfterQuit": [],
+          "exitCode": 0,
+          "defaultStoresUnchangedAtEnd": true,
+          "testStoreDeleted": true
+        }
+      }
+    },
+    "verdicts": {
+      "forgedRejection": {
+        "verdict": "pass",
+        "failed": []
+      },
+      "stderrFlood": {
+        "verdict": "pass",
+        "failed": []
+      },
+      "exportAndStorage": {
+        "verdict": "pass",
+        "failed": []
+      }
+    }
+  },
+  "summary": {
+    "forgedRejection": "pass",
+    "stderrFlood": "pass",
+    "exportAndStorage": "pass"
+  }
+}
