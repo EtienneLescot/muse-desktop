@@ -1,0 +1,94 @@
+{
+  "schema": "muse-desktop.m1-06-usershell-probe-macos.v1",
+  "ticket": "M1-06",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; no app: the engine driven over MSP from node",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m1-06-usershell-probe.mjs",
+  "isolation": "Engine started from node with MUSE_NO_AUTO_UPDATE=1, cwd and workspace in a fresh temp folder. The engine's own session store is shared with the user (ADR 0003 limit): each variant adds one short session there.",
+  "method": "The app's three host postures (main.rs HostSandboxMode::cli_args, plus --trust-workspace) and its initialize; one fresh session per variant of session/start; `echo <marker>` through session/userShell; every notification for 6 s after the call is kept and searched for the marker and for the sandbox error.",
+  "checks": {
+    "app's Workspace posture: serve --sandbox-network restricted --trust-workspace": {
+      "granted": [
+        "userShell",
+        "sessionMcp"
+      ],
+      "bare, temp path as given": {
+        "approvalMode": "onRequest",
+        "userShell": "accepted",
+        "markerEchoed": false,
+        "sandboxUnavailable": true,
+        "status": "failed",
+        "visibleOutput": "tool failed: environment failure: managed shell sandbox is unavailable\nThe execution environment is broken: the command was never started and every later comman"
+      },
+      "bare, canonical path (the app's form)": {
+        "approvalMode": "onRequest",
+        "userShell": "accepted",
+        "markerEchoed": false,
+        "sandboxUnavailable": true,
+        "status": "failed",
+        "visibleOutput": "tool failed: environment failure: managed shell sandbox is unavailable\nThe execution environment is broken: the command was never started and every later comman"
+      },
+      "approvalMode promptUnmatched (Ask for approval)": {
+        "approvalMode": "promptUnmatched",
+        "userShell": "accepted",
+        "markerEchoed": false,
+        "sandboxUnavailable": true,
+        "status": "failed",
+        "visibleOutput": "tool failed: environment failure: managed shell sandbox is unavailable\nThe execution environment is broken: the command was never started and every later comman"
+      },
+      "approvalMode onRequest": {
+        "approvalMode": "onRequest",
+        "userShell": "accepted",
+        "markerEchoed": false,
+        "sandboxUnavailable": true,
+        "status": "failed",
+        "visibleOutput": "tool failed: environment failure: managed shell sandbox is unavailable\nThe execution environment is broken: the command was never started and every later comman"
+      },
+      "approvalMode allowAll": {
+        "approvalMode": "allowAll",
+        "userShell": "accepted",
+        "markerEchoed": false,
+        "sandboxUnavailable": true,
+        "status": "failed",
+        "visibleOutput": "tool failed: environment failure: managed shell sandbox is unavailable\nThe execution environment is broken: the command was never started and every later comman"
+      }
+    },
+    "app's Network posture: serve --sandbox-network enabled --trust-workspace": {
+      "granted": [
+        "userShell",
+        "sessionMcp"
+      ],
+      "approvalMode promptUnmatched (Ask for approval)": {
+        "approvalMode": "promptUnmatched",
+        "userShell": "accepted",
+        "markerEchoed": false,
+        "sandboxUnavailable": true,
+        "status": "failed",
+        "visibleOutput": "tool failed: environment failure: managed shell sandbox is unavailable\nThe execution environment is broken: the command was never started and every later comman"
+      }
+    },
+    "app's Elevated posture: serve --disable-sandbox --sandbox-network enabled --trust-workspace": {
+      "granted": [
+        "userShell",
+        "sessionMcp"
+      ],
+      "approvalMode promptUnmatched (Ask for approval)": {
+        "approvalMode": "promptUnmatched",
+        "userShell": "accepted",
+        "markerEchoed": true,
+        "sandboxUnavailable": false,
+        "status": "completed",
+        "visibleOutput": "USERSHELL-J8QHL0\n"
+      }
+    }
+  },
+  "verdicts": {
+    "workspacePostureUserShellRuns": false,
+    "workspacePostureFailsLikeTheApp": true,
+    "networkPostureUserShellRuns": false,
+    "elevatedPostureUserShellRuns": true
+  }
+}

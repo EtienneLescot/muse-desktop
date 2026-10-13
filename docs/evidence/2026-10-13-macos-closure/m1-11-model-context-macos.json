@@ -1,0 +1,226 @@
+{
+  "schema": "muse-desktop.m1-11-model-context-macos.v1",
+  "ticket": "M1-11",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 3,
+  "harness": "scripts/macos/m1-11-model-context.mjs on scripts/macos/test-instance.mjs, bridge port 9445",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<25320223-63ba-5e65-83f1-58a7a1a99c13>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": "One isolated instance on the pinned engine, one project folder under the proof's temp folder, two conversations in it (one host). Messages typed in the real composer and sent with a real Enter; the model picker and Compact now are clicked in the page. The host's own state is read back through the app's list_models command per conversation (isActive), the label from the picker's trigger, the context reading from the ContextMeter.",
+  "checks": {
+    "fresh-picker": {
+      "a": {
+        "present": true,
+        "label": "Model",
+        "options": []
+      },
+      "b": {
+        "present": true,
+        "label": "Model",
+        "options": []
+      }
+    },
+    "conversations": {
+      "a": true,
+      "b": true,
+      "sameProject": true,
+      "pickerA1": {
+        "present": true,
+        "label": "muse-spark-1.3-contributor",
+        "options": [
+          {
+            "label": "muse-wonder-1.0",
+            "detail": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.3",
+            "detail": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.3-contributor",
+            "detail": "default",
+            "selected": true
+          },
+          {
+            "label": "muse-spark-1.2",
+            "detail": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.2-contributor",
+            "detail": "",
+            "selected": false
+          }
+        ]
+      },
+      "hostActiveA1": "muse-spark-1.3-contributor",
+      "pickerB1": {
+        "present": true,
+        "label": "muse-spark-1.3-contributor",
+        "options": [
+          {
+            "label": "muse-wonder-1.0",
+            "detail": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.3",
+            "detail": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.3-contributor",
+            "detail": "default",
+            "selected": true
+          },
+          {
+            "label": "muse-spark-1.2",
+            "detail": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.2-contributor",
+            "detail": "",
+            "selected": false
+          }
+        ]
+      },
+      "hostActiveB1": "muse-spark-1.3-contributor",
+      "catalog": [
+        "muse-wonder-1.0",
+        "muse-spark-1.3",
+        "muse-spark-1.3-contributor",
+        "muse-spark-1.2",
+        "muse-spark-1.2-contributor"
+      ]
+    },
+    "b-switch": {
+      "target": "muse-wonder-1.0",
+      "targetId": "muse-wonder-1.0",
+      "setModel": {
+        "ok": true,
+        "args": {
+          "sessionId": "01a1349b-d6da-7cb0-b4b0-4781417fb2e4",
+          "modelId": "muse-wonder-1.0",
+          "providerId": "meta",
+          "profileId": "tbh"
+        },
+        "result": "null"
+      },
+      "pickerB2": "muse-wonder-1.0",
+      "hostActiveB2": "muse-wonder-1.0"
+    },
+    "round-trip": {
+      "pickerA2": "muse-spark-1.3-contributor",
+      "hostActiveA2": "muse-spark-1.3-contributor",
+      "pickerB3": "muse-wonder-1.0",
+      "hostActiveB3": "muse-wonder-1.0"
+    },
+    "context": {
+      "meterBefore": {
+        "present": true,
+        "trigger": "Context 3% used. Open context details",
+        "title": "Context: 26.9k of 1.0M tokens",
+        "pressure": "normal",
+        "popover": "Context window26.9k / 1.0M (3%)Plenty of room left in the window. About 981.1k tokens free.Last turn: 26.8k in · 42 out.Compact nowCompacting asks the engine to summarise the thread so far and free room, keeping this conversation."
+      },
+      "replied": true,
+      "meterAfter": {
+        "present": true,
+        "trigger": "Context 3% used. Open context details",
+        "title": "Context: 31.8k of 1.0M tokens",
+        "pressure": "normal",
+        "popover": "Context window31.8k / 1.0M (3%)Plenty of room left in the window. About 976.2k tokens free.Last turn: 31.7k in · 69 out.Compact nowCompacting asks the engine to summarise the thread so far and free room, keeping this conversation."
+      },
+      "hostActiveB4": "muse-wonder-1.0"
+    },
+    "compaction": {
+      "clicked": true,
+      "ipc": [
+        {
+          "cmd": "compact_session",
+          "ok": true,
+          "result": "\"accepted\""
+        }
+      ],
+      "states": [
+        {
+          "atMs": 2,
+          "summary": "Compacting…",
+          "note": "Compacting engine context…",
+          "button": "Compacting…"
+        },
+        {
+          "atMs": 506,
+          "summary": "Compacting…",
+          "note": "Compaction accepted — waiting for the engine…",
+          "button": "Compacting…"
+        },
+        {
+          "atMs": 8061,
+          "summary": "3%",
+          "note": "Compacting asks the engine to summarise the thread so far and free room, keeping this conversation.",
+          "button": "Compact now"
+        }
+      ],
+      "meterAfterCompact": {
+        "present": true,
+        "trigger": "Context 3% used. Open context details",
+        "title": "Context: 31.8k of 1.0M tokens",
+        "pressure": "normal",
+        "popover": "Context window31.8k / 1.0M (3%)Plenty of room left in the window. About 976.2k tokens free.Last turn: 31.7k in · 69 out.Compact nowCompacting asks the engine to summarise the thread so far and free room, keeping this conversation."
+      }
+    },
+    "unavailable-model": {
+      "modelId": "no-such-model-mv6hgg0s",
+      "outcome": {
+        "error": "MSP error -32030: session/setModel command 01a1349c-59f6-7000-8b63-96c052d66722 rejected: invalid_model: model is not in the catalog [commandRejected] (invalid_model) [retryable=false]"
+      },
+      "hostActiveAfter": "muse-wonder-1.0",
+      "pickerAfter": "muse-wonder-1.0"
+    }
+  },
+  "verdicts": {
+    "labelFollowsConversation": true,
+    "hostStateIsPerConversation": true,
+    "switchPersistsAcrossSwitches": true,
+    "turnRunsOnSwitchedModel": true,
+    "contextUsageRendered": true,
+    "compactionAdmissionShown": true,
+    "unavailableModelRefused": true,
+    "noProcessLeft": true,
+    "isolationKept": true,
+    "all": true
+  },
+  "limits": [
+    "The unavailable model is sent through the app's set_model command from the page (the picker only lists the live catalog, so no click can choose one): the host's refusal (invalid_model, -32030) and the unchanged active model are measured, not a UI message.",
+    "One compaction on a short thread: its admission is shown; its result is not (finding above).",
+    "Labels are the engine's display labels, which equal the model ids on this engine."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "findings": [
+    "Shared code, not macOS: a conversation created from the welcome screen shows the picker as a bare 'Model' with no choices after its first turn (check fresh-picker), while list_models on its host already returns the five-model catalog with isActive. The catalog is only read at mount (no host yet: empty list) and on a conversation switch (set_active) or resume, so the picker fills once the user opens the conversation from the sidebar.",
+    "Shared code: after Compact now, the meter goes pending, then 'Compaction accepted — waiting for the engine…', then back to its generic copy after about 8 s, without saying whether the engine compacted or found nothing to do, and the reading stays at 31.8k (no new context usage arrived)."
+  ],
+  "notesAddedAfterRun": [
+    "findings",
+    "limits",
+    "verdict compactionOutcomeShown renamed compactionAdmissionShown (same test), as in the script"
+  ]
+}

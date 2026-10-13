@@ -1,0 +1,239 @@
+{
+  "schema": "muse-desktop.m1-10-queue-macos.v1",
+  "ticket": "M1-10",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 3,
+  "harness": "scripts/macos/m1-10-queue.mjs on scripts/macos/test-instance.mjs, bridge port 9444",
+  "isolation": [
+    {
+      "phase": "live",
+      "data": "<proof>/data-live",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<a40661f1-a2d4-5a2d-a54e-d46a88b71b76>",
+      "defaultStoresUnchangedAtStart": true
+    },
+    {
+      "phase": "restart (first launch)",
+      "data": "<proof>/data-restart",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<08237d81-8aaf-51c9-b9ff-2146f6f18eb6>",
+      "defaultStoresUnchangedAtStart": true
+    },
+    {
+      "phase": "restart (relaunch)",
+      "data": "<proof>/data-restart",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<08237d81-8aaf-51c9-b9ff-2146f6f18eb6>",
+      "defaultStoresUnchangedAtStart": true
+    }
+  ],
+  "method": "Isolated instances on the pinned engine, one project folder per phase under the proof's temp folder. Every message is typed in the real composer (Input.insertText) and sent with a real Enter; Guide and Remove from queue are clicked in the page. The running state is the conversation's status dot (data-running); queue rows are the 'Queued messages' panel; the stored queue is localStorage muse-desktop.queued-turns.v1; replies are read from the stored transcript and the screen. The restart phase kills the app process alone with SIGKILL mid-turn (the engine child is left to its own fate and recorded), then relaunches the same exe on the same data folder.",
+  "checks": {
+    "live-first-turn": {
+      "sid": "01a1348b-bd24-7d91-bdbf-dab61cb09925",
+      "started": true,
+      "stillRunningAfter3s": true
+    },
+    "live-two-queued": {
+      "sentA": true,
+      "sentB": true,
+      "rows": [
+        {
+          "text": "QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        },
+        {
+          "text": "QUEUE-B-MV6GU0M9 reply with exactly BETA-MV6GU0M9 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a1348b-bd24-7d91-bdbf-dab61cb09925\":[{\"session_id\":\"01a1348b-bd24-7d91-bdbf-dab61cb09925\",\"turn_id\":\"01a1348b-cbc4-7701-886f-96865040e945\",\"text\":\"QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9 and nothing else\",\"createdAt\":1791882939422},{\"session_id\":\"01a1348b-bd24-7d91-bdbf-dab61cb09925\",\"turn_id\":\"01a1348b-cc45-7786-81fd-666baea1aed1\",\"text\":\"QUEUE-B-MV6GU0M9 reply with exactly BETA-MV"
+    },
+    "live-remove-second": {
+      "clicked": true,
+      "rows": [
+        {
+          "text": "QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a1348b-bd24-7d91-bdbf-dab61cb09925\":[{\"session_id\":\"01a1348b-bd24-7d91-bdbf-dab61cb09925\",\"turn_id\":\"01a1348b-cbc4-7701-886f-96865040e945\",\"text\":\"QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9 and nothing else\",\"createdAt\":1791882939422}]}"
+    },
+    "live-guide": {
+      "clicked": true,
+      "firstStillRunning": true,
+      "rows": [
+        {
+          "text": "QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ]
+    },
+    "live-outcome": {
+      "turnIds": {
+        "first": "01a1348b-bdd3-7aa6-88c3-b4210994ae70",
+        "a": "01a1348b-cbc4-7701-886f-96865040e945",
+        "b": "01a1348b-cc45-7786-81fd-666baea1aed1"
+      },
+      "firstTurnSpan": {
+        "first": 1791882935781,
+        "last": 1791882939628,
+        "entries": 3
+      },
+      "aTurnSpan": {
+        "first": 1791882940431,
+        "last": 1791882944249,
+        "entries": 2
+      },
+      "steeredTokenInFirstTurn": false,
+      "firstTurnStoppedCountingAt": 150,
+      "alphaAnswered": true,
+      "alphaInATurn": true,
+      "aStartedAfterFirstEnded": true,
+      "betaAnswered": false,
+      "queueRowsAtEnd": 0,
+      "storedAtEnd": "{}",
+      "userEntries": [
+        "Count slowly from one to 150, one number per line,",
+        "QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9",
+        "QUEUE-B-MV6GU0M9 reply with exactly BETA-MV6GU0M9 ",
+        "Change of plan: stop counting now and end your rep"
+      ],
+      "ipc": [
+        {
+          "cmd": "send_input",
+          "ok": true,
+          "text": "Count slowly from one to 150, one number per line, nothing e",
+          "result": "{\"commandId\":\"01a1348b-bdd3-7aa6-88c3-b4210994ae70\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a1348b-bdd3-7aa6-88c3-b4210994ae70\"}"
+        },
+        {
+          "cmd": "send_input",
+          "ok": true,
+          "text": "QUEUE-A-MV6GU0M9 reply with exactly ALPHA-MV6GU0M9 and nothi",
+          "result": "{\"commandId\":\"01a1348b-cbc4-7701-886f-96865040e945\",\"disposition\":\"queued\",\"startedNewTurn\":false,\"status\":\"accepted\",\"turnId\":\"01a1348b-cbc4-7701-886f-96865040e945\"}"
+        },
+        {
+          "cmd": "send_input",
+          "ok": true,
+          "text": "QUEUE-B-MV6GU0M9 reply with exactly BETA-MV6GU0M9 and nothin",
+          "result": "{\"commandId\":\"01a1348b-cc45-7786-81fd-666baea1aed1\",\"disposition\":\"queued\",\"startedNewTurn\":false,\"status\":\"accepted\",\"turnId\":\"01a1348b-cc45-7786-81fd-666baea1aed1\"}"
+        },
+        {
+          "cmd": "unqueue_turn",
+          "ok": true,
+          "text": "",
+          "result": "{\"commandId\":\"01a1348b-ccbd-7000-82e2-6038d0f0a7d7\",\"status\":\"accepted\",\"turnId\":\"01a1348b-cc45-7786-81fd-666baea1aed1\"}"
+        },
+        {
+          "cmd": "steer_input",
+          "ok": true,
+          "text": "Change of plan: stop counting now and end your reply with th",
+          "result": "{\"commandId\":\"01a1348b-cebd-7eed-88b2-5585e7eb1f31\",\"status\":\"accepted\",\"turnId\":\"01a1348b-bdd3-7aa6-88c3-b4210994ae70\"}"
+        }
+      ],
+      "betaOnScreen": false
+    },
+    "live-stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    },
+    "restart-before-kill": {
+      "firstTurn": {
+        "sid": "01a1348c-9d24-7130-a7ea-ef6d730e16ad",
+        "started": true,
+        "stillRunningAfter3s": true
+      },
+      "rows": [
+        {
+          "text": "RESTORE-A-MV6GU0M9 reply with exactly ALPHA2-MV6GU0M9 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        },
+        {
+          "text": "RESTORE-B-MV6GU0M9 reply with exactly BETA2-MV6GU0M9 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a1348c-9d24-7130-a7ea-ef6d730e16ad\":[{\"session_id\":\"01a1348c-9d24-7130-a7ea-ef6d730e16ad\",\"turn_id\":\"01a1348c-ab0f-78da-86cf-d9becdf9c59a\",\"text\":\"RESTORE-A-MV6GU0M9 reply with exactly ALPHA2-MV6GU0M9 and nothing else\",\"createdAt\":1791882996575},{\"session_id\":\"01a1348c-9d24-7130-a7ea-ef6d730e16ad\",\"turn_id\":\"01a1348c-ab81-7239-8647-522d5084a3a8\",\"text\":\"RESTORE-B-MV6GU0M9 reply with exactly BE"
+    },
+    "restart-kill": {
+      "signal": "SIGKILL",
+      "enginesAfterKill": [
+        {
+          "command": "<home>/muse-proofs/engine/1.4.2-R4684.1/muse-bin serve --sandbox-network rest",
+          "aliveAfter3s": false
+        }
+      ],
+      "stop": {
+        "quitBy": "SIGKILL",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": null,
+        "defaultStoresUnchangedAtEnd": true
+      }
+    },
+    "restart-relaunch": {
+      "storedAtRelaunch": "{\"01a1348c-9d24-7130-a7ea-ef6d730e16ad\":[{\"session_id\":\"01a1348c-9d24-7130-a7ea-ef6d730e16ad\",\"turn_id\":\"01a1348c-ab0f-78da-86cf-d9becdf9c59a\",\"text\":\"RESTORE-A-MV6GU0M9 reply with exactly ALPHA2-MV6GU0M9 and nothing else\",\"createdAt\":1791882996575},{\"session_id\":\"01a1348c-9d24-7130-a7ea-ef6d730e16ad\",\"turn_id\":\"01a1348c-ab81-7239-8647-522d5084a3a8\",\"text\":\"RESTORE-B-MV6GU0M9 reply with exactly BE",
+      "rowsAtRelaunch": [
+        {
+          "text": "RESTORE-B-MV6GU0M9 reply with exactly BETA2-MV6GU0M9 and nothing else",
+          "recovered": true,
+          "button": "Dismiss"
+        }
+      ],
+      "alphaAnswered": false,
+      "betaAnswered": false,
+      "alphaAt": null,
+      "betaAt": null,
+      "alphaCount": 0,
+      "betaCount": 0,
+      "rowsAtEnd": [],
+      "storedAtEnd": "{}",
+      "ipc": [],
+      "userEntries": [
+        "Count slowly from one to 400, one number",
+        "RESTORE-B-MV6GU0M9 reply with exactly BE",
+        "RESTORE-A-MV6GU0M9 reply with exactly AL"
+      ]
+    },
+    "restart-stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    }
+  },
+  "verdicts": {
+    "guideRedirectsRunningTurn": false,
+    "twoQueuedWhileRunning": true,
+    "secondRemovedWhileRunning": true,
+    "removedNeverRuns": true,
+    "remainingRunsAfterFirstInOrder": true,
+    "queueStoredBeforeKill": true,
+    "queueSurvivesKill": true,
+    "queueResumesInOrderAfterRestart": false,
+    "noProcessLeft": true,
+    "isolationKept": true,
+    "all": false
+  },
+  "limits": [],
+  "consoleErrors": [],
+  "notesAddedAfterRun": [
+    "note"
+  ],
+  "note": "Run by an earlier version of scripts/macos/m1-10-queue.mjs: its order verdict read log indexes (the log is grouped by turn, not a timeline) and its restart phase kept no timeline. Kept as measured; see m1-10-queue-macos.json limits."
+}
