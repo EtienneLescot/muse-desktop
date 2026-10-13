@@ -1,0 +1,155 @@
+{
+  "schema": "muse-desktop.m0-03-no-text-lost.v1",
+  "ticket": "M0-03",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 4,
+  "harness": "scripts/macos/m0-03-no-text-lost.mjs on scripts/macos/test-instance.mjs (launch), bridge port 9413",
+  "isolation": {
+    "data": "<proof>/m0-03/MV6GNSXQ/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<56dfe28d-47fc-5b72-9440-48a21e665b8f>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": "One isolated instance on the pinned engine, one project conversation (first turn from the welcome screen). Text typed with Input.insertText, Enter as AppKit key events, the double-click as two trusted AppKit mouse events (clickCount 1 then 2) on the Send button, reloads with Page.reload. Counts read from the IPC trace (send_input, with its commandId), the stored transcript (user entries and their clientMessageId), the outbox key and the queued-turns key.",
+  "scenarios": {
+    "rejected": {
+      "typed": true,
+      "after3s": {
+        "sameConversation": true,
+        "composerKeepsText": true,
+        "composerUsable": true,
+        "explanationShown": true,
+        "outboxRows": 0,
+        "sendInputCalls": 0,
+        "userEntries": 0
+      },
+      "after10s": {
+        "sameConversation": true,
+        "composerKeepsText": true,
+        "composerUsable": true,
+        "explanationShown": true,
+        "outboxRows": 0,
+        "sendInputCalls": 0,
+        "userEntries": 0
+      },
+      "retryButtons": []
+    },
+    "doubleEnter": {
+      "typed": true,
+      "done": true,
+      "sendInput": [
+        {
+          "commandId": "01a13487-9748-79d8-85c4-9af3757d15e9",
+          "ok": true
+        }
+      ],
+      "userEntries": [
+        "c61f848f-6a01-49d8-85c4-9af3757d15e9"
+      ],
+      "composerAfter": "",
+      "outboxRows": 0,
+      "queued": 0
+    },
+    "doubleClick": {
+      "typed": true,
+      "clicked": true,
+      "done": true,
+      "sendInput": [
+        {
+          "commandId": "01a13487-b566-7636-8b33-21851cd288e9",
+          "ok": true
+        }
+      ],
+      "userEntries": [
+        "59b6b8d5-d2d0-4636-8b33-21851cd288e9"
+      ],
+      "composerAfter": "",
+      "outboxRows": 0,
+      "queued": 0
+    },
+    "reloadDraft": {
+      "typed": true,
+      "entriesBefore": 19,
+      "composerAfterReload": "DRAFT-RELOAD-MV6GNSXQ — unsent, é 😀",
+      "entriesAfter": 19,
+      "sentAfterReload": 0
+    },
+    "reloadMidSend": {
+      "typed": true,
+      "sendInputBeforeReload": [
+        {
+          "commandId": "01a13487-e4c8-755e-84c8-3b69ee503749",
+          "ok": true
+        }
+      ],
+      "done": true,
+      "sendInputAfterReload": [],
+      "userEntries": [
+        "da3a98da-f59d-455e-84c8-3b69ee503749"
+      ],
+      "composerAfter": "",
+      "outbox": {
+        "6eb10cf0": []
+      }
+    },
+    "reloadAtOnce": {
+      "typed": true,
+      "sendInputBeforeReload": [],
+      "ackBeforeReload": false,
+      "after": {
+        "composer": "Reply with exactly RELOAD-NOW-MV6GNSXQ and nothing else.",
+        "outbox": {
+          "6eb10cf0": []
+        },
+        "queued": 0
+      },
+      "replied": false,
+      "userEntries": [],
+      "sendInputAfterReload": [],
+      "final": {
+        "composer": "Reply with exactly RELOAD-NOW-MV6GNSXQ and nothing else.",
+        "outbox": {
+          "6eb10cf0": []
+        }
+      },
+      "outcome": "kept for the user"
+    }
+  },
+  "checks": {
+    "rejectedKeepsText": true,
+    "doubleEnterOneTurn": true,
+    "doubleClickOneTurn": true,
+    "draftSurvivesReload": true,
+    "reloadMidSendNoDuplicate": true,
+    "reloadAtOnceNeverLostNeverDoubled": true,
+    "nothingLeft": true
+  },
+  "verdicts": {
+    "rejectedSendKeepsText": true,
+    "doubleSubmitOneTurn": true,
+    "draftAndInFlightSurviveReload": true,
+    "reloadBeforeAckVariant": true,
+    "imeEnterDoesNotSubmit": "not driven (limit)",
+    "nothingLeft": true
+  },
+  "limits": [
+    "IME not driven: the bridge has no composition input (Input.imeSetComposition is not served) and switching the system input source is out of bounds for this harness. The composer's guard is `if (e.nativeEvent.isComposing) return;` (src/components/Composer.tsx onKey; EmptySessionScreen.tsx the same). WebKit is known to deliver the Enter that commits a candidate after compositionend, with isComposing false and keyCode 229; if this WKWebView does so, that Enter would send. To check by hand with a Japanese or Chinese input source (Étienne).",
+    "The engine's session store (~/.local/share/muse/sessions) is the user's, shared by the test instance (ADR 0003).",
+    "Debug build in test mode, not the release build."
+  ],
+  "start": "ready",
+  "firstTurn": true,
+  "imeProbe": "Input.imeSetComposition: Input.imeSetComposition is not supported by the WKWebView test bridge",
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "passed": true
+}
