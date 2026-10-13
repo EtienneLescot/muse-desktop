@@ -1,0 +1,460 @@
+{
+  "schema": "muse-desktop.macos-m3-01-local-mcp.v1",
+  "ticket": "M3-01",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m3-01-local-mcp.mjs on scripts/macos/test-instance.mjs; fixture scripts/macos/m3-01-mcp-fixture-server.mjs copied into the proof folder",
+  "criteria": "docs/plans/2026-09-15-agent-implementation-plan.md §M3-01 (a fixture server exposes then runs a tool, restarts, changes its list and fails; the call is observed in a Muse session) and docs/ROADMAP.md §M3-01 (stdio handshake, Start/Stop server, Refresh tools, hot reload on tools/list_changed, Use in Muse injection, posture-bound authorization)",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<0985aec2-bff0-54d1-a946-9ff968283818>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment, test-instance.mjs): fresh data folder, its own WKWebView store, the pinned engine with MUSE_NO_AUTO_UPDATE=1, CDP through the test bridge.",
+    "Every action goes through the Extensions page (form fields set, buttons clicked); the folder dialogs are answered by the IPC trace. Posture: the fresh profile's default, Ask for approval.",
+    "The fixture logs every request with its pid and its parent's command: muse-desktop for the app's probe and persistent process, the engine for the session's own process. A tool answer carries an HMAC under a key only that process holds, recomputed here.",
+    "Fingerprint (size, mtime) of ~/.config/muse and ~/.local/share/muse/{plugins,skills} before and after."
+  ],
+  "phases": {
+    "setup": {
+      "defaultFolder": {
+        "clicked": true,
+        "stored": true,
+        "setWorkspace": true
+      }
+    },
+    "probe": {
+      "ms": 203,
+      "notice": "Connected to g6-fixture 1.0.0 · 3 tool(s) · 115 ms",
+      "tools": [
+        "g6_echo",
+        "g6_slow",
+        "g6_crash"
+      ],
+      "banners": [],
+      "serverLog": [
+        {
+          "pid": 53219,
+          "parent": "muse-desktop",
+          "event": "start"
+        },
+        {
+          "pid": 53219,
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "initialize",
+          "framing": "frames"
+        },
+        {
+          "pid": 53219,
+          "parent": "muse-desktop",
+          "event": "notification",
+          "method": "notifications/initialized"
+        },
+        {
+          "pid": 53219,
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "tools/list",
+          "framing": "frames"
+        }
+      ]
+    },
+    "call": {
+      "nonce": "n1-92dcaf",
+      "label": "Review and call",
+      "dialog": "Authorization required Local MCP · g6_echo This call is waiting for a one-time approval because the current posture is Ask for approval. Allow once Cancel",
+      "approved": true,
+      "output": "{\n  \"content\": [\n    {\n      \"text\": \"g6_echo: nonce=n1-92dcaf proof=eb47183791 pid=53230\",\n      \"type\": \"text\"\n    }\n  ],\n  \"isError\": false\n}",
+      "serverLog": [
+        {
+          "pid": 53230,
+          "parent": "muse-desktop",
+          "event": "start"
+        },
+        {
+          "pid": 53230,
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "initialize",
+          "framing": "frames"
+        },
+        {
+          "pid": 53230,
+          "parent": "muse-desktop",
+          "event": "notification",
+          "method": "notifications/initialized"
+        },
+        {
+          "pid": 53230,
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "tools/call",
+          "tool": "g6_echo",
+          "framing": "frames"
+        },
+        {
+          "pid": 53230,
+          "parent": "muse-desktop",
+          "event": "call",
+          "tool": "g6_echo",
+          "nonce": "n1-92dcaf",
+          "proof": "eb47183791"
+        }
+      ]
+    },
+    "persist": {
+      "saved": {
+        "id": "local-mcp-g6-local-mv6g5ik5",
+        "kind": "local",
+        "status": "installed",
+        "tools": [
+          "g6_echo",
+          "g6_slow",
+          "g6_crash"
+        ],
+        "serverVersion": "1.0.0",
+        "commandStored": true
+      },
+      "started": {
+        "feedback": "Persistent server running · 3 tools",
+        "buttons": [
+          "Stop server",
+          "Refresh tools",
+          "Roll back",
+          "Remove"
+        ]
+      },
+      "persistentPid": "recorded",
+      "persistentAlive": true,
+      "reload": {
+        "ms": 5186,
+        "tools": [
+          "g6_echo",
+          "g6_slow",
+          "g6_crash",
+          "g6_added"
+        ],
+        "row": "g6_echo · g6_slow · g6_crash · g6_added"
+      },
+      "reloadLog": [
+        {
+          "parent": "muse-desktop",
+          "event": "start"
+        },
+        {
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "initialize",
+          "framing": "frames"
+        },
+        {
+          "parent": "muse-desktop",
+          "event": "notification",
+          "method": "notifications/initialized"
+        },
+        {
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "tools/list",
+          "framing": "frames"
+        },
+        {
+          "parent": "muse-desktop",
+          "event": "list_changed-sent"
+        },
+        {
+          "parent": "muse-desktop",
+          "event": "request",
+          "method": "tools/list",
+          "framing": "frames"
+        }
+      ],
+      "call2": {
+        "nonce": "n2-60dc10",
+        "output": "{\n  \"content\": [\n    {\n      \"text\": \"g6_echo: nonce=n2-60dc10 proof=db47926dca pid=53291\",\n      \"type\": \"text\"\n    }\n  ],\n  \"isError\": false\n}"
+      },
+      "ipc": [
+        {
+          "cmd": "mcp_local_start",
+          "ok": true
+        },
+        {
+          "cmd": "mcp_local_poll",
+          "ok": true,
+          "changed": true
+        },
+        {
+          "cmd": "mcp_local_call_persistent",
+          "ok": true
+        }
+      ]
+    },
+    "fail": {
+      "crash": {
+        "ms": 905,
+        "banners": [
+          "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+        ],
+        "buttons": [
+          "Start server",
+          "Refresh tools",
+          "Roll back",
+          "Remove"
+        ],
+        "registryStatus": "installed"
+      },
+      "crashedProcessGone": true,
+      "notMcp": {
+        "banners": [
+          "The local MCP action could not be completed. — MCP response JSON invalid: expected value at line 1 column 1"
+        ],
+        "saveOffered": false,
+        "registered": false
+      }
+    },
+    "restart": {
+      "restarted": {
+        "feedback": "Persistent server running · 4 tools",
+        "buttons": [
+          "Stop server",
+          "Refresh tools",
+          "Roll back",
+          "Remove"
+        ]
+      },
+      "newProcess": true,
+      "refreshed": {
+        "feedback": "Tools refreshed · 4 discovered · 1 ms",
+        "tools": [
+          "g6_echo",
+          "g6_slow",
+          "g6_crash",
+          "g6_added"
+        ]
+      },
+      "stopped": {
+        "feedback": "Persistent server stopped.",
+        "buttons": [
+          "Start server",
+          "Refresh tools",
+          "Roll back",
+          "Remove"
+        ]
+      },
+      "appMcpProcessesAlive": 0,
+      "appMcpZombies": {
+        "count": 2,
+        "of": 4,
+        "note": "processes the app started and killed without reaping (ps state Z): exited, held as zombies until the app exits"
+      },
+      "restartedProcessGoneAfterStop": true
+    },
+    "session": {
+      "useInMuse": {
+        "ok": true,
+        "stored": true
+      },
+      "startSession": {
+        "authorizationMode": "ask",
+        "approvalMode": "promptUnmatched",
+        "firstMessageRefused": [
+          {
+            "blockedByHarness": true
+          }
+        ],
+        "stdioServers": [
+          {
+            "command": "node",
+            "args": [
+              "<proof>/fx/server.mjs",
+              "--state",
+              "<proof>/fx/state"
+            ],
+            "mode": "optional"
+          }
+        ]
+      },
+      "serverAtSessionStart": [
+        {
+          "parent": "muse-bin",
+          "event": "start"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "request",
+          "method": "initialize",
+          "framing": "lines"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "notification",
+          "method": "notifications/initialized"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "request",
+          "method": "tools/list",
+          "framing": "lines"
+        }
+      ],
+      "nonce": "N301-D1193CB8",
+      "turn": {
+        "finished": true,
+        "ms": 8537,
+        "approvals": [
+          {
+            "card": "mcp__mcp_1__g6_echo scope: once · session · localPersistent Allow once Allow for this session Always allow this MCP tool Reject",
+            "choices": [
+              "Allow once",
+              "Allow for this session",
+              "Always allow this MCP tool",
+              "Reject"
+            ],
+            "clicked": "Allow once"
+          }
+        ],
+        "entries": [
+          {
+            "role": "user",
+            "text": "Setup message, refused by the test harness (no turn)."
+          },
+          {
+            "role": "user",
+            "text": "Call the g6_echo tool of the connected MCP server with nonce \"N301-D1193CB8\", then reply with the tool's text output exactly, nothing else."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: mcp__mcp_1__g6_echo"
+          },
+          {
+            "role": "assistant",
+            "text": "g6_echo: nonce=N301-D1193CB8 proof=0fb282a713 pid=53635"
+          },
+          {
+            "role": "tool",
+            "text": "Mcp 1 · g6 echo\ng6_echo: nonce=N301-D1193CB8 proof=0fb282a713 pid=53635"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "serverLogDuringTurn": [
+        {
+          "parent": "muse-bin",
+          "event": "start"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "request",
+          "method": "initialize",
+          "framing": "lines"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "notification",
+          "method": "notifications/initialized"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "request",
+          "method": "tools/list",
+          "framing": "lines"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "request",
+          "method": "tools/call",
+          "tool": "g6_echo",
+          "framing": "lines"
+        },
+        {
+          "parent": "muse-bin",
+          "event": "call",
+          "tool": "g6_echo",
+          "nonce": "N301-D1193CB8",
+          "proof": "0fb282a713"
+        }
+      ],
+      "processes": [
+        "muse-desktop",
+        "<defunct>",
+        "<defunct>",
+        "<defunct>",
+        "muse-bin serve --sandbox-network restricted --trust-workspace",
+        "node <proof>/fx/server.mjs --state <tmp>/muse-"
+      ]
+    },
+    "cleanup": {
+      "removed": {
+        "gone": true
+      }
+    }
+  },
+  "verdicts": {
+    "probeHandshake": true,
+    "panelCallThroughApproval": true,
+    "savedAndStarted": true,
+    "hotReloadOnListChanged": true,
+    "callThroughPersistentProcess": true,
+    "serverFailureHonest": true,
+    "nonMcpRefused": true,
+    "restartedWithChangedList": true,
+    "stopEndsProcess": true,
+    "injectedIntoSessionStart": true,
+    "engineConnectedItsOwnProcess": true,
+    "callObservedInMuseSession": true,
+    "postureAskedBeforeTheCall": true,
+    "cleanExit": true,
+    "userEngineConfigUntouched": true
+  },
+  "limits": [
+    "The engine's own session store (~/.local/share/muse/sessions) is shared with the user (ADR 0003): the proof conversation stays there.",
+    "The persistent process is the app's; the session's process is the engine's own (Use in Muse injects the command, the host initialises it). The catalogue the host shows the model is read from the turn, not from a host listing."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true
+}
