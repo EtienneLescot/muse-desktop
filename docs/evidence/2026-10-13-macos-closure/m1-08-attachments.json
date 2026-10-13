@@ -1,0 +1,135 @@
+{
+  "schema": "muse-desktop.macos-ticket-proof.v1",
+  "ticket": "M1-08",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "build": {
+    "exe": "~/muse-proofs/app/08b291d/muse-desktop",
+    "exeSha256": "40ee4e0fbf0d270763c0bb97abee827f598272211c98473cc06b42ad58e50548"
+  },
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with the embedded frontend, isolated test mode (ADR 0003, macOS amendment), WKWebView driven through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "engineBinary": "~/muse-proofs/engine/1.4.2-R4684.1/muse-bin",
+  "engineSha256": "e9987ef4267a648dc1931c2836a23f6f16f8b4417368b126a810bece2abd308d",
+  "liveTurns": 1,
+  "harness": "node scripts/macos/m1-08-attachments.mjs --exe <exe> --port 9433 --base <tmp> --out-dir <dir> (scripts/macos/test-instance.mjs launch(), scripts/cdp-harness.mjs IPC trace)",
+  "isolation": {
+    "data": "<tmp>/m1-attach-mv6h17en/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<7bb40df5-7ff1-5b11-93ba-89de35a68c6d>",
+    "defaultStoresUnchangedAtStart": true,
+    "stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    },
+    "consoleErrors": [],
+    "processesDuringRun": [
+      "muse-desktop",
+      "muse-bin serve --sandbox-network restricted --trust-workspace"
+    ]
+  },
+  "method": "page-built File objects through DataTransfer into the composer's <input type=file> (change) and the drop handler; DOM.setFileInputFiles is not served by the WKWebView bridge. The image is a 64x64 solid red PNG built by the harness, so the answer is checkable; the bytes in send_input's image part (IPC trace) are compared with it. Messages typed with Input.insertText and sent with a real Enter.",
+  "windowsReference": "docs/evidence/2026-09-26-m1-closure/m1-08-attachments.json, m1-08-single-image.json",
+  "checks": {
+    "project": {
+      "start": "ready"
+    },
+    "inject-8-empty-draft": {
+      "disabledBefore": false,
+      "given": 8
+    },
+    "ninth-refused-empty-draft": {
+      "chips": 8,
+      "inputDisabledAt8": true,
+      "error": "You can attach up to 8 files with a written message (8 without)."
+    },
+    "inject-8-with-text": {
+      "disabledBefore": false,
+      "given": 8
+    },
+    "eighth-refused-with-text": {
+      "chips": 7,
+      "kept": [
+        "grey-0.png",
+        "grey-1.png",
+        "grey-2.png",
+        "grey-3.png",
+        "grey-4.png",
+        "grey-5.png",
+        "grey-6.png"
+      ],
+      "inputDisabledAt7": true,
+      "error": "You can attach up to 7 files with a written message (8 without)."
+    },
+    "removed-before-send": {
+      "chips": [
+        "red-square.png"
+      ]
+    },
+    "sent-parts": {
+      "ok": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "What colour is the attached image? Answer with just the colour name in lower case."
+        },
+        {
+          "type": "image",
+          "mediaType": "image/png",
+          "width": 64,
+          "height": 64,
+          "bytes": 168
+        }
+      ],
+      "imageBytesIdentical": true,
+      "removedFileSent": false
+    },
+    "model-answer": {
+      "answer": "red"
+    },
+    "composer-inject-8": {
+      "disabledBefore": false,
+      "given": 8
+    },
+    "wire-bound": {
+      "chipsBeforeSend": 8,
+      "partsSent": 9,
+      "ok": false,
+      "result": "\"inputParts cannot contain more than 8 parts\"",
+      "unsent": {
+        "text": "Nine parts mv6h17en: eight images and this text.",
+        "error": "send_input failed: inputParts cannot contain more than 8 parts",
+        "buttons": [
+          "Retry",
+          "Discard"
+        ]
+      },
+      "engineAnswered": false
+    },
+    "after-discard": {
+      "unsentRows": 0,
+      "composerChips": 8,
+      "composerText": "Nine parts mv6h17en: eight images and this text."
+    }
+  },
+  "verdicts": {
+    "ninthFileRefused": true,
+    "textCountsAsPartInUi": true,
+    "removedAttachmentNotSent": true,
+    "imageRidesLiveTurn": true,
+    "wireRefusesNineParts": true,
+    "textPreservedWithRetryDiscard": true,
+    "discardClearsUnsentRow": true,
+    "all": true,
+    "ticketMacos": "☑"
+  },
+  "limits": [
+    "Files reach the page as page-built File objects (DataTransfer), not through the macOS open panel of <input type=file> nor a Finder drag: the bridge serves neither DOM.setFileInputFiles nor native drag and drop. The app's own intake (onChange/onDrop -> readAttachment) is what runs. Picking a file in the real open panel and dropping one from Finder remain for a session with Étienne.",
+    "After the refused 9-part send, Discard removes the unsent row but the composer still holds the 8 images and the text (recorded in after-discard): the message exists twice until then. Not data loss; logged for the backlog.",
+    "With an empty draft the over-limit copy reads 'You can attach up to 8 files with a written message (8 without)': the wording is meant for a non-empty draft (cross-platform copy defect, logged for the backlog).",
+    "Since 27/09 the UI counts the text as a part, so the 8-image + text wire refusal of the Windows record is reached by attaching 8 images with an empty draft, then typing: the UI does not re-check the cap when text is added after the files (logged for the backlog)."
+  ]
+}
