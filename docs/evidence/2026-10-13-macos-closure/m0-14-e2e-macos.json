@@ -1,0 +1,117 @@
+{
+  "schema": "muse-desktop.m0-14-e2e-macos.v1",
+  "ticket": "M0-14",
+  "date": "2026-10-13",
+  "commit": "a138d18",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "scripts/muse-fixture.mjs (protocol double, ADR 0003); no real engine in this check",
+  "liveTurns": 0,
+  "harness": "npm run e2e:fixture (scripts/e2e-fixture.mjs), port 9339",
+  "isolation": "MUSE_DESKTOP_TEST_DATA_DIR in a fresh temp folder; the window on a WKWebView data store of its own (UUID in <data>/webkit-store, kept under ~/Library/WebKit/muse-desktop/WebsiteDataStore/<uuid>); before driving and at the end the runner compares every file (size, mtime) of ~/Library/WebKit/com.muse.desktop (the installed app's store) and of the debug exe's default WebsiteData: unchanged in every run. App process group killed and test store deleted at the end; no muse-desktop or fixture process left, WebsiteDataStore empty afterwards.",
+  "runs": {
+    "baseline": [
+      {
+        "passed": true,
+        "verdict": {
+          "abCardPendingInEach": true,
+          "abDecidingAReachesOnlyA": true,
+          "abBStillPendingAndIntact": true,
+          "abBDecidedAfterwards": true,
+          "sendHostFailureForced": true,
+          "sendNeverLost": true,
+          "sendTextOnScreen": true,
+          "otherHostUnaffected": true,
+          "isolatedWebviewProfile": true,
+          "isolatedAppData": true
+        },
+        "consoleErrors": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "passed": true,
+        "verdict": {
+          "abCardPendingInEach": true,
+          "abDecidingAReachesOnlyA": true,
+          "abBStillPendingAndIntact": true,
+          "abBDecidedAfterwards": true,
+          "sendHostFailureForced": true,
+          "sendNeverLost": true,
+          "sendTextOnScreen": true,
+          "otherHostUnaffected": true,
+          "isolatedWebviewProfile": true,
+          "isolatedAppData": true
+        },
+        "consoleErrors": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "passed": true,
+        "verdict": {
+          "abCardPendingInEach": true,
+          "abDecidingAReachesOnlyA": true,
+          "abBStillPendingAndIntact": true,
+          "abBDecidedAfterwards": true,
+          "sendHostFailureForced": true,
+          "sendNeverLost": true,
+          "sendTextOnScreen": true,
+          "otherHostUnaffected": true,
+          "isolatedWebviewProfile": true,
+          "isolatedAppData": true
+        },
+        "consoleErrors": [
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "passed": true,
+        "verdict": {
+          "abCardPendingInEach": true,
+          "abDecidingAReachesOnlyA": true,
+          "abBStillPendingAndIntact": true,
+          "abBDecidedAfterwards": true,
+          "sendHostFailureForced": true,
+          "sendNeverLost": true,
+          "sendTextOnScreen": true,
+          "otherHostUnaffected": true,
+          "isolatedWebviewProfile": true,
+          "isolatedAppData": true
+        },
+        "consoleErrors": [
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      }
+    ],
+    "mutationA": {
+      "patch": "6581008 (Windows temporary mutation (a): the decision goes to the other conversation's card), applied to the worktree, never committed here, reverted after the run",
+      "passed": false,
+      "falseVerdicts": [
+        "abDecidingAReachesOnlyA",
+        "abBStillPendingAndIntact"
+      ]
+    },
+    "mutationB": {
+      "patch": "105c401 (Windows temporary mutation (b): a refused send is dropped with its bubble), same handling",
+      "passed": false,
+      "falseVerdicts": [
+        "sendNeverLost",
+        "sendTextOnScreen"
+      ]
+    }
+  },
+  "rehearsal": "A first series failed before driving ('The operation is insecure.'): the runner wrote to localStorage before the page had loaded. Fixed by waiting for the page (this commit's parent change); the three runs above were then repeated in full.",
+  "ci": "Job e2e-macos added to .github/workflows/ci.yml (macos-14); its first result is the PR's CI.",
+  "verdicts": {
+    "e2eGreenOnMacOS": true,
+    "catchesWrongRoute": true,
+    "catchesLostSend": true,
+    "isolated": true
+  },
+  "limits": [
+    "The Keychain service com.muse.desktop.mcp is shared with the user, as Windows Credential Manager is (ADR 0003).",
+    "The fixture is a protocol double, not a model."
+  ]
+}
