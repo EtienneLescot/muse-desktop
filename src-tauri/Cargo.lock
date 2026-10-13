@@ -2555,6 +2555,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "keyring",
+ "libc",
  "notify",
  "objc2",
  "objc2-foundation",

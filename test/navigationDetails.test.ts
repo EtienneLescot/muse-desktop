@@ -38,11 +38,6 @@ const requiredCallSites: { file: string; call: string; why: string }[] = [
     why: "the workspace path shown to the user must be the readable native form",
   },
   {
-    file: "../src/components/SessionSidebar.tsx",
-    call: "primaryModifier()",
-    why: "the sidebar shortcut hint switches conversations and is OS-dependent",
-  },
-  {
     file: "../src/components/InputPanel.tsx",
     call: "primaryModifier()",
     why: "the send-answer tooltip advertises Cmd+Enter on Apple platforms",
@@ -58,6 +53,13 @@ describe("platform-aware navigation details", () => {
       );
     });
   }
+
+  it("names the conversation switch as the app handles it: Ctrl+Tab on every OS", () => {
+    // On macOS Cmd+Tab is the system's app switcher; App.tsx listens to Ctrl
+    // only, so the hint said Cmd+Tab for a key that did nothing (M0-11, 13/10/2026).
+    assert.match(read("../src/App.tsx"), /e\.key === "Tab" && e\.ctrlKey/);
+    assert.match(read("../src/components/SessionSidebar.tsx"), /Ctrl\+Tab to switch conversations/);
+  });
 
   it("imports the helpers instead of re-declaring them locally", () => {
     // A local copy would drift from the tested implementation.

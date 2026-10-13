@@ -257,6 +257,9 @@ export function TerminalPanel({
         <span aria-hidden="true">›</span>
         <input
           ref={inputRef}
+          // macOS substitutes typed quotes and dashes in a spell-checked field:
+          // `echo "a" -- b` reached the shell as “a” — b (M1-05, 13/10/2026).
+          spellCheck={false}
           value={command}
           onChange={(event) => setCommand(event.target.value)}
           onKeyDown={(event) => {

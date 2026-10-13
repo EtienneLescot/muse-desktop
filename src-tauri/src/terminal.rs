@@ -164,6 +164,15 @@ impl TerminalRegistry {
         let mut command = CommandBuilder::new(&shell);
         command.cwd(&shell_cwd);
         command.env("TERM", "xterm-256color");
+        // An app started from the Finder or the Dock gets no locale: zsh then
+        // runs in the C locale and echoes typed UTF-8 as `?` (M1-05, 13/10/2026).
+        // A locale the user set is kept.
+        if ["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .all(|name| std::env::var_os(name).filter(|value| !value.is_empty()).is_none())
+        {
+            command.env("LANG", "en_US.UTF-8");
+        }
         let mut child = pair
             .slave
             .spawn_command(command)

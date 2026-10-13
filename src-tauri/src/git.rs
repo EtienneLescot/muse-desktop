@@ -1259,8 +1259,12 @@ pub fn run_worktree_setup(
     };
     #[cfg(not(target_os = "windows"))]
     let mut child = {
+        use std::os::unix::process::CommandExt;
+        // Its own process group: Cancel and the timeout stop the whole command,
+        // not only `sh` (`sleep 27; echo …` kept running, M2-04, 13/10/2026).
         Command::new("sh")
             .args(["-c", trimmed])
+            .process_group(0)
             .current_dir(&dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1297,8 +1301,7 @@ pub fn run_worktree_setup(
     let mut exit_code: Option<i32> = None;
     loop {
         if cancelled_flag.load(std::sync::atomic::Ordering::Relaxed) {
-            let _ = child.kill();
-            let _ = child.wait();
+            stop_setup(&mut child);
             status = "cancelled";
             break;
         }
@@ -1312,8 +1315,7 @@ pub fn run_worktree_setup(
             Err(e) => return Err(format!("setup wait failed: {e}")),
         }
         if std::time::Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
+            stop_setup(&mut child);
             status = "timedOut";
             break;
         }
@@ -2150,6 +2152,20 @@ fn remove_pristine_worktree(source: &Path, target: &Path) -> Result<String, Stri
         Ok(_) => format!("the new worktree {name} was removed with its branch {branch}, as nothing was left in it"),
         Err(e) => format!("the new worktree {name} was removed, its branch {branch} kept: {e}"),
     })
+}
+
+/// Stops a setup command and everything it started: on Unix the command leads
+/// its own process group (`process_group(0)`), so the group is killed.
+fn stop_setup(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // SAFETY: kill(2) on the group this child leads; no memory is shared.
+        unsafe {
+            libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 #[cfg(test)]
