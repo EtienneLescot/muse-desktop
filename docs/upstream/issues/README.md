@@ -171,3 +171,33 @@ on 05/10, with Étienne's approval. The measurements are in
     was killed had stopped publishing events, seen once. #94 is the raw MSP re-run that note
     asked for.
 - **Not posted:** French-locale PowerShell output is mis-decoded. It is a side note in #88.
+
+## Follow-up of 13 October 2026 (macOS, host 1.4.2-R4684.1)
+
+From the macOS campaign (macOS 26.5, Apple Silicon, pinned engine `1.4.2-R4684.1`), posted in
+Étienne's name. Evidence in [`docs/evidence/2026-10-13-macos-closure/`](../../evidence/2026-10-13-macos-closure/).
+
+- **#97, fork at an earlier turn: commented** ([comment](https://github.com/meta-models/muse-code-sdk/issues/97#issuecomment-6145242584)).
+  - The issue (filed by another user on 1.4.3 and 1.4.4) refuses every completed turn but the
+    latest as a cut point (`InvalidCut`). The same happens on 1.4.2, with `echo` and the default
+    provider (`m1-09-msp-fork-probe-1.4.2.json`).
+- **#103, new issue: a fork during a running turn copies that turn** ([#103](https://github.com/meta-models/muse-code-sdk/issues/103)).
+  - The fork answers `turnCount: 1`, yet the branch serves the running turn's prompt as a
+    completed turn, and its model prefix carries that turn (`m1-09-msp-fork-probe-1.4.2.json`,
+    `m1-09-fork-app-1.4.2.json`).
+- **#55, fork with sub-agent lanes: clarified** ([comment](https://github.com/meta-models/muse-code-sdk/issues/55#issuecomment-6145243009)).
+  - The `InvalidCut` quoted on 05/10 is #97, not the Windows `WriteFailed` of #31/#55, which macOS
+    1.4.2 does not show.
+- **#104, new issue: `session/userShell` refused under the sandbox on macOS** ([#104](https://github.com/meta-models/muse-code-sdk/issues/104)).
+  - Under `--sandbox-network restricted` or `enabled`, every approval mode fails with "managed
+    shell sandbox is unavailable"; it runs with `--disable-sandbox`. The model's own shell runs
+    under the same postures (`m1-06-usershell-probe-macos.json`, `m0-06-policy-in-force.json`).
+- **Not posted:**
+  - Under Workspace only, the macOS sandbox lets commands write in `$TMPDIR` and `/private/tmp`.
+    This is a documented-behaviour question, not a proven defect; Settings states it since
+    `3196ce2`.
+  - 1.4.2 reports sub-agents as `subagent_spawn` tool calls and `reminderChild` items, with no
+    `subagent` item to stop. The MSP contract for lanes is not published, so this is recorded
+    against M2-07 rather than filed.
+  - The engine starts MCP stdio servers with a filtered environment (fixed on our side in
+    `df57377`).
