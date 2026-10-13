@@ -146,7 +146,7 @@ describe("visible failures", () => {
       assert.equal(text.match(/await confirmAction\(/g)?.length ?? 0, calls, `${file} awaits confirmAction`);
       asked += calls;
     }
-    assert.equal(asked, 5, "the move, the archive delete, both host restarts and the posture restart ask");
+    assert.equal(asked, 6, "the move, the archive delete, both host restarts, the posture restart and a forced worktree removal ask");
 
     const { confirmAction } = await import("../src/lib/env.ts");
     const calls: unknown[] = [];

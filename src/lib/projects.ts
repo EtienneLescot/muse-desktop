@@ -373,6 +373,31 @@ export function projectOfFolder(projects: Project[], folder: string): Project | 
   return projects.find((project) => projectWorkspaces(project).some((root) => pathKey(root) === key));
 }
 
+/**
+ * `projectOfFolder`, then by resolved folder when no spelling matches: on
+ * macOS `/var/…` and `/private/var/…`, or a symlinked checkout, name one
+ * folder, and a project's restricted posture must follow it (M2-02, 13/10/2026).
+ * `canonical` resolves a path on disk (`inspect_workspace_root`), or null.
+ */
+export async function projectOfFolderResolved(
+  projects: Project[],
+  folder: string,
+  canonical: (path: string) => Promise<string | null>,
+): Promise<Project | undefined> {
+  const direct = projectOfFolder(projects, folder);
+  if (direct) return direct;
+  const target = await canonical(folder);
+  if (!target) return undefined;
+  const key = pathKey(target);
+  for (const project of projects) {
+    for (const root of projectWorkspaces(project)) {
+      const resolved = await canonical(root);
+      if (resolved && pathKey(resolved) === key) return project;
+    }
+  }
+  return undefined;
+}
+
 /** Project id a thread is attached to (null = ungrouped). */
 export function projectOfThread(
   attached: ThreadProjectMap,

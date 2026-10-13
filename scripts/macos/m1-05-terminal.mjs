@@ -225,7 +225,7 @@ try {
   const wide = await t.run("python3 long.py 4000 wide", (a) => a.includes("LONG-DONE 4000"), 60_000);
   await sleep(800);
   const longRaw = await t.rawSince(longFrom);
-  const uLines = (plain(longRaw).match(/U\d{4} é€😀 中文 ✓ é€😀\n/gu) || []).length;
+  const uLines = (plain(longRaw).match(/U\d{4} \u00e9\u20ac\u{1F600} \u4e2d\u6587 \u2713 \u00e9\u20ac\u{1F600}\n/gu) || []).length;
   const wLines = (plain(longRaw).match(/W\d{4} 中文字符測試漢字中文字符測試漢字😀\n/gu) || []).length;
   const dom = await t.dom();
   check("unicode-long", {
