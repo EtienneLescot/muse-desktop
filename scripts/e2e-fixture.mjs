@@ -327,6 +327,9 @@ async function main() {
       // named, and neither default store moved.
       const store = readFileSync(join(dirs.data, "webkit-store"), "utf8").trim().toLowerCase();
       dirs.store = join(WEBKIT, basename(EXE), "WebsiteDataStore", store);
+      // The page target exists before its document: storage throws until it loads.
+      const loaded = await waitFor(() => app.ev("location.protocol === 'tauri:' && document.readyState === 'complete'").catch(() => false), 60_000, 250);
+      if (!loaded) throw new Error("the app page never finished loading");
       await app.ev("(localStorage.setItem('muse-e2e.store-probe', '1'), true)");
       report.webviewStore = await waitFor(() => existsSync(dirs.store), 30_000, 500) ? "test store written" : null;
       if (!report.webviewStore || !sameTree(dirs.defaults, webkitDefaults())) {
