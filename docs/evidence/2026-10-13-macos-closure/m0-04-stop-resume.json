@@ -1,0 +1,368 @@
+{
+  "schema": "muse-desktop.m0-04-stop-resume.v1",
+  "ticket": "M0-04",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 10,
+  "harness": "scripts/macos/m0-04-stop-resume.mjs on scripts/macos/test-instance.mjs (launch), bridge port 9414",
+  "isolation": {
+    "data": "<proof>/m0-04/MV6GUWI7/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<51f5779e-70b0-5963-a4f6-074043a50940>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "method": "One isolated instance on the pinned engine, the global posture set to YOLO (muse-desktop.authorization-mode.v1, then a reload) before any conversation, the Isolation sandbox left at its default. Projects A and B from the welcome screen. Text typed with Input.insertText and Enter as AppKit key events; Stop clicked with trusted AppKit mouse events on the composer's Stop button. The IPC trace records cancel_session and send_input; the UI is sampled every 25 ms after a click; the engine's own session log (read only) gives each run's terminal state.",
+  "phases": {
+    "beforeFirstToken": {
+      "admitted": "{\"commandId\":\"01a1348c-bba4-7a68-889b-fb94e6652464\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a1348c-bba4-7a68-889b-fb94e6652464\"}",
+      "stopVisible": true,
+      "msEnterToClick": 98,
+      "replyTextAtClick": 0,
+      "clicked": true,
+      "stoppingSeen": true,
+      "resolvedMs": 600,
+      "cancels": [
+        {
+          "sessionId": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+          "turnId": null,
+          "ok": true,
+          "atMs": 22717
+        }
+      ],
+      "cancelsForThis": 1,
+      "turnIdSent": false,
+      "view": {
+        "sid": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+        "title": "Reply with exactly READY-A-MV6GUWI7 and no…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "engine": {
+        "runId": "01a1348c-bba4-7a68-889b-fb94e6652464",
+        "started": true,
+        "terminal": "cancelled",
+        "reason": "cancelled during model step"
+      },
+      "noTextAfterwards": 0
+    },
+    "resumeAfterEnd": {
+      "completed": true,
+      "sendInput": [
+        {
+          "ok": true,
+          "disposition": "started"
+        }
+      ],
+      "viewAtEnd": {
+        "sid": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+        "title": "Reply with exactly READY-A-MV6GUWI7 and no…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "engine": {
+        "runId": "01a1348c-be7c-788e-8fa2-b5718206d5df",
+        "started": true,
+        "terminal": "completed",
+        "reason": null
+      }
+    },
+    "duringTool": {
+      "toolProcess": {
+        "pid": 71021,
+        "command": "/bin/sh -c sleep 45 && echo SLEPT-MV6GUWI7"
+      },
+      "approvalCards": 0,
+      "clicked": true,
+      "stoppingSeen": true,
+      "resolvedMs": 292,
+      "cancels": [
+        {
+          "sessionId": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+          "turnId": "01a1348c-f92f-71d1-8bab-5aab44a30449",
+          "ok": true,
+          "atMs": 43103
+        }
+      ],
+      "cancelsForThis": 1,
+      "turnIdSent": true,
+      "view": {
+        "sid": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+        "title": "Reply with exactly READY-A-MV6GUWI7 and no…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "toolProcessGoneWithin5s": true,
+      "engine": {
+        "runId": "01a1348c-f92f-71d1-8bab-5aab44a30449",
+        "started": true,
+        "terminal": "cancelled",
+        "reason": "cancelled after tool result reconciliation"
+      },
+      "toolDoneTextNeverCame": true
+    },
+    "lateAnswer": {
+      "replyTextAtClick": 860,
+      "clicked": true,
+      "stoppingSeen": true,
+      "resolvedMs": 133,
+      "cancels": [
+        {
+          "sessionId": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+          "turnId": "01a1348d-0d0a-73ba-8764-0c0d8091b726",
+          "ok": true,
+          "atMs": 54115
+        }
+      ],
+      "cancelsForThis": 1,
+      "turnIdSent": true,
+      "view": {
+        "sid": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+        "title": "Reply with exactly READY-A-MV6GUWI7 and no…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "textGrewAfterResolved": 0,
+      "engine": {
+        "runId": "01a1348d-0d0a-73ba-8764-0c0d8091b726",
+        "started": true,
+        "terminal": "cancelled",
+        "reason": "cancelled during model step"
+      }
+    },
+    "doubleClick": {
+      "clicked": true,
+      "stoppingSeen": true,
+      "resolvedMs": 231,
+      "cancels": [
+        {
+          "sessionId": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+          "turnId": "01a1348d-4ada-7079-82d9-d09f28c5ad93",
+          "ok": true,
+          "atMs": 73561
+        }
+      ],
+      "cancelsForThis": 1,
+      "turnIdSent": true,
+      "view": {
+        "sid": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+        "title": "Reply with exactly READY-A-MV6GUWI7 and no…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "engine": {
+        "runId": "01a1348d-4ada-7079-82d9-d09f28c5ad93",
+        "started": true,
+        "terminal": "cancelled",
+        "reason": "cancelled during model step"
+      }
+    },
+    "aDoesNotStopB": {
+      "bothRunningBeforeStop": true,
+      "clicked": true,
+      "stoppingSeen": true,
+      "resolvedMs": 138,
+      "cancels": [
+        {
+          "sessionId": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+          "turnId": "01a1348d-96e0-72fb-867d-1cb16f981b91",
+          "ok": true,
+          "atMs": 82851
+        }
+      ],
+      "cancelsForThis": 1,
+      "turnIdSent": true,
+      "view": {
+        "sid": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+        "title": "Reply with exactly READY-A-MV6GUWI7 and no…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": false
+      },
+      "bRunningAfterAStopped": true,
+      "bGrewAfterAStopped": 1294,
+      "bFinished": true,
+      "engineA": {
+        "runId": "01a1348d-96e0-72fb-867d-1cb16f981b91",
+        "started": true,
+        "terminal": "cancelled",
+        "reason": "cancelled during model step"
+      },
+      "engineB": {
+        "runId": "01a1348d-83d1-7d07-83e2-a50871d32e03",
+        "started": true,
+        "terminal": "completed",
+        "reason": null
+      }
+    },
+    "final": {
+      "completed": true,
+      "engineRunsA": [
+        {
+          "runId": "01a1348c-8e52-732b-8127-573632155708",
+          "started": true,
+          "terminal": "completed",
+          "reason": null
+        },
+        {
+          "runId": "01a1348c-bba4-7a68-889b-fb94e6652464",
+          "started": true,
+          "terminal": "cancelled",
+          "reason": "cancelled during model step"
+        },
+        {
+          "runId": "01a1348c-be7c-788e-8fa2-b5718206d5df",
+          "started": true,
+          "terminal": "completed",
+          "reason": null
+        },
+        {
+          "runId": "01a1348c-f92f-71d1-8bab-5aab44a30449",
+          "started": true,
+          "terminal": "cancelled",
+          "reason": "cancelled after tool result reconciliation"
+        },
+        {
+          "runId": "01a1348d-0d0a-73ba-8764-0c0d8091b726",
+          "started": true,
+          "terminal": "cancelled",
+          "reason": "cancelled during model step"
+        },
+        {
+          "runId": "01a1348d-4ada-7079-82d9-d09f28c5ad93",
+          "started": true,
+          "terminal": "cancelled",
+          "reason": "cancelled during model step"
+        },
+        {
+          "runId": "01a1348d-96e0-72fb-867d-1cb16f981b91",
+          "started": true,
+          "terminal": "cancelled",
+          "reason": "cancelled during model step"
+        },
+        {
+          "runId": "01a1348d-ed35-7064-8d57-c6f3e4eb02e4",
+          "started": true,
+          "terminal": "completed",
+          "reason": null
+        }
+      ],
+      "engineRunsB": [
+        {
+          "runId": "01a1348c-66c5-7212-8af2-66150246c651",
+          "started": true,
+          "terminal": "completed",
+          "reason": null
+        },
+        {
+          "runId": "01a1348d-83d1-7d07-83e2-a50871d32e03",
+          "started": true,
+          "terminal": "completed",
+          "reason": null
+        }
+      ]
+    }
+  },
+  "checks": {
+    "beforeFirstToken": true,
+    "beforeFirstTokenTurnId": false,
+    "resumeImmediately": true,
+    "afterEndNoStop": true,
+    "duringTool": true,
+    "lateAnswer": true,
+    "doubleClickOneCancel": true,
+    "aDoesNotStopB": true,
+    "finalTurn": true,
+    "stoppingStateShown": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "nothingLeft": true
+  },
+  "verdicts": {
+    "stopBeforeFirstToken": true,
+    "stopDuringTool": true,
+    "stopAfterEnd": true,
+    "stopWithLateAnswer": true,
+    "stopDoubleClick": true,
+    "stoppingADoesNotAffectB": true,
+    "finalStateMatchesEngine": true,
+    "resumeAfterStop": true,
+    "nothingLeft": true
+  },
+  "limits": [
+    "Posture YOLO for the whole run, so that the shell tool of the duringTool phase runs without an approval card; the Ask postures are covered by M0-05/M0-06.",
+    "The engine's session store (~/.local/share/muse/sessions) is the user's, shared by the test instance (ADR 0003); it is only read here.",
+    "Debug build in test mode, not the release build."
+  ],
+  "posture": "yolo",
+  "startB": "ready",
+  "startA": "ready",
+  "sessions": {
+    "sidA": "01a1348c-8db8-7732-a6dc-a00fd7313f9a",
+    "sidB": "01a1348c-65d2-7730-a561-5cc15ae73949"
+  },
+  "consoleErrors": [],
+  "observations": {
+    "beforeFirstTokenTurnId": "The Stop clicked 98 ms after Enter, once send_input had answered with its turnId, went out without a turnId (the renderer had not taken it yet); the engine still cancelled that run. The by-design fallback also seen on Windows (cdp-stop-terminal notes)."
+  },
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "passed": true
+}
