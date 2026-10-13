@@ -11,7 +11,8 @@
  * - waits for test-mode.pid, then checks, before handing the page over, that
  *   the window runs on its own WKWebView store and that the installed app's
  *   store and the debug exe's default store did not change;
- * - stop() quits the app with Cmd+Q, as a user would, kills what is left of
+ * - stop() closes the app's window (Tauri's window close, the OS close path;
+ *   Cmd+Q as a fallback), kills what is left of
  *   its process group, checks the stores again and deletes the test store.
  *
  *   const inst = await launch({ exe, port, data, engine });
@@ -106,8 +107,16 @@ export async function launch({ exe, port, data, engine = DEFAULT_ENGINE, env = {
     async function stop({ keepStore = false } = {}) {
       const end = { quitBy: null };
       if (child.exitCode === null) {
-        try { await app.send("Input.dispatchKeyEvent", { type: "keyDown", key: "q", code: "KeyQ", modifiers: 4 }); } catch { /* the app may be gone already */ }
-        end.quitBy = (await waitFor(() => child.exitCode !== null, 15_000, 200)) ? "Cmd+Q" : "SIGKILL";
+        // The window closed through Tauri's window API, the path of a close
+        // from the OS: the last window closed ends the app (RunEvent::Exit
+        // stops the hosts). macOS draws no Close button in the page. Not awaited:
+        // the page goes with the window.
+        await app.ev("(window.__TAURI_INTERNALS__.invoke('plugin:window|close', { label: 'main' }), true)").catch(() => null);
+        end.quitBy = (await waitFor(() => child.exitCode !== null, 20_000, 200)) ? "window closed" : null;
+        if (!end.quitBy) {
+          await app.send("Input.dispatchKeyEvent", { type: "keyDown", key: "q", code: "KeyQ", modifiers: 4 }).catch(() => null);
+          end.quitBy = (await waitFor(() => child.exitCode !== null, 10_000, 200)) ? "Cmd+Q" : "SIGKILL";
+        }
       } else {
         end.quitBy = "already exited";
       }
