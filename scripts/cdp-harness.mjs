@@ -6,6 +6,8 @@
  *
  * Requires the CDP-enabled build:
  *   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
+ * On macOS, a debug build in test mode serves the same calls through its
+ * WKWebView bridge (src-tauri/src/test_bridge.rs, MUSE_DESKTOP_TEST_CDP_PORT).
  * MUSE_CDP_PORT overrides the port (default 9222).
  */
 import { execFileSync } from "node:child_process";
@@ -24,7 +26,8 @@ export function argValue(name, fallback) {
 export async function openPage() {
   const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
   const page = list.find((t) => t.type === "page" && typeof t.webSocketDebuggerUrl === "string"
-    && /tauri\.localhost/.test(t.url));
+    // WebView2 serves http://tauri.localhost, WKWebView tauri://localhost.
+    && /tauri\.localhost|^tauri:\/\/localhost/.test(t.url));
   if (!page) throw new Error(`no app page target on CDP ${PORT}`);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   let nextId = 1;
@@ -104,7 +107,8 @@ export const INSTALL_IPC_TRACE = `(() => {
   const original = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = String(typeof input === 'string' ? input : (input && input.url) || input);
-    const match = url.match(/^https?:\\/\\/ipc\\.localhost\\/([^/?#]+)/);
+    // WebView2: http://ipc.localhost/<cmd>; WKWebView: ipc://localhost/<cmd>.
+    const match = url.match(/^(?:https?:\\/\\/ipc\\.localhost|ipc:\\/\\/localhost)\\/([^/?#]+)/);
     if (!match) return original(input, init);
     const cmd = decodeURIComponent(match[1]);
     let args = null;

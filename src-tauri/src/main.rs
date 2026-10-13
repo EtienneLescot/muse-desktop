@@ -46,6 +46,8 @@ mod notification_ledger;
 mod outbox_ledger;
 mod workspace_watch;
 mod test_mode;
+#[cfg(all(debug_assertions, target_os = "macos"))]
+mod test_bridge;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -10034,7 +10036,7 @@ fn main() {
     #[cfg(target_os = "macos")]
     login_env::adopt_login_shell_path();
     let mut context = tauri::generate_context!();
-    test_mode::open_devtools(&mut context);
+    test_mode::prepare_windows(&mut context);
     let builder = tauri::Builder::default();
     // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
     // this executable while the user's instance may still run — two
@@ -10064,6 +10066,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .setup(|app| Ok(test_mode::setup(app)?))
         .manage(AppState {
             resume_mutex: tokio::sync::Mutex::new(()),
             hosts: Mutex::new(Hosts::default()),

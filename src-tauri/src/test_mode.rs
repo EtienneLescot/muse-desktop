@@ -1,53 +1,67 @@
 //! Isolated test mode for the M0-14 end-to-end check (ADR 0003).
 //!
-//! Debug builds on Windows only: elsewhere `data_dir` compiles to `None`, so
-//! none of this can switch on in a shipped app, nor on macOS or Linux, where
+//! Debug builds on Windows and macOS only: elsewhere `data_dir` compiles to
+//! `None`, so none of this can switch on in a shipped app, nor on Linux, where
 //! it would lift the single-instance guard without moving the webview store.
 //! `MUSE_DESKTOP_TEST_DATA_DIR` turns it on. That folder then holds the app
-//! data and the WebView2 profile, the computer-use service gets a pipe named
-//! after it (`computer::endpoint`), the single-instance guard and the OS wake-up
-//! task are skipped, and every local engine is `MUSE_DESKTOP_TEST_SIDECAR`, a
-//! JSON argv such as `["node", "scripts/muse-fixture.mjs"]`. A remote target
+//! data and, on Windows, the WebView2 profile; on macOS the window gets a
+//! WKWebView data store of its own (`store_id`), never the default one. The
+//! computer-use service gets an endpoint named after the folder
+//! (`computer::endpoint`), the single-instance guard and the OS wake-up task
+//! are skipped, and every local engine is `MUSE_DESKTOP_TEST_SIDECAR`, a JSON
+//! argv such as `["node", "scripts/muse-fixture.mjs"]`. A remote target
 //! (`ssh://`) that the test profile itself configured is reached over the
 //! system ssh, as outside test mode: a test that configures none never leaves
 //! the fixture, as in CI.
 //! `MUSE_DESKTOP_TEST_CDP_PORT` opens the DevTools protocol of the webview on
-//! that port. `MUSE_DESKTOP_TEST_REMOTE_MCP` names the one loopback origin a
-//! remote MCP connector may use over plain HTTP (`remote_mcp_origin`).
+//! that port: WebView2's own on Windows, the WKWebView bridge on macOS
+//! (`test_bridge`). `MUSE_DESKTOP_TEST_REMOTE_MCP` names the one loopback
+//! origin a remote MCP connector may use over plain HTTP (`remote_mcp_origin`).
 
 use std::path::PathBuf;
 
 /// The switch. Only a build that can enter test mode carries this string:
 /// the E2E runner refuses an exe without it.
-#[cfg(all(debug_assertions, windows))]
+#[cfg(all(debug_assertions, any(windows, target_os = "macos")))]
 const SWITCH: &str = "MUSE_DESKTOP_TEST_DATA_DIR";
 
 /// The isolated instance's data folder, when test mode is on.
-#[cfg(all(debug_assertions, windows))]
+#[cfg(all(debug_assertions, any(windows, target_os = "macos")))]
 pub fn data_dir() -> Option<PathBuf> {
     std::env::var_os(SWITCH)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
 
-/// A release build is never in test mode, nor macOS or Linux.
-#[cfg(not(all(debug_assertions, windows)))]
+/// A release build is never in test mode, nor Linux.
+#[cfg(not(all(debug_assertions, any(windows, target_os = "macos"))))]
 pub fn data_dir() -> Option<PathBuf> {
     None
 }
 
 /// Called once in `main`, before any webview exists: moves the WebView2
-/// profile (the renderer's localStorage) into the test folder and leaves
-/// `test-mode.pid` there, the proof of entry the E2E runner waits for.
-/// Returns whether test mode is on.
+/// profile (the renderer's localStorage) into the test folder on Windows and
+/// leaves `test-mode.pid` there, the proof of entry the E2E runner waits for.
+/// On macOS the store moves when `setup` builds the window, and its id is left
+/// in `webkit-store`. Returns whether test mode is on.
 pub fn enter() -> bool {
     let Some(dir) = data_dir() else { return false };
     // A variable left in a developer shell must not switch it on silently.
     #[cfg(all(debug_assertions, windows))]
     eprintln!("muse-desktop: {SWITCH} is set, test mode: app data and WebView2 profile in {}", dir.display());
+    #[cfg(all(debug_assertions, target_os = "macos"))]
+    eprintln!(
+        "muse-desktop: {SWITCH} is set, test mode: app data in {}, WKWebView data store {}",
+        dir.display(),
+        store_uuid(&dir)
+    );
+    #[cfg(windows)]
     std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", dir.join("WebView2"));
-    let marker = std::fs::create_dir_all(&dir)
-        .and_then(|()| std::fs::write(dir.join("test-mode.pid"), std::process::id().to_string()));
+    let marker = std::fs::create_dir_all(&dir).and_then(|()| {
+        #[cfg(target_os = "macos")]
+        std::fs::write(dir.join("webkit-store"), store_uuid(&dir))?;
+        std::fs::write(dir.join("test-mode.pid"), std::process::id().to_string())
+    });
     if let Err(error) = marker {
         eprintln!("muse-desktop: test mode marker not written: {error}");
     }
@@ -55,12 +69,73 @@ pub fn enter() -> bool {
 }
 
 /// The DevTools port goes through the WebView2 options: an elevated host, as
-/// on a CI runner, ignores `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`.
-pub fn open_devtools<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
+/// on a CI runner, ignores `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`. On macOS
+/// the configured windows are not created: `setup` builds them on the test
+/// instance's own WKWebView data store, which Tauri does not read from the
+/// window configuration.
+pub fn prepare_windows<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
+    #[cfg(target_os = "macos")]
+    if data_dir().is_some() {
+        for window in &mut context.config_mut().app.windows {
+            window.create = false;
+        }
+    }
     let Some(args) = browser_args() else { return };
     for window in &mut context.config_mut().app.windows {
         window.additional_browser_args = Some(args.clone());
     }
+}
+
+/// Builds the windows `prepare_windows` held back, each on the test store,
+/// and opens the WKWebView bridge when a port is set. Outside macOS test mode
+/// it does nothing.
+pub fn setup(app: &tauri::App) -> Result<(), String> {
+    #[cfg(all(debug_assertions, target_os = "macos"))]
+    if let Some(dir) = data_dir() {
+        let store = store_id(&dir);
+        for config in &app.config().app.windows {
+            tauri::WebviewWindowBuilder::from_config(app.handle(), config)
+                .map_err(|error| format!("test window {}: {error}", config.label))?
+                .data_store_identifier(store)
+                .initialization_script(crate::test_bridge::ERROR_CAPTURE)
+                .build()
+                .map_err(|error| format!("test window {}: {error}", config.label))?;
+        }
+        if let Some(port) = cdp_port() {
+            crate::test_bridge::start(app.handle().clone(), port);
+        }
+    }
+    #[cfg(not(all(debug_assertions, target_os = "macos")))]
+    let _ = app;
+    Ok(())
+}
+
+fn cdp_port() -> Option<u16> {
+    data_dir()
+        .and_then(|_| std::env::var("MUSE_DESKTOP_TEST_CDP_PORT").ok())
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port > 0)
+}
+
+/// The WKWebView data store of a test instance, derived from its folder: the
+/// same folder reopens the same store, a fresh one never meets the user's.
+/// WebKit keeps it under `~/Library/WebKit/<app>/WebsiteDataStore/<uuid>`;
+/// the runner deletes it at the end of the run.
+#[cfg(target_os = "macos")]
+pub fn store_id(dir: &std::path::Path) -> [u8; 16] {
+    use sha1::{Digest, Sha1};
+    let digest = Sha1::digest(dir.to_string_lossy().as_bytes());
+    let mut id = [0u8; 16];
+    id.copy_from_slice(&digest[..16]);
+    // RFC 4122 name-based (SHA-1) layout, so the id reads as a version 5 UUID.
+    id[6] = (id[6] & 0x0f) | 0x50;
+    id[8] = (id[8] & 0x3f) | 0x80;
+    id
+}
+
+#[cfg(target_os = "macos")]
+fn store_uuid(dir: &std::path::Path) -> String {
+    uuid::Uuid::from_bytes(store_id(dir)).hyphenated().to_string().to_uppercase()
 }
 
 /// The WebView2 arguments of a test instance, for every webview it opens:
@@ -68,9 +143,10 @@ pub fn open_devtools<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
 /// browser window (opened at run time) needs them too — without, it never
 /// showed while its command answered "opened" (M0-13, 06/10/2026).
 pub fn browser_args() -> Option<String> {
-    let port = data_dir()
-        .and_then(|_| std::env::var("MUSE_DESKTOP_TEST_CDP_PORT").ok())
-        .and_then(|value| value.parse::<u16>().ok())?;
+    if !cfg!(windows) {
+        return None;
+    }
+    let port = cdp_port()?;
     // Options replace wry's default arguments: keep them.
     Some(format!(
         "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
@@ -131,5 +207,15 @@ mod tests {
         ] {
             assert_eq!(loopback_origin(raw), None, "{raw}");
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn store_id_is_per_folder() {
+        let a = store_id(std::path::Path::new("/tmp/muse-e2e-a"));
+        assert_eq!(a, store_id(std::path::Path::new("/tmp/muse-e2e-a")));
+        assert_ne!(a, store_id(std::path::Path::new("/tmp/muse-e2e-b")));
+        assert_eq!(a[6] >> 4, 5);
+        assert_eq!(store_uuid(std::path::Path::new("/tmp/muse-e2e-a")).len(), 36);
     }
 }
