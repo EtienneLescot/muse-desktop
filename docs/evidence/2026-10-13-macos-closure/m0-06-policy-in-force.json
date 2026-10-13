@@ -1,0 +1,723 @@
+{
+  "schema": "muse-desktop.m0-06-policy-in-force-macos.v1",
+  "ticket": "M0-06",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, debug build with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 5,
+  "harness": "scripts/macos/m0-06-policy-in-force.mjs (+ scripts/macos/m0-05-06-common.mjs), port 9426",
+  "isolation": "One isolated test instance per phase (scripts/macos/test-instance.mjs): fresh data folder and WKWebView store under the run folder, projects in folders under the run folder ($TMPDIR) created through the Projects panel, the pinned engine with MUSE_NO_AUTO_UPDATE=1; each stop records the default stores unchanged and no process left. Outside-the-folder write targets: a sibling under $TMPDIR, another $TMPDIR tree, /private/tmp/muse-proofs-g2-<run> and ~/muse-proofs/g2-outside-<run>, all created and deleted by the script. The engine's session store is shared with the user (ADR 0003).",
+  "method": "scope: conversations with no message started from each project's row (Projects panel > New conversation here) under each Isolation level of Settings; the requested posture is read from start_session on the page's IPC trace, the engine argv from ps under the app's pid; the posture menu cycled with five engines running (set_approval_mode, host effectiveMode), then a graceful relaunch. matrix/middle/temp: real 1.4.2 turns whose only action is `sh probe.sh`, a script the harness wrote in the project folder; writes are judged on disk, the read and the network from the probe lines in the stored transcript (curl exit code and HTTP status). texts: Settings' sentences read on macOS and set against those cells.",
+  "phases": {
+    "scope": {
+      "at": "2026-10-13T09:36:04.582Z",
+      "liveTurns": 0,
+      "isolation": {
+        "data": "<run>/scope/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<30ec0b72-021c-5a70-8ee0-c12369c48d6e>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "cases": [
+        {
+          "settings": "Workspace only",
+          "project": "F1",
+          "stored": "workspace",
+          "status": "Ask for approval",
+          "ok": true,
+          "sessionId": "01a1349d-fbe3-7a93-840c-97a9e02a6fae",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace",
+            "sandbox": null
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "serve --sandbox-network restricted --trust-workspace"
+        },
+        {
+          "settings": "Workspace and network",
+          "project": "F2",
+          "stored": "network",
+          "status": "Ask for approval",
+          "ok": true,
+          "sessionId": "01a1349e-0bdc-7fa2-8aa0-a301819565b0",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "network",
+            "sandbox": null
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "serve --sandbox-network enabled --trust-workspace"
+        },
+        {
+          "settings": "Elevated access",
+          "project": "F3",
+          "stored": "elevated",
+          "status": "Ask for approval",
+          "ok": true,
+          "sessionId": "01a1349e-1a7a-7d12-8d40-dd78ab668a75",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "elevated",
+            "sandbox": null
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+        },
+        {
+          "settings": "Elevated access",
+          "project": "N",
+          "stored": "elevated",
+          "status": "Ask for approval",
+          "ok": true,
+          "sessionId": "01a1349e-2949-7222-9540-ce91ff0ae49c",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace",
+            "sandbox": null
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "serve --sandbox-network restricted --trust-workspace"
+        },
+        {
+          "settings": "Elevated access",
+          "project": "R",
+          "stored": "elevated",
+          "status": "Ask for approval",
+          "ok": true,
+          "sessionId": "01a1349e-37f8-7fb0-b415-5988a104116e",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace",
+            "sandbox": null
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+        }
+      ],
+      "overrideN": {
+        "select": true,
+        "value": "deny"
+      },
+      "overrideR": {
+        "select": true,
+        "value": "read-only"
+      },
+      "change": {
+        "settings": "Elevated access",
+        "project": "F1 (follows Settings, engine running)",
+        "ok": false,
+        "sessionId": null,
+        "requested": {
+          "authorizationMode": "ask",
+          "sandboxMode": "elevated",
+          "sandbox": null
+        },
+        "hostApprovalMode": null,
+        "engine": "reused a running engine",
+        "error": "This folder's engine is running with Workspace only; restart it to apply Elevated access."
+      },
+      "postures": [
+        {
+          "mode": "workspace",
+          "via": "composer menu",
+          "stored": "workspace"
+        },
+        {
+          "mode": "yolo",
+          "via": "composer menu",
+          "stored": "yolo"
+        },
+        {
+          "mode": "ask",
+          "via": "composer menu",
+          "stored": "ask"
+        },
+        {
+          "mode": "yolo",
+          "via": "composer menu",
+          "stored": "yolo"
+        }
+      ],
+      "setApprovalMode": [
+        {
+          "mode": "workspace",
+          "ok": true,
+          "effectiveMode": "onRequest"
+        },
+        {
+          "mode": "workspace",
+          "ok": true,
+          "effectiveMode": "onRequest"
+        },
+        {
+          "mode": "workspace",
+          "ok": true,
+          "effectiveMode": "onRequest"
+        },
+        {
+          "mode": "workspace",
+          "ok": true,
+          "effectiveMode": "onRequest"
+        },
+        {
+          "mode": "workspace",
+          "ok": true,
+          "effectiveMode": "onRequest"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "ask",
+          "ok": true,
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "ask",
+          "ok": true,
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "ask",
+          "ok": true,
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "ask",
+          "ok": true,
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "ask",
+          "ok": true,
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        },
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        }
+      ],
+      "enginesAtEnd": [
+        "serve --sandbox-network restricted --trust-workspace",
+        "serve --sandbox-network enabled --trust-workspace",
+        "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+        "serve --sandbox-network restricted --trust-workspace",
+        "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+      ],
+      "consoleErrors": [],
+      "stopFirst": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "relaunchPosture": "yolo",
+      "resume": [],
+      "setApprovalModeAfterRelaunch": [
+        {
+          "mode": "yolo",
+          "ok": true,
+          "effectiveMode": "allowAll"
+        }
+      ],
+      "enginesAfterRelaunch": [
+        "serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+      ],
+      "restoredAsk": {
+        "clicked": true,
+        "via": "composer menu",
+        "stored": "ask"
+      },
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "workspaceArgv": true,
+        "networkArgv": true,
+        "elevatedArgv": true,
+        "noNetworkProjectStaysWorkspace": true,
+        "readOnlyProjectFlags": true,
+        "runningEngineKeepsItsPosture": true,
+        "postureChangeWithoutRestart": true,
+        "posturePersistsAcrossRelaunch": true,
+        "relaunchedEngineFollowsCurrentSettings": true
+      }
+    },
+    "matrix": {
+      "at": "2026-10-13T09:37:55.997Z",
+      "liveTurns": 3,
+      "isolation": {
+        "data": "<run>/matrix/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<03a24830-9d07-508a-b18f-09b8adacfbba>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "cells": [
+        {
+          "level": "Workspace only",
+          "posture": "yolo",
+          "setIsolation": {
+            "clicked": true,
+            "stored": "workspace",
+            "status": "Ask for approval"
+          },
+          "setPosture": {
+            "clicked": true,
+            "via": "Settings",
+            "stored": "yolo"
+          },
+          "startSession": {
+            "ok": true,
+            "authorizationMode": "yolo",
+            "sandboxMode": "workspace",
+            "hostApprovalMode": "allowAll"
+          },
+          "engine": "serve --sandbox-network restricted --trust-workspace",
+          "cards": [],
+          "turnEnded": true,
+          "printed": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "fail",
+            "read-outside-home": "ok",
+            "net-http": "exit6:000",
+            "net-https": "exit6:000"
+          },
+          "disk": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "fail"
+          },
+          "reply": " probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=fail probe read-outside-home=ok probe net-http=exit6:000 probe net-https=exit6:000 probe done  probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=fail probe read-outside-home=ok probe net-http=exit6:000 probe net-https=exit6:000 probe done "
+        },
+        {
+          "level": "Workspace and network",
+          "posture": "yolo",
+          "setIsolation": {
+            "clicked": true,
+            "stored": "network",
+            "status": "YOLO"
+          },
+          "setPosture": {
+            "clicked": true,
+            "via": "Settings",
+            "stored": "yolo"
+          },
+          "startSession": {
+            "ok": true,
+            "authorizationMode": "yolo",
+            "sandboxMode": "network",
+            "hostApprovalMode": "allowAll"
+          },
+          "engine": "serve --sandbox-network enabled --trust-workspace",
+          "cards": [],
+          "turnEnded": true,
+          "printed": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "fail",
+            "read-outside-home": "ok",
+            "net-http": "exit0:200",
+            "net-https": "exit0:200"
+          },
+          "disk": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "fail"
+          },
+          "reply": " probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=fail probe read-outside-home=ok probe net-http=exit0:200 probe net-https=exit0:200 probe done  probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=fail probe read-outside-home=ok probe net-http=exit0:200 probe net-https=exit0:200 probe done "
+        },
+        {
+          "level": "Elevated access",
+          "posture": "yolo",
+          "setIsolation": {
+            "clicked": true,
+            "stored": "elevated",
+            "status": "YOLO"
+          },
+          "setPosture": {
+            "clicked": true,
+            "via": "Settings",
+            "stored": "yolo"
+          },
+          "startSession": {
+            "ok": true,
+            "authorizationMode": "yolo",
+            "sandboxMode": "elevated",
+            "hostApprovalMode": "allowAll"
+          },
+          "engine": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cards": [],
+          "turnEnded": true,
+          "printed": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "ok",
+            "read-outside-home": "ok",
+            "net-http": "exit0:200",
+            "net-https": "exit0:200"
+          },
+          "disk": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "ok"
+          },
+          "reply": " probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=ok probe read-outside-home=ok probe net-http=exit0:200 probe net-https=exit0:200 probe done  probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=ok probe read-outside-home=ok probe net-http=exit0:200 probe net-https=exit0:200 probe done "
+        }
+      ],
+      "consoleErrors": [],
+      "restoredAsk": {
+        "clicked": true,
+        "via": "composer menu",
+        "stored": "ask"
+      },
+      "restoredWorkspace": {
+        "clicked": true,
+        "stored": "workspace",
+        "status": "Ask for approval"
+      },
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      }
+    },
+    "middle": {
+      "at": "2026-10-13T09:38:26.909Z",
+      "liveTurns": 1,
+      "isolation": {
+        "data": "<run>/middle/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<ea0c7db6-4f16-5835-ada5-d1581f2f8290>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "cells": [
+        {
+          "level": "Workspace only",
+          "posture": "workspace",
+          "setIsolation": {
+            "clicked": true,
+            "stored": "workspace",
+            "status": "Ask for approval"
+          },
+          "setPosture": {
+            "clicked": true,
+            "via": "Settings",
+            "stored": "workspace"
+          },
+          "startSession": {
+            "ok": true,
+            "authorizationMode": "workspace",
+            "sandboxMode": "workspace",
+            "hostApprovalMode": "onRequest"
+          },
+          "engine": "serve --sandbox-network restricted --trust-workspace",
+          "cards": [],
+          "turnEnded": true,
+          "printed": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "fail",
+            "read-outside-home": "ok",
+            "net-http": "exit6:000",
+            "net-https": "exit6:000"
+          },
+          "disk": {
+            "write-inside-relative": "ok",
+            "write-inside-absolute": "ok",
+            "write-outside-temp": "ok",
+            "write-outside-home": "fail"
+          },
+          "reply": " probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=fail probe read-outside-home=ok probe net-http=exit6:000 probe net-https=exit6:000 probe done  probe write-inside-relative=ok probe write-inside-absolute=ok probe write-outside-temp=ok probe write-outside-home=fail probe read-outside-home=ok probe net-http=exit6:000 probe net-https=exit6:000 probe done "
+        }
+      ],
+      "consoleErrors": [],
+      "restoredAsk": {
+        "clicked": true,
+        "via": "composer menu",
+        "stored": "ask"
+      },
+      "restoredWorkspace": {
+        "clicked": true,
+        "stored": "workspace",
+        "status": "Ask for approval"
+      },
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      }
+    },
+    "texts": {
+      "at": "2026-10-13T09:39:42.375Z",
+      "liveTurns": 0,
+      "settings": {
+        "isolationNote": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. A project follows this level unless its own preferences restrict it.",
+        "isolation": [
+          {
+            "label": "Workspace only",
+            "detail": "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders."
+          },
+          {
+            "label": "Workspace and network",
+            "detail": "Also lets commands connect out."
+          },
+          {
+            "label": "Elevated access",
+            "detail": "Adds files and commands outside the folder. It reaches every project that does not restrict it."
+          }
+        ],
+        "postures": [
+          {
+            "label": "Ask for approval",
+            "detail": "Muse asks before any action the engine's own rules do not allow."
+          },
+          {
+            "label": "Ask only for more access",
+            "detail": "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands."
+          },
+          {
+            "label": "YOLO",
+            "detail": "Muse never asks. Your Isolation setting still limits what an action can reach."
+          }
+        ]
+      },
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "claims": [
+        {
+          "sentence": "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "claim": "writes stay inside the folder",
+          "holds": false,
+          "cells": {
+            "inside": [
+              "ok",
+              "ok"
+            ],
+            "outsideHome": "fail",
+            "outsideTemp": "ok",
+            "tempPhase": {
+              "write-tmpdir-sibling": "ok",
+              "write-tmpdir-other-tree": "ok",
+              "write-private-tmp": "ok",
+              "write-home": "fail"
+            }
+          }
+        },
+        {
+          "sentence": "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "claim": "commands cannot connect out",
+          "holds": true,
+          "cells": {
+            "http": "exit6:000",
+            "https": "exit6:000"
+          }
+        },
+        {
+          "sentence": "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
+          "claim": "reads can reach other folders",
+          "holds": true,
+          "cells": {
+            "read": "ok"
+          }
+        },
+        {
+          "sentence": "Also lets commands connect out.",
+          "claim": "also lets commands connect out",
+          "holds": true,
+          "cells": {
+            "http": "exit0:200",
+            "https": "exit0:200",
+            "outsideHome": "fail"
+          }
+        },
+        {
+          "sentence": "Adds files and commands outside the folder. It reaches every project that does not restrict it.",
+          "claim": "adds files and commands outside the folder",
+          "holds": true,
+          "cells": {
+            "outsideHome": "ok",
+            "outsideTemp": "ok",
+            "https": "exit0:200"
+          }
+        },
+        {
+          "sentence": "Muse never asks. Your Isolation setting still limits what an action can reach.",
+          "claim": "never asks; Isolation still limits",
+          "holds": true,
+          "cells": {
+            "cards": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "sentence": "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands.",
+          "claim": "the engine's sandbox decides when Muse asks (macOS cell recorded)",
+          "holds": true,
+          "cells": {
+            "cards": 0,
+            "tools": [],
+            "outsideHome": "fail",
+            "http": "exit6:000"
+          }
+        }
+      ],
+      "windowsOnlyNoteAbsent": true,
+      "verdict": {
+        "everyClaimHolds": false,
+        "windowsOnlyNoteAbsent": true
+      }
+    },
+    "temp": {
+      "at": "2026-10-13T09:39:19.221Z",
+      "liveTurns": 1,
+      "isolation": {
+        "data": "<run>/temp/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<2c2e9fef-86d9-599a-90e2-d60785c78655>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "setIsolation": {
+        "clicked": true,
+        "stored": "workspace",
+        "status": "Ask for approval"
+      },
+      "setPosture": {
+        "clicked": true,
+        "via": "Settings",
+        "stored": "yolo"
+      },
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "yolo",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "allowAll"
+      },
+      "engine": [
+        "serve --sandbox-network restricted --trust-workspace"
+      ],
+      "printed": {
+        "write-tmpdir-sibling": "ok",
+        "write-tmpdir-other-tree": "ok",
+        "write-private-tmp": "ok",
+        "write-home": "fail",
+        "tmpdir-env": "<TMPDIR>/"
+      },
+      "disk": {
+        "write-tmpdir-sibling": "ok",
+        "write-tmpdir-other-tree": "ok",
+        "write-private-tmp": "ok",
+        "write-home": "fail"
+      },
+      "restoredAsk": {
+        "clicked": true,
+        "via": "composer menu",
+        "stored": "ask"
+      },
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      }
+    }
+  },
+  "verdicts": {
+    "scope": {
+      "workspaceArgv": true,
+      "networkArgv": true,
+      "elevatedArgv": true,
+      "noNetworkProjectStaysWorkspace": true,
+      "readOnlyProjectFlags": true,
+      "runningEngineKeepsItsPosture": true,
+      "postureChangeWithoutRestart": true,
+      "posturePersistsAcrossRelaunch": true,
+      "relaunchedEngineFollowsCurrentSettings": true
+    },
+    "matrix": "recorded (cells judged by texts)",
+    "middle": "recorded (cells judged by texts)",
+    "texts": {
+      "everyClaimHolds": false,
+      "windowsOnlyNoteAbsent": true
+    },
+    "temp": "recorded (cells judged by texts)"
+  },
+  "limits": [
+    "macOS engine 1.4.2 (Seatbelt): under Workspace only, writes outside the folder are refused in the home folder but succeed in the user's temp folder ($TMPDIR) and in /private/tmp; Settings' 'Writes stay inside the conversation's folder' over-claims on macOS for those two folders. Names do not resolve under Workspace only (curl exit 6), where Windows resolved them and refused the connect.",
+    "Under 'Ask only for more access' (onRequest) the macOS engine ran `sh probe.sh` without asking (0 cards); the sentence's Windows clause ('On Windows it asks for shell commands') says nothing about macOS.",
+    "A relaunch resumes a conversation on an engine started with the current Settings level when the project follows Settings (F1 started under Workspace only came back under Elevated access), as Settings' note says ('Applied when a new engine starts').",
+    "The boot resume runs before the harness installs its IPC trace: the relaunch is judged on the posture the app re-applies and the host's answer to it."
+  ]
+}
