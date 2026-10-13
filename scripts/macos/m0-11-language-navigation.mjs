@@ -21,7 +21,7 @@
  *
  *   node scripts/macos/m0-11-language-navigation.mjs --exe ~/muse-proofs/app/08b291d/muse-desktop
  *     [--port 9423] [--base $TMPDIR/muse-proofs-g2/m0-11]
- *     [--out docs/evidence/2026-10-13-macos-closure/m0-11-language-navigation.json]
+ *     [--out docs/evidence/2026-10-13-macos-closure/m0-11-language-navigation.json] [--build-commit 08b291d]
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -33,6 +33,8 @@ import { newProjectConversation, sendFirstMessage } from "./smoke-real-turn.mjs"
 
 const EXE = resolve(argValue("--exe", join(homedir(), "muse-proofs", "app", "08b291d", "muse-desktop")));
 const PORT = Number(argValue("--port", "9423"));
+const BUILD = argValue("--build-commit", "08b291d");
+const FIXED_BUILD = BUILD !== "08b291d";
 const BASE = resolve(argValue("--base", join(tmpdir(), "muse-proofs-g2", "m0-11")));
 const OUT = argValue("--out", "docs/evidence/2026-10-13-macos-closure/m0-11-language-navigation.json");
 const RUN = join(BASE, `run-${Date.now().toString(36)}`);
@@ -118,14 +120,23 @@ async function main() {
     schema: "muse-desktop.m0-11-language-navigation-macos.v1",
     ticket: "M0-11",
     date: new Date().toISOString().slice(0, 10),
-    commit: "08b291d",
+    commit: BUILD,
     platform: `macOS ${execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim()} (${execFileSync("sw_vers", ["-buildVersion"], { encoding: "utf8" }).trim()}), ${process.arch}, debug build with embedded frontend, WKWebView through the test bridge`,
     engine: "scripts/muse-fixture.mjs (protocol double, ADR 0003); no real engine and no model turn in this proof",
     pinnedEngineOnThisMachine: engineVersion(),
     liveTurns: 0,
     harness: `scripts/macos/m0-11-language-navigation.mjs, port ${PORT}`,
     systemLocale: { AppleLocale: execFileSync("defaults", ["read", "-g", "AppleLocale"], { encoding: "utf8" }).trim() },
-    method: "Isolated test instance (scripts/macos/test-instance.mjs) on the protocol fixture. Two project conversations created from the welcome screen (folders answered by the IPC trace), each first message typed and sent with a real Enter, each fixture approval card answered with a real mouse click. Every surface audited in the DOM with the cdp-language-audit.mjs markers, over visible text and over title, aria-label and placeholder; every attribute naming a modifier collected. Shortcuts dispatched as key events through the bridge (Input.dispatchKeyEvent, Cmd = modifiers 4, Ctrl = 2): they reach the page's keydown handlers, as a real key press in the focused window would; the OS-level handling of Cmd+Tab (the app switcher) is outside the page. Zoom measured as window.innerWidth in CSS pixels. Search typed with Input.insertText in the Cmd+K dialog.",
+    method: "Isolated test instance (scripts/macos/test-instance.mjs) on the protocol fixture. Two project conversations created from the welcome screen (folders answered by the IPC trace), each first message typed and sent with a real Enter, each fixture approval card answered with a real mouse click. Every surface audited in the DOM with the cdp-language-audit.mjs markers, over visible text and over title, aria-label and placeholder; every attribute naming a modifier collected. Shortcuts dispatched as key events through the bridge (Input.dispatchKeyEvent, Cmd = modifiers 4, Ctrl = 2): they reach the page's keydown handlers, as a real key press in the focused window would; the OS-level handling of Cmd+Tab (the app switcher) is outside the page. Zoom measured as window.innerWidth in CSS pixels. Search typed with Input.insertText in the Cmd+K dialog."
+      + (FIXED_BUILD ? ` Replay on ${BUILD} (capability core:webview:allow-set-webview-zoom; the sidebar hint says Ctrl+Tab on every OS): the zoom keys are now expected to change the page zoom with no 'not allowed' console error, and the switch hint to name Ctrl+Tab, the shortcut the app obeys. modifierHintsSayCmd now accepts the two hints that name a real Control shortcut on macOS (Ctrl+C in the terminal, Ctrl+Tab between conversations). If the zoom keys left the width unchanged, the capability is checked by the equivalent IPC call (plugin:webview|set_webview_zoom).` : ""),
+    ...(FIXED_BUILD ? { previousRun: {
+      file: "docs/evidence/2026-10-13-macos-closure/m0-11-language-navigation.json",
+      commit: "08b291d",
+      defectsThen: [
+        "Sidebar hint said 'Cmd+Tab to switch conversations': Cmd+Tab left the conversation unchanged (and is the system app switcher), Ctrl+Tab switched (conversationSwitchMatchesItsHint false).",
+        "Cmd+Plus, Cmd+Minus, Cmd+0: innerWidth stayed 1280 and each key logged 'webview.set_webview_zoom not allowed. Permissions associated with this command: core:webview:allow-set-webview-zoom' (zoomKeysWork and noConsoleErrorBesidesResizeObserver false).",
+      ],
+    } } : {}),
     surfaces: {},
     checks: {},
   };
@@ -211,6 +222,17 @@ async function main() {
     await key(app, "0", "Digit0", CMD, "0");
     await sleep(800);
     zoom.afterCmd0 = await width();
+    zoom.keyDeniedErrors = app.errors.filter((e) => /set_webview_zoom not allowed/.test(e)).length;
+    if (zoom.afterCmdPlus === zoom.width0) {
+      // The keys did not reach Tauri's zoom handler (or it was refused): the capability by the IPC call itself.
+      const set = (value) => app.ev(`window.__TAURI_INTERNALS__.invoke('plugin:webview|set_webview_zoom', { label: 'main', value: ${value} }).then(() => ({ ok: true }), (e) => ({ ok: false, error: String(e).slice(0, 200) }))`);
+      zoom.ipc = { set15: await set(1.5) };
+      await sleep(800);
+      zoom.ipc.widthAt15 = await width();
+      zoom.ipc.reset = await set(1);
+      await sleep(800);
+      zoom.ipc.widthAfterReset = await width();
+    }
     record.checks.zoom = zoom;
     record.checks.shortcuts = sc;
 
@@ -244,10 +266,13 @@ async function main() {
   record.verdicts = {
     everySurfaceReached: ["home", "conversation-with-approval-card", "conversation", "search", "new-conversation", "settings", "automations", "extensions", "library", "archives"].every((n) => s[n]),
     noFrenchChrome: Object.entries(s).every(([, x]) => x.textHits.every((h) => /Électricité|vérifie|compteur|réponds|projet-électricité/.test(h.text)) && x.attributeHits.every((h) => /Électricité|vérifie|projet-électricité/.test(h.value))),
-    modifierHintsSayCmd: allHints.some((h) => /\bCmd\+/.test(h.value)) && allHints.every((h) => !/\bCtrl\b/.test(h.value) || /^Shortcuts: Ctrl\+C interrupt/.test(h.value)),
+    // Ctrl is right where the shortcut really is Control on macOS: Ctrl+C in the terminal, Ctrl+Tab between conversations (App.tsx tests ctrlKey).
+    modifierHintsSayCmd: allHints.some((h) => /\bCmd\+/.test(h.value)) && allHints.every((h) => !/\bCtrl\b/.test(h.value) || /^Shortcuts: Ctrl\+C interrupt/.test(h.value) || /^↑↓ to navigate · Ctrl\+Tab to switch conversations$/.test(h.value)),
     cmdShortcutsWork: Boolean(c.shortcuts?.cmdK && c.shortcuts.cmdN && c.shortcuts.cmdComma && c.shortcuts.cmdCommaCloses && c.shortcuts.cmdB && c.shortcuts.cmdBRestores && c.shortcuts.escapeClosesSearch),
     conversationSwitchMatchesItsHint: /Cmd\+Tab/.test(c.conversationSwitch?.hint ?? "") ? c.conversationSwitch.afterCmdTab === "switched" : c.conversationSwitch?.afterCtrlTab === "conversation 2 (switched)",
     zoomKeysWork: Boolean(c.zoom) && c.zoom.afterCmdPlus < c.zoom.width0 && c.zoom.afterTwoCmdMinus > c.zoom.width0 && c.zoom.afterCmd0 === c.zoom.width0,
+    zoomCapabilityGranted: Boolean(c.zoom) && c.zoom.keyDeniedErrors === 0
+      && (c.zoom.afterCmdPlus !== c.zoom.width0 || (c.zoom.ipc?.set15?.ok === true && c.zoom.ipc.widthAt15 < c.zoom.width0 && c.zoom.ipc.widthAfterReset === c.zoom.width0)),
     searchCaseInsensitiveUnderSystemLocale: Boolean(c.search?.lower.results.length && c.search.upper.results.length),
     displayPathReadable: Boolean(c.displayPath?.shown) && !/^\\\\\?\\/.test(c.displayPath.shown) && [P1, `/private${P1}`].includes(c.displayPath.shown),
     nativeTrafficLights: c.windowChrome?.customCaptionButtons === 0 && c.windowChrome.platformMacosClass === true,

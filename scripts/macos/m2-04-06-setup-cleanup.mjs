@@ -106,7 +106,12 @@ const record = {
   git: execFileSync("git", ["--version"], { encoding: "utf8" }).trim(),
   liveTurns: 0,
   harness: `scripts/macos/m2-04-06-setup-cleanup.mjs on scripts/macos/test-instance.mjs, bridge port ${PORT}`,
-  method: `One isolated instance, started with an extra variable ${PLANTED} in its environment. Settings' Worktree tools are driven through their DOM (values set, buttons clicked). Worktrees B to E are made with the git CLI as a user would outside the app; ages are set with utimes (ten days back). Native commands are called through the Tauri IPC only for the refusals the UI cannot ask for. The folder dialog and the confirmation boxes go through the IPC trace; every plugin:dialog call is recorded.`,
+  method: `One isolated instance, started with an extra variable ${PLANTED} in its environment. Settings' Worktree tools are driven through their DOM (values set, buttons clicked). Worktrees B to E are made with the git CLI as a user would outside the app; ages are set with utimes (ten days back). Native commands are called through the Tauri IPC only for the refusals the UI cannot ask for. The folder dialog and the confirmation boxes go through the IPC trace; every plugin:dialog call is recorded.`
+    + (BUILD === "08b291d" || BUILD === "4fecdc8" ? "" : ` Replay on ${BUILD}: the compound cancel (\`sleep 27; echo …\`) is now judged by the verdict M2-04.cancelCompoundCommand (cancelled within 5 s, no sleep left 2 s after Cancel, the UI out of "Running setup…", the tail never run); findings.compoundCancelLeavesChildRunning, true on 08b291d and 4fecdc8, is expected false.`),
+  ...(BUILD === "08b291d" || BUILD === "4fecdc8" ? {} : { previousRun: {
+    files: ["docs/evidence/2026-10-13-macos-closure/m2-04-06-setup-cleanup.json (08b291d)", "docs/evidence/2026-10-13-macos-closure/m2-04-06-setup-cleanup-fixed-4fecdc8.json (4fecdc8)"],
+    defectThen: "Cancel setup on `sleep 27; echo late > setup-late.txt` killed only sh: the sleep was still alive 2 s after Cancel, the UI stayed on \"Running setup…\" and said \"Setup cancelled in 27.0s\" (cancelToOutcomeMs ≈ 25,600) once the sleep ended.",
+  } }),
   m204: {}, m206: {},
 };
 let inst = null;
@@ -260,6 +265,10 @@ try {
     "M2-04.failureCarriesExitCode": /^Setup failed .*exit 5/.test(m4.failed.status ?? ""),
     "M2-04.retryAfterFailure": /^Setup ready/.test(m4.retry.status ?? "") && m4.retry.fileWritten,
     "M2-04.cancelSimpleCommand": /^Setup cancelled/.test(m4.cancelSimple.status ?? "") && m4.cancelSimple.cancelToOutcomeMs < 5_000 && m4.cancelSimple.sleepLeft === 0,
+    // Expected since 3196ce2 (the setup command leads its process group, Cancel kills the group);
+    // false on 08b291d and 4fecdc8, where only `sh` was killed.
+    "M2-04.cancelCompoundCommand": /^Setup cancelled/.test(m4.cancelCompound.status ?? "") && m4.cancelCompound.cancelToOutcomeMs < 5_000
+      && m4.cancelCompound.during?.sleepAlive2sAfterCancel === 0 && m4.cancelCompound.during?.uiStillRunning === false && m4.cancelCompound.sleepLeft === 0 && m4.cancelCompound.tailRanAfterCancel === false,
     "M2-04.readinessDetects": /package\.json/.test(m4.readiness ?? "") && /git available/.test(m4.readiness ?? "") && /node (available|missing)/.test(m4.readiness ?? ""),
     "M2-04.refusesMainCheckout": /under \.muse\/worktrees/.test(m4.refuseMain.error ?? "") && !existsSync(join(REPO, "refused.txt")),
     "M2-04.refusesOverlongCommand": /2000 character limit/.test(m4.refuseLong.error ?? ""),
@@ -326,7 +335,7 @@ record.proposedMacosState = {
   "M2-06": record.defects.some((d) => d.ticket === "M2-06") ? "◐ (verdicts pass; the per-row buttons remove dirty or attached worktrees without the refusal the ticket requires)" : "☑",
 };
 record.notProved = [
-  "M2-06 persistent cleanup intent resumed after an interruption: muse-desktop.worktree-cleanup.v1 is loaded and saved by useMuseSessions but nothing writes an intent and no Retry cleanup action exists at 08b291d, so there is nothing to resume.",
+  "M2-06 persistent cleanup intent resumed after an interruption (not re-examined in later replays; stated for 08b291d): muse-desktop.worktree-cleanup.v1 is loaded and saved by useMuseSessions but nothing writes an intent and no Retry cleanup action exists at 08b291d, so there is nothing to resume.",
 ];
 record.limits = [
   "The ten-minute kill (timedOut) is not waited for; it is covered by the Rust tests only.",
