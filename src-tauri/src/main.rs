@@ -10031,6 +10031,7 @@ mod tests {
 fn main() {
     // The Muse host starts this executable as its computer-use MCP server.
     if std::env::args().nth(1).as_deref() == Some(computer::RELAY_ARG) {
+        test_mode::adopt_relay_args(&std::env::args().collect::<Vec<_>>());
         std::process::exit(computer::run_relay());
     }
     #[cfg(target_os = "macos")]

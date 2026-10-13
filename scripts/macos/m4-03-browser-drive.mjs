@@ -35,6 +35,7 @@ import { argValue, redactor, sleep, waitFor } from "../cdp-harness.mjs";
 import { newProjectConversation, transcript } from "./smoke-real-turn.mjs";
 import { launch } from "./test-instance.mjs";
 
+const BUILD = argValue("--build-commit", "08b291d");
 const EXE = resolve(argValue("--exe", "src-tauri/target/debug/muse-desktop"));
 const PORT = Number(argValue("--port", "9470"));
 const WEB = Number(argValue("--web", "9472"));
@@ -75,14 +76,15 @@ const testServices = () => drivers().filter((p) => p.command.includes("muse-desk
 /** The relay the engine started (muse-desktop --computer-use-mcp): its environment and the socket its driver proxy uses. */
 function relays() {
   const all = ps();
-  return all.filter((p) => p.command.endsWith("--computer-use-mcp")).map((p) => {
+  return all.filter((p) => / --computer-use-mcp( |$)/.test(p.command)).map((p) => {
     let env = "";
     try { env = execFileSync("ps", ["-wwE", "-o", "command=", "-p", String(p.pid)], { encoding: "utf8" }); } catch { /* gone */ }
     const proxies = all.filter((c) => c.ppid === p.pid).map((c) => c.command);
     return {
       pid: p.pid,
       parent: all.find((x) => x.pid === p.ppid)?.command.split(" ").slice(0, 2).join(" ").replace(/^.*\//, "") ?? null,
-      seesTestDataDir: /\bMUSE_DESKTOP_TEST_DATA_DIR=/.test(env),
+      // In its environment, or named in its argv (test_mode::relay_args, since 4fecdc8's successor).
+      seesTestDataDir: /\bMUSE_DESKTOP_TEST_DATA_DIR=/.test(env) || / --test-data-dir \S/.test(p.command),
       seesTestSidecar: /\bMUSE_DESKTOP_TEST_SIDECAR=/.test(env),
       driverProxies: proxies,
       proxyOnDefaultSocket: proxies.some((c) => c.replace(/\/\/+/g, "/").replace(" /var/", " /private/var/").includes(`--socket ${DEFAULT_SOCKET}`)),
@@ -119,7 +121,7 @@ const report = {
   schema: "muse-desktop.m4-03-browser-drive-macos.v1",
   ticket: "M4-03",
   date: new Date().toISOString().slice(0, 10),
-  commit: "08b291d",
+  commit: BUILD,
   platform: `${platform[0]} ${platform[1]} (${platform[2]}), arm64, Apple Silicon; debug build with embedded frontend, WKWebView through the test bridge`,
   harness: "scripts/macos/m4-03-browser-drive.mjs on scripts/macos/test-instance.mjs (macOS replay of scripts/cdp-m4-03-acceptance.mjs)",
   liveTurns: 0,

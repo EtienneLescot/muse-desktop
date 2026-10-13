@@ -1,0 +1,406 @@
+{
+  "schema": "muse-desktop.m2-02-postures.macos.v1",
+  "ticket": "M2-02",
+  "date": "2026-10-13",
+  "commit": "4fecdc8",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 4fecdc8 with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/macos/m2-02-postures.mjs on scripts/macos/test-instance.mjs, bridge port 9406",
+  "method": "One isolated instance. Postures are read on the live engine processes: flags from ps, folder from lsof (cwd). Conversations are started with the Projects panel's New conversation here (start_session, no turn). The OS folder dialog and the restart confirmation are answered by the IPC trace (plugin:dialog|open, plugin:dialog|message) as the user's choice would be.",
+  "steps": {
+    "globalElevated": {
+      "selected": "elevated",
+      "current": [
+        "Current posture: Ask for approval",
+        "Current isolation: Elevated access"
+      ],
+      "closed": "left by the next navigation"
+    },
+    "projects": {
+      "ids": {
+        "P1": "mv6hqcdr-2olt9i",
+        "P2": "mv6hqdmr-67nb76",
+        "P3": "mv6hqevo-ajk8sk",
+        "P4": "mv6hqg4o-gcst7m"
+      },
+      "p4StoredWorkspace": "<P4 via /var>"
+    },
+    "overrides": {
+      "P1": {
+        "select": "workspace",
+        "selectText": "No Elevated access",
+        "diff": [
+          "Isolation: Follow Settings → No Elevated access"
+        ],
+        "inherits": false,
+        "storedSettings": {
+          "sandbox": "workspace"
+        }
+      },
+      "P2": {
+        "select": "",
+        "selectText": "Follow Settings (Elevated access)",
+        "diff": [],
+        "inherits": true,
+        "storedSettings": {}
+      },
+      "P3": {
+        "select": "read-only",
+        "selectText": "Read only, no commands",
+        "diff": [
+          "Isolation: Follow Settings → Read only, no commands"
+        ],
+        "inherits": false,
+        "storedSettings": {
+          "sandbox": "read-only"
+        }
+      },
+      "P4": {
+        "select": "read-only",
+        "selectText": "Read only, no commands",
+        "diff": [
+          "Isolation: Follow Settings → Read only, no commands"
+        ],
+        "inherits": false,
+        "storedSettings": {
+          "sandbox": "read-only"
+        }
+      }
+    },
+    "threeProjects": {
+      "conversations": {
+        "P1": {
+          "ok": true,
+          "sid": "01a134a2-daf4-7ce1-9484-db2164992364",
+          "request": {
+            "workspacePath": "<P1>",
+            "sandboxMode": "network",
+            "sandboxDisableWrite": false,
+            "sandboxDisableShell": false
+          },
+          "error": null,
+          "banner": [],
+          "notes": []
+        },
+        "P2": {
+          "ok": true,
+          "sid": "01a134a2-e386-7533-a898-a85ca7a9579d",
+          "request": {
+            "workspacePath": "<P2>",
+            "sandboxMode": "elevated",
+            "sandboxDisableWrite": false,
+            "sandboxDisableShell": false
+          },
+          "error": null,
+          "banner": [],
+          "notes": []
+        },
+        "P3": {
+          "ok": true,
+          "sid": "01a134a2-eb6e-7ce1-8100-3f54e71e58b9",
+          "request": {
+            "workspacePath": "<P3>",
+            "sandboxMode": "workspace",
+            "sandboxDisableWrite": true,
+            "sandboxDisableShell": true
+          },
+          "error": null,
+          "banner": [],
+          "notes": []
+        },
+        "P4": {
+          "ok": true,
+          "sid": "01a134a3-36ab-78d1-b7de-f5dfa6f11eac",
+          "request": {
+            "workspacePath": "<P4 via /var>",
+            "sandboxMode": "workspace",
+            "sandboxDisableWrite": true,
+            "sandboxDisableShell": true
+          },
+          "error": null,
+          "banner": [],
+          "notes": []
+        }
+      },
+      "engines": [
+        {
+          "pid": 91223,
+          "flags": "serve --sandbox-network enabled --trust-workspace",
+          "cwd": "<P1>"
+        },
+        {
+          "pid": 91431,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P2>"
+        },
+        {
+          "pid": 91445,
+          "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+          "cwd": "<P3>"
+        }
+      ]
+    },
+    "p1FollowSettings": {
+      "select": "",
+      "selectText": "Follow Settings (Elevated access)",
+      "diff": [],
+      "inherits": true,
+      "storedSettings": {}
+    },
+    "p1RefusalAndRestart": {
+      "refused": {
+        "ok": false,
+        "sid": null,
+        "request": {
+          "workspacePath": "<P1>",
+          "sandboxMode": "elevated",
+          "sandboxDisableWrite": false,
+          "sandboxDisableShell": false
+        },
+        "error": "\"This folder's engine is running with Workspace and network; restart it to apply Elevated access.\"",
+        "banner": [
+          "This conversation could not be started. — This folder's engine is running with Workspace and network; restart it to apply Elevated access. Restart workspace host"
+        ],
+        "notes": []
+      },
+      "restartClicked": true,
+      "ipc": [
+        {
+          "cmd": "start_session",
+          "ok": false,
+          "args": {
+            "workspacePath": "<P1>",
+            "sandboxMode": "elevated",
+            "sandboxDisableWrite": false
+          },
+          "result": "\"This folder's engine is running with Workspace and network; restart it to apply Elevated access.\""
+        },
+        {
+          "cmd": "plugin:dialog|message",
+          "ok": true
+        },
+        {
+          "cmd": "restart_host",
+          "ok": true,
+          "args": {
+            "workspacePath": "<P1>",
+            "sandboxMode": "elevated",
+            "sandboxDisableWrite": false
+          }
+        }
+      ],
+      "engines": [
+        {
+          "pid": 91431,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P2>"
+        },
+        {
+          "pid": 91445,
+          "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+          "cwd": "<P3>"
+        },
+        {
+          "pid": 91633,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P1>"
+        }
+      ]
+    },
+    "p1KillAndResume": {
+      "killedPid": 91633,
+      "reopened": true,
+      "engines": [
+        {
+          "pid": 91431,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P2>"
+        },
+        {
+          "pid": 91445,
+          "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+          "cwd": "<P3>"
+        },
+        {
+          "pid": 91686,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P1>"
+        }
+      ],
+      "ipc": [
+        {
+          "cmd": "resume_session",
+          "ok": true
+        },
+        {
+          "cmd": "set_approval_mode",
+          "ok": true
+        }
+      ],
+      "resumeCalls": [
+        {
+          "cmd": "resume_session",
+          "ok": true,
+          "sessionId": "01a134a2-daf4-7ce1-9484-db2164992364",
+          "result": "{\"approval_mode\":\"promptUnmatched\",\"granted_capabilities\":[\"userShell\",\"sessionMcp\"],\"loaded\":true,\"model_id\":\"muse-spark-1.3-contributor\",\"running\":false,\"sandbox\":{\"disableShell\":false,\"disableWrite"
+        }
+      ],
+      "activeHeader": "",
+      "banner": []
+    },
+    "settingsRestartP2": {
+      "settings": {
+        "clicked": true,
+        "defaultFolder": "Change folder",
+        "status": [
+          "Host restarted. Reconnect any durable conversations to continue."
+        ],
+        "current": [
+          "Current posture: Ask for approval",
+          "Current isolation: Workspace only"
+        ],
+        "closed": "left by the next navigation"
+      },
+      "engines": [
+        {
+          "pid": 91445,
+          "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+          "cwd": "<P3>"
+        },
+        {
+          "pid": 91686,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P1>"
+        },
+        {
+          "pid": 91742,
+          "flags": "serve --sandbox-network restricted --trust-workspace",
+          "cwd": "<P2>"
+        }
+      ]
+    },
+    "p4VarSpelling": {
+      "start": {
+        "ok": true,
+        "sid": "01a134a3-36ab-78d1-b7de-f5dfa6f11eac",
+        "request": {
+          "workspacePath": "<P4 via /var>",
+          "sandboxMode": "workspace",
+          "sandboxDisableWrite": true,
+          "sandboxDisableShell": true
+        },
+        "error": null,
+        "banner": [],
+        "notes": []
+      },
+      "enginesAtStart": [
+        {
+          "pid": 91445,
+          "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+          "cwd": "<P3>"
+        },
+        {
+          "pid": 91686,
+          "flags": "serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+          "cwd": "<P1>"
+        },
+        {
+          "pid": 91742,
+          "flags": "serve --sandbox-network restricted --trust-workspace",
+          "cwd": "<P2>"
+        },
+        {
+          "pid": 91809,
+          "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+          "cwd": "<P4>"
+        }
+      ],
+      "sameSpelling": {
+        "settings": {
+          "clicked": true,
+          "defaultFolder": "Change folder",
+          "status": [
+            "Host restarted. Reconnect any durable conversations to continue."
+          ],
+          "current": [
+            "Current posture: Ask for approval",
+            "Current isolation: Elevated access"
+          ],
+          "closed": "left by the next navigation"
+        },
+        "engines": [
+          {
+            "pid": 91849,
+            "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+            "cwd": "<P4>"
+          }
+        ]
+      },
+      "resolvedSpelling": {
+        "settings": {
+          "clicked": true,
+          "defaultFolder": "Change folder",
+          "status": [
+            "Host restarted. Reconnect any durable conversations to continue."
+          ],
+          "current": [
+            "Current posture: Ask for approval",
+            "Current isolation: Elevated access"
+          ],
+          "closed": "left by the next navigation"
+        },
+        "engines": [
+          {
+            "pid": 91886,
+            "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace",
+            "cwd": "<P4>"
+          }
+        ]
+      },
+      "conversationWorkspace": "<P4>"
+    }
+  },
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<f2334471-611c-53ae-9ac8-2f4c6feccf50>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "verdicts": {
+    "diffShowsRestrictions": true,
+    "threeConversationsStarted": true,
+    "p1NoElevated": true,
+    "p2FollowsElevated": true,
+    "p3ReadOnly": true,
+    "threePosturesAtOnce": true,
+    "overrideRemovedRefusedOnLiveEngine": true,
+    "restartOfferedAndApplied": true,
+    "otherEnginesUntouched": true,
+    "killedEngineRespawnedWithPosture": true,
+    "sameSessionResumed": true,
+    "settingsRestartAppliesGlobal": true,
+    "settingsRestartLeavesOthers": true
+  },
+  "macosSpelling": {
+    "varSpellingStartsReadOnly": true,
+    "sameSpellingSettingsRestartKeepsReadOnly": true,
+    "resolvedSpellingSettingsRestartKeepsReadOnly": true,
+    "resolvedSpellingFlags": [
+      "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+    ]
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "limits": [
+    "The restart confirmation and the folder dialog are answered by the IPC trace; the native NSAlert and NSOpenPanel are not driven.",
+    "Engine session store and Keychain shared with the user (ADR 0003 amendment)."
+  ],
+  "passed": true
+}
