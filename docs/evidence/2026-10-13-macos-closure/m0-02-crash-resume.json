@@ -1,0 +1,367 @@
+{
+  "schema": "muse-desktop.m0-02-crash-resume.v1",
+  "ticket": "M0-02",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 6,
+  "harness": "scripts/macos/m0-02-crash-resume.mjs on scripts/macos/test-instance.mjs (launch, three instances on one data folder, store kept between them), bridge port 9412",
+  "isolation": {
+    "data": "<proof>/m0-02/MV6G8TQZ/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<3986bbc2-44ec-5397-813a-41e1ba72161b>",
+    "defaultStoresUnchangedAtStart": true,
+    "sameDataFolderForAllInstances": true
+  },
+  "method": "Instance 1: project conversation, first turn asks for a token, then a long counting turn and, while it streams, a draft typed (Input.insertText) in the same composer; 2 s later SIGKILL of the app pid. Instance 2 on the same data folder: storage compared with the values read just before the kill, draft read back in the composer, the conversation resumed on open, a new turn asks for the first token (engine-side history). Then a long turn and SIGKILL of that conversation's muse-bin host only; the Reconnect button clicked with a trusted mouse event; resume_session and read_session_history traced; a new turn recalls the token. A second draft, then a normal window close. Instance 3 on the same data: second draft restored, a new turn recalls the token.",
+  "phases": {
+    "appCrash": {
+      "start": "ready",
+      "firstTurn": true,
+      "longTurnRunning": true,
+      "draftTyped": true,
+      "beforeKill": {
+        "view": {
+          "sid": "01a1347c-a689-7510-a21a-97740a554077",
+          "title": "Reply with exactly KIWI-MV6G8TQZ and nothi…",
+          "state": "Working",
+          "connection": "Connected",
+          "notice": null,
+          "reconnect": [],
+          "composer": {
+            "value": "M0-02 draft typed during a running turn, never sent MV6G8TQZ — accents é, emoji 😀",
+            "disabled": false
+          },
+          "stop": {
+            "text": "Stop",
+            "disabled": false
+          },
+          "hostEndedLine": false
+        },
+        "hosts": [
+          {
+            "pid": 55470,
+            "ppid": 55459,
+            "cwd": "<proof>/m0-02/MV6G8TQZ/project",
+            "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+          }
+        ]
+      },
+      "storageBeforeKill": {
+        "muse-desktop.projects.v1": {
+          "bytes": 195,
+          "validJson": true
+        },
+        "muse-desktop.sessions.v1": {
+          "bytes": 275,
+          "validJson": true
+        },
+        "muse-desktop.thread-projects.v1": {
+          "bytes": 58,
+          "validJson": true
+        },
+        "muse-desktop.log.v1.<sid>": {
+          "bytes": 2338,
+          "validJson": true
+        },
+        "muse-desktop.draft.<sid>": {
+          "bytes": 82,
+          "validJson": false
+        },
+        "muse-desktop.active.v1": {
+          "bytes": 38,
+          "validJson": true
+        }
+      },
+      "killedAt": "2026-10-13T09:00:02.146Z",
+      "hostsAliveAfterAppKill": [],
+      "stop": {
+        "quitBy": "SIGKILL",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": null,
+        "defaultStoresUnchangedAtEnd": true
+      }
+    },
+    "relaunchAndEngineCrash": {
+      "storageAfterRelaunch": {
+        "muse-desktop.projects.v1": {
+          "bytes": 195,
+          "validJson": true
+        },
+        "muse-desktop.sessions.v1": {
+          "bytes": 315,
+          "validJson": true
+        },
+        "muse-desktop.thread-projects.v1": {
+          "bytes": 58,
+          "validJson": true
+        },
+        "muse-desktop.log.v1.<sid>": {
+          "bytes": 2608,
+          "validJson": true
+        },
+        "muse-desktop.draft.<sid>": {
+          "bytes": 82,
+          "validJson": false
+        },
+        "muse-desktop.active.v1": {
+          "bytes": 38,
+          "validJson": true
+        }
+      },
+      "storageCompare": {
+        "muse-desktop.projects.v1": "identical",
+        "muse-desktop.sessions.v1": "changed (275 -> 315 bytes, valid true)",
+        "muse-desktop.thread-projects.v1": "identical",
+        "muse-desktop.log.v1.<sid>": "changed (2338 -> 2608 bytes, valid true)",
+        "muse-desktop.draft.<sid>": "identical",
+        "muse-desktop.active.v1": "identical"
+      },
+      "sessionRowKept": true,
+      "sessionRowFieldsChanged": [
+        "model_id"
+      ],
+      "draftInComposer": "M0-02 draft typed during a running turn, never sent MV6G8TQZ — accents é, emoji 😀",
+      "restored": {
+        "sessions": [
+          "01a1347c-a689-7510-a21a-97740a554077"
+        ],
+        "projects": [
+          "project"
+        ],
+        "roles": [
+          "assistant",
+          "user",
+          "subagent",
+          "assistant",
+          "subagent",
+          "subagent",
+          "assistant",
+          "user",
+          "subagent"
+        ],
+        "firstTokenInLog": true,
+        "draftUserMessageNotSent": true
+      },
+      "resumeOnOpen": {
+        "view": {
+          "sid": "01a1347c-a689-7510-a21a-97740a554077",
+          "title": "Reply with exactly KIWI-MV6G8TQZ and nothi…",
+          "state": "Ready",
+          "connection": "Connected",
+          "notice": null,
+          "reconnect": [],
+          "composer": {
+            "value": "M0-02 draft typed during a running turn, never sent MV6G8TQZ — accents é, emoji 😀",
+            "disabled": false
+          },
+          "stop": null,
+          "hostEndedLine": false
+        },
+        "hosts": [
+          {
+            "pid": 57952,
+            "ppid": 57942,
+            "cwd": "<proof>/m0-02/MV6G8TQZ/project",
+            "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+          }
+        ]
+      },
+      "killedTurnNotRunning": true,
+      "recallAfterAppKill": {
+        "done": true,
+        "reply": "KIWI-MV6G8TQZ AFTER-APP-KILL-MV6G8TQZ",
+        "sends": [
+          {
+            "sessionId": "01a1347c-a689-7510-a21a-97740a554077",
+            "ok": true
+          }
+        ]
+      },
+      "engineKill": {
+        "host": {
+          "pid": 57952,
+          "ppid": 57942,
+          "cwd": "<proof>/m0-02/MV6G8TQZ/project",
+          "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+        },
+        "at": "2026-10-13T09:03:05.901Z"
+      },
+      "afterEngineKill": {
+        "sid": "01a1347c-a689-7510-a21a-97740a554077",
+        "title": "Reply with exactly KIWI-MV6G8TQZ and nothi…",
+        "state": "Ready",
+        "connection": "Disconnected",
+        "notice": null,
+        "reconnect": [
+          "Reconnect"
+        ],
+        "composer": {
+          "value": "",
+          "disabled": true
+        },
+        "stop": null,
+        "hostEndedLine": true
+      },
+      "appAliveAfterEngineKill": true,
+      "hostEndedInLog": [
+        "Muse stopped because the host process ended. Reconnect to continue."
+      ],
+      "reconnectClicked": true,
+      "afterReconnect": {
+        "sid": "01a1347c-a689-7510-a21a-97740a554077",
+        "title": "Reply with exactly KIWI-MV6G8TQZ and nothi…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": true
+      },
+      "reconnectWire": [
+        {
+          "cmd": "resume_session",
+          "sessionId": "01a1347c-a689-7510-a21a-97740a554077",
+          "ok": true,
+          "loaded": true,
+          "durable": true,
+          "resultBytes": 481
+        },
+        {
+          "cmd": "read_session_history",
+          "sessionId": "01a1347c-a689-7510-a21a-97740a554077",
+          "ok": true,
+          "loaded": false,
+          "durable": false,
+          "resultBytes": 2000
+        }
+      ],
+      "hostsAfterReconnect": [
+        {
+          "pid": 58344,
+          "ppid": 57942,
+          "cwd": "<proof>/m0-02/MV6G8TQZ/project",
+          "command": "muse-bin serve --sandbox-network restricted --trust-workspace"
+        }
+      ],
+      "recallAfterEngineKill": {
+        "done": true,
+        "reply": "KIWI-MV6G8TQZ AFTER-ENGINE-KILL-MV6G8TQZ"
+      },
+      "draft2Typed": true,
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      }
+    },
+    "relaunchAfterClose": {
+      "draftInComposer": "M0-02 second draft before a normal close MV6G8TQZ",
+      "resumeOnOpen": {
+        "sid": "01a1347c-a689-7510-a21a-97740a554077",
+        "title": "Reply with exactly KIWI-MV6G8TQZ and nothi…",
+        "state": "Ready",
+        "connection": "Connected",
+        "notice": null,
+        "reconnect": [],
+        "composer": {
+          "value": "M0-02 second draft before a normal close MV6G8TQZ",
+          "disabled": false
+        },
+        "stop": null,
+        "hostEndedLine": true
+      },
+      "recallAfterClose": {
+        "done": true,
+        "reply": "KIWI-MV6G8TQZ AFTER-CLOSE-MV6G8TQZ"
+      },
+      "roles": [
+        "assistant",
+        "user",
+        "subagent",
+        "assistant",
+        "subagent",
+        "subagent",
+        "assistant",
+        "user",
+        "subagent",
+        "assistant",
+        "user",
+        "subagent",
+        "thinking",
+        "assistant",
+        "subagent",
+        "subagent",
+        "assistant",
+        "user",
+        "subagent",
+        "thinking",
+        "assistant",
+        "system",
+        "subagent",
+        "system",
+        "assistant",
+        "user",
+        "subagent",
+        "thinking",
+        "assistant",
+        "subagent",
+        "subagent",
+        "user",
+        "assistant",
+        "subagent",
+        "assistant",
+        "subagent",
+        "subagent"
+      ],
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      }
+    }
+  },
+  "checks": {
+    "firstTurnAndLongTurnInFlight": true,
+    "hostDiesWithApp": true,
+    "storageIntactAfterKill": true,
+    "transcriptKept": true,
+    "draftRestoredAfterKill": true,
+    "draftNeverSent": true,
+    "resumedAfterAppKill": true,
+    "historyAfterAppKill": true,
+    "honestStatusAfterEngineKill": true,
+    "reconnectResumesDurable": true,
+    "historyAfterEngineKill": true,
+    "draftRestoredAfterClose": true,
+    "historyAfterClose": true,
+    "nothingLeft": true
+  },
+  "verdicts": {
+    "appCrashKeepsThreadsAndDraft": true,
+    "noSecondHostAfterAppCrash": true,
+    "resumeAfterAppCrash": true,
+    "resumeAfterEngineCrash": true,
+    "resumeAfterNormalClose": true,
+    "nothingLeft": true
+  },
+  "limits": [
+    "The engine's session store (~/.local/share/muse/sessions) is the user's, shared by the test instances (ADR 0003).",
+    "The page loads before the harness can trace it: the boot resume of instances 2 and 3 is read from its effects (host respawned in the project folder, Connected, the token recalled through the same session id), not from an IPC trace. The manual Reconnect of the engine-crash phase is traced.",
+    "Debug build in test mode, not the release build."
+  ],
+  "failure": null,
+  "passed": true
+}
