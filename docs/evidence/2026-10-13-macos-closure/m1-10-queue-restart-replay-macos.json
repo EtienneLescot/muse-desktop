@@ -1,0 +1,274 @@
+{
+  "schema": "muse-desktop.m1-10-queue-macos.v1",
+  "ticket": "M1-10",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": null,
+  "liveTurns": 3,
+  "harness": "scripts/macos/m1-10-queue.mjs on scripts/macos/test-instance.mjs, bridge port 9444",
+  "isolation": [
+    {
+      "phase": "restart (first launch)",
+      "data": "<proof>/data-restart",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<4dde0feb-cb5c-5ff6-981d-1b127f879f59>",
+      "defaultStoresUnchangedAtStart": true
+    },
+    {
+      "phase": "restart (relaunch)",
+      "data": "<proof>/data-restart",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<4dde0feb-cb5c-5ff6-981d-1b127f879f59>",
+      "defaultStoresUnchangedAtStart": true
+    }
+  ],
+  "method": "Isolated instances on the pinned engine, one project folder per phase under the proof's temp folder. Every message is typed in the real composer (Input.insertText) and sent with a real Enter; Guide and Remove from queue are clicked in the page. The running state is the conversation's status dot (data-running); queue rows are the 'Queued messages' panel; the stored queue is localStorage muse-desktop.queued-turns.v1; replies are read from the stored transcript and the screen. The restart phase kills the app process alone with SIGKILL mid-turn (the engine child is left to its own fate and recorded), then relaunches the same exe on the same data folder.",
+  "checks": {
+    "restart-before-kill": {
+      "firstTurn": {
+        "sid": "01a13497-e6e3-7531-a2ab-3ed59e33c821",
+        "started": true,
+        "stillRunningAfter3s": true
+      },
+      "rows": [
+        {
+          "text": "RESTORE-A-MV6HB362 reply with exactly ALPHA2-MV6HB362 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        },
+        {
+          "text": "RESTORE-B-MV6HB362 reply with exactly BETA2-MV6HB362 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a13497-e6e3-7531-a2ab-3ed59e33c821\":[{\"session_id\":\"01a13497-e6e3-7531-a2ab-3ed59e33c821\",\"turn_id\":\"01a13497-f4fc-7a20-8474-6937283aed48\",\"text\":\"RESTORE-A-MV6HB362 reply with exactly ALPHA2-MV6HB362 and nothing else\",\"createdAt\":1791883736383},{\"session_id\":\"01a13497-e6e3-7531-a2ab-3ed59e33c821\",\"turn_id\":\"01a13497-f56b-7b1c-866b-e41316a8548c\",\"text\":\"RESTORE-B-MV6HB362 reply with exactly BE"
+    },
+    "restart-kill": {
+      "signal": "SIGKILL",
+      "enginesAfterKill": [
+        {
+          "command": "<home>/muse-proofs/engine/1.4.2-R4684.1/muse-bin serve --sandbox-network rest",
+          "aliveAfter3s": false
+        }
+      ],
+      "stop": {
+        "quitBy": "SIGKILL",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": null,
+        "defaultStoresUnchangedAtEnd": true
+      }
+    },
+    "restart-relaunch": {
+      "storedAtRelaunch": [
+        "RESTORE-A-MV6HB362 r",
+        "RESTORE-B-MV6HB362 r"
+      ],
+      "timeline": [
+        {
+          "atMs": 7,
+          "rows": [
+            "RESTORE-A-MV6HB362 [recovered: Dismiss]",
+            "RESTORE-B-MV6HB362 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "A",
+            "B"
+          ],
+          "running": false,
+          "log": [
+            "user: Count slowly from one to 400, one number per l",
+            "assistant: ",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "user: RESTORE-A-MV6HB362 reply with exactly ALPHA2-M",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current "
+          ]
+        },
+        {
+          "atMs": 520,
+          "rows": [
+            "RESTORE-A-MV6HB362 [recovered: Dismiss]",
+            "RESTORE-B-MV6HB362 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user(A): RESTORE-A-MV6HB362 reply with exactly ALPHA2-M"
+          ]
+        },
+        {
+          "atMs": 1030,
+          "rows": [
+            "RESTORE-B-MV6HB362 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user(A): RESTORE-A-MV6HB362 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: "
+          ]
+        },
+        {
+          "atMs": 3057,
+          "rows": [
+            "RESTORE-B-MV6HB362 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user(A): RESTORE-A-MV6HB362 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: ",
+            "thinking(A): Evaluating a potential prompt injection and de"
+          ]
+        },
+        {
+          "atMs": 9662,
+          "rows": [
+            "RESTORE-B-MV6HB362 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user(A): RESTORE-A-MV6HB362 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Evaluating a potential prompt injection and de",
+            "assistant(A): ALPHA2-MV6HB362",
+            "subagent: ",
+            "subagent: "
+          ]
+        },
+        {
+          "atMs": 16306,
+          "rows": [],
+          "stored": [],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user(A): RESTORE-A-MV6HB362 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Evaluating a potential prompt injection and de",
+            "assistant(A): ALPHA2-MV6HB362",
+            "subagent: Reminder child session",
+            "subagent: Reminder child session",
+            "assistant(B): ",
+            "subagent: "
+          ]
+        },
+        {
+          "atMs": 18839,
+          "rows": [],
+          "stored": [],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "thinking: Generating a sequential number list under abst",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6HB362 reply with exactly BETA2-MV",
+            "assistant: ",
+            "system: Turn queued — it will start after the current ",
+            "user(A): RESTORE-A-MV6HB362 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Evaluating a potential prompt injection and de",
+            "assistant(A): ALPHA2-MV6HB362",
+            "subagent: Reminder child session",
+            "subagent: Reminder child session",
+            "assistant(B): ",
+            "subagent: ",
+            "assistant(B): BETA2-MV6HB362",
+            "subagent: ",
+            "subagent: "
+          ]
+        }
+      ],
+      "alphaAnswered": true,
+      "betaAnswered": true,
+      "alphaCount": 1,
+      "betaCount": 1,
+      "ipc": []
+    },
+    "restart-stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    }
+  },
+  "verdicts": {
+    "queueStoredBeforeKill": true,
+    "queueSurvivesKill": true,
+    "queueResumesInOrderAfterRestart": true,
+    "noProcessLeft": true,
+    "isolationKept": true,
+    "all": true
+  },
+  "limits": [],
+  "consoleErrors": []
+}

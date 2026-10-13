@@ -1,0 +1,456 @@
+{
+  "schema": "muse-desktop.m1-10-queue-macos.v1",
+  "ticket": "M1-10",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 5,
+  "harness": "scripts/macos/m1-10-queue.mjs on scripts/macos/test-instance.mjs, bridge port 9444",
+  "isolation": [
+    {
+      "phase": "live",
+      "data": "<proof>/data-live",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<c5f17dc1-a4e0-5c4c-9947-52ee6405a643>",
+      "defaultStoresUnchangedAtStart": true
+    },
+    {
+      "phase": "restart (first launch)",
+      "data": "<proof>/data-restart",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<63c9e7c7-3f45-5d3c-b8b7-5b33edffbcde>",
+      "defaultStoresUnchangedAtStart": true
+    },
+    {
+      "phase": "restart (relaunch)",
+      "data": "<proof>/data-restart",
+      "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<63c9e7c7-3f45-5d3c-b8b7-5b33edffbcde>",
+      "defaultStoresUnchangedAtStart": true
+    }
+  ],
+  "method": "Isolated instances on the pinned engine, one project folder per phase under the proof's temp folder. Every message is typed in the real composer (Input.insertText) and sent with a real Enter; Guide and Remove from queue are clicked in the page. The running state is the conversation's status dot (data-running); queue rows are the 'Queued messages' panel; the stored queue is localStorage muse-desktop.queued-turns.v1; replies are read from the stored transcript and the screen. The restart phase kills the app process alone with SIGKILL mid-turn (the engine child is left to its own fate and recorded), then relaunches the same exe on the same data folder.",
+  "checks": {
+    "live-first-turn": {
+      "sid": "01a13493-ff20-79e3-b975-5f3dd8bd903c",
+      "started": true,
+      "stillRunningAfter3s": true
+    },
+    "live-two-queued": {
+      "sentA": true,
+      "sentB": true,
+      "rows": [
+        {
+          "text": "QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        },
+        {
+          "text": "QUEUE-B-MV6H5LA1 reply with exactly BETA-MV6H5LA1 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a13493-ff20-79e3-b975-5f3dd8bd903c\":[{\"session_id\":\"01a13493-ff20-79e3-b975-5f3dd8bd903c\",\"turn_id\":\"01a13494-0db8-70f4-8d8b-60ea4f6835ab\",\"text\":\"QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1 and nothing else\",\"createdAt\":1791883480614},{\"session_id\":\"01a13493-ff20-79e3-b975-5f3dd8bd903c\",\"turn_id\":\"01a13494-0e8b-79cd-8d86-38a61185f107\",\"text\":\"QUEUE-B-MV6H5LA1 reply with exactly BETA-MV"
+    },
+    "live-remove-second": {
+      "clicked": true,
+      "rows": [
+        {
+          "text": "QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a13493-ff20-79e3-b975-5f3dd8bd903c\":[{\"session_id\":\"01a13493-ff20-79e3-b975-5f3dd8bd903c\",\"turn_id\":\"01a13494-0db8-70f4-8d8b-60ea4f6835ab\",\"text\":\"QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1 and nothing else\",\"createdAt\":1791883480614}]}"
+    },
+    "live-guide": {
+      "clicked": true,
+      "firstStillRunning": true,
+      "rows": [
+        {
+          "text": "QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ]
+    },
+    "live-outcome": {
+      "turnIds": {
+        "first": "01a13494-007d-721e-8a56-667f3328b84e",
+        "a": "01a13494-0db8-70f4-8d8b-60ea4f6835ab",
+        "b": "01a13494-0e8b-79cd-8d86-38a61185f107"
+      },
+      "firstTurnSpan": {
+        "first": 1791883477164,
+        "last": 1791883481329,
+        "entries": 3
+      },
+      "aTurnSpan": {
+        "first": 1791883482087,
+        "last": 1791883487948,
+        "entries": 2
+      },
+      "steeredTokenInFirstTurn": false,
+      "firstTurnStoppedCountingAt": 150,
+      "alphaAnswered": true,
+      "alphaInATurn": true,
+      "aStartedAfterFirstEnded": true,
+      "betaAnswered": false,
+      "queueRowsAtEnd": 0,
+      "storedAtEnd": "{}",
+      "userEntries": [
+        "Count slowly from one to 150, one number per line,",
+        "QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1",
+        "QUEUE-B-MV6H5LA1 reply with exactly BETA-MV6H5LA1 ",
+        "Change of plan: stop counting now and end your rep"
+      ],
+      "ipc": [
+        {
+          "cmd": "send_input",
+          "ok": true,
+          "text": "Count slowly from one to 150, one number per line, nothing e",
+          "result": "{\"commandId\":\"01a13494-007d-721e-8a56-667f3328b84e\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a13494-007d-721e-8a56-667f3328b84e\"}"
+        },
+        {
+          "cmd": "send_input",
+          "ok": true,
+          "text": "QUEUE-A-MV6H5LA1 reply with exactly ALPHA-MV6H5LA1 and nothi",
+          "result": "{\"commandId\":\"01a13494-0db8-70f4-8d8b-60ea4f6835ab\",\"disposition\":\"queued\",\"startedNewTurn\":false,\"status\":\"accepted\",\"turnId\":\"01a13494-0db8-70f4-8d8b-60ea4f6835ab\"}"
+        },
+        {
+          "cmd": "send_input",
+          "ok": true,
+          "text": "QUEUE-B-MV6H5LA1 reply with exactly BETA-MV6H5LA1 and nothin",
+          "result": "{\"commandId\":\"01a13494-0e8b-79cd-8d86-38a61185f107\",\"disposition\":\"queued\",\"startedNewTurn\":false,\"status\":\"accepted\",\"turnId\":\"01a13494-0e8b-79cd-8d86-38a61185f107\"}"
+        },
+        {
+          "cmd": "unqueue_turn",
+          "ok": true,
+          "text": "",
+          "result": "{\"commandId\":\"01a13494-0ef6-7000-83ab-3f1c13582841\",\"status\":\"accepted\",\"turnId\":\"01a13494-0e8b-79cd-8d86-38a61185f107\"}"
+        },
+        {
+          "cmd": "steer_input",
+          "ok": true,
+          "text": "Change of plan: stop counting now and end your reply with th",
+          "result": "{\"commandId\":\"01a13494-10f8-7056-8590-4bf77fcfaa51\",\"status\":\"accepted\",\"turnId\":\"01a13494-007d-721e-8a56-667f3328b84e\"}"
+        }
+      ],
+      "assistantEntries": [
+        "first @1791883477164: ",
+        "first @1791883479955: 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 ",
+        "undefine @1791883480520: 67 68 69 70 71 72 73 74 ",
+        "undefine @1791883480730: ",
+        "first @1791883481329:  136 137 138 139 140 141 142 143 144 145 146 147 148 149 150",
+        "A @1791883482087: ",
+        "A @1791883487948: ALPHA-MV6H5LA1",
+        "01a13494 @1791883495716: ",
+        "01a13494 @1791883503159: Stopped counting STEERED-MV6H5LA1"
+      ],
+      "steeredTokenAnywhere": true,
+      "betaOnScreen": false
+    },
+    "live-stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    },
+    "restart-before-kill": {
+      "firstTurn": {
+        "sid": "01a13494-da69-7e63-b10c-445bd615056b",
+        "started": true,
+        "stillRunningAfter3s": true
+      },
+      "rows": [
+        {
+          "text": "RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-MV6H5LA1 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        },
+        {
+          "text": "RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV6H5LA1 and nothing else",
+          "recovered": false,
+          "button": "Remove from queue"
+        }
+      ],
+      "firstStillRunning": true,
+      "stored": "{\"01a13494-da69-7e63-b10c-445bd615056b\":[{\"session_id\":\"01a13494-da69-7e63-b10c-445bd615056b\",\"turn_id\":\"01a13494-e8a5-7b07-8d40-ec4a2fdede03\",\"text\":\"RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-MV6H5LA1 and nothing else\",\"createdAt\":1791883536610},{\"session_id\":\"01a13494-da69-7e63-b10c-445bd615056b\",\"turn_id\":\"01a13494-e913-71ab-8786-27226d3846a9\",\"text\":\"RESTORE-B-MV6H5LA1 reply with exactly BE"
+    },
+    "restart-kill": {
+      "signal": "SIGKILL",
+      "enginesAfterKill": [
+        {
+          "command": "<home>/muse-proofs/engine/1.4.2-R4684.1/muse-bin serve --sandbox-network rest",
+          "aliveAfter3s": false
+        }
+      ],
+      "stop": {
+        "quitBy": "SIGKILL",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": null,
+        "defaultStoresUnchangedAtEnd": true
+      }
+    },
+    "restart-relaunch": {
+      "storedAtRelaunch": [
+        "RESTORE-A-MV6H5LA1 r",
+        "RESTORE-B-MV6H5LA1 r"
+      ],
+      "timeline": [
+        {
+          "atMs": 27,
+          "rows": [
+            "RESTORE-A-MV6H5LA1 [recovered: Dismiss]",
+            "RESTORE-B-MV6H5LA1 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "A",
+            "B"
+          ],
+          "running": false,
+          "log": [
+            "user: Count slowly from one to 400, one number per l",
+            "assistant: ",
+            "subagent: ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user: RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current "
+          ]
+        },
+        {
+          "atMs": 1091,
+          "rows": [
+            "RESTORE-B-MV6H5LA1 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: "
+          ]
+        },
+        {
+          "atMs": 3126,
+          "rows": [
+            "RESTORE-B-MV6H5LA1 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: ",
+            "thinking(A): Checking an abstract interface constraint."
+          ]
+        },
+        {
+          "atMs": 4137,
+          "rows": [
+            "RESTORE-B-MV6H5LA1 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: ",
+            "thinking(A): Checking an abstract interface constraint.Eval"
+          ]
+        },
+        {
+          "atMs": 5151,
+          "rows": [
+            "RESTORE-B-MV6H5LA1 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Checking an abstract interface constraint.Eval",
+            "assistant(A): ALPHA2-MV6H5LA1",
+            "subagent: ",
+            "subagent: "
+          ]
+        },
+        {
+          "atMs": 20397,
+          "rows": [
+            "RESTORE-B-MV6H5LA1 [recovered: Dismiss]"
+          ],
+          "stored": [
+            "B"
+          ],
+          "running": false,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Checking an abstract interface constraint.Eval",
+            "assistant(A): ALPHA2-MV6H5LA1",
+            "subagent: Reminder child session",
+            "subagent: Reminder child session"
+          ]
+        },
+        {
+          "atMs": 20903,
+          "rows": [],
+          "stored": [],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Checking an abstract interface constraint.Eval",
+            "assistant(A): ALPHA2-MV6H5LA1",
+            "subagent: Reminder child session",
+            "subagent: Reminder child session",
+            "assistant(B): ",
+            "subagent: "
+          ]
+        },
+        {
+          "atMs": 22935,
+          "rows": [],
+          "stored": [],
+          "running": true,
+          "log": [
+            "assistant: ",
+            "user: Count slowly from one to 400, one number per l",
+            "subagent: ",
+            "assistant: 331 332 333 334 335 336 337 338 339 340 341 34",
+            "system: Turn queued — it will start after the current ",
+            "user: RESTORE-B-MV6H5LA1 reply with exactly BETA2-MV",
+            "assistant: 355 356 357 358 359 360 361 362 363 364 365 36",
+            "system: Turn queued — it will start after the current ",
+            "assistant: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 1",
+            "user(A): RESTORE-A-MV6H5LA1 reply with exactly ALPHA2-M",
+            "assistant(A): ",
+            "subagent: Reminder child session",
+            "thinking(A): Checking an abstract interface constraint.Eval",
+            "assistant(A): ALPHA2-MV6H5LA1",
+            "subagent: Reminder child session",
+            "subagent: Reminder child session",
+            "assistant(B): ",
+            "subagent: ",
+            "thinking(B): Analyzing a string-restoration request for a t",
+            "assistant(B): BETA2-MV6H5LA1",
+            "subagent: ",
+            "subagent: "
+          ]
+        }
+      ],
+      "alphaAnswered": true,
+      "betaAnswered": true,
+      "alphaCount": 1,
+      "betaCount": 1,
+      "ipc": []
+    },
+    "restart-stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    }
+  },
+  "verdicts": {
+    "twoQueuedWhileRunning": true,
+    "secondRemovedWhileRunning": true,
+    "removedNeverRuns": true,
+    "remainingRunsAfterFirstInOrder": true,
+    "queueStoredBeforeKill": true,
+    "queueSurvivesKill": true,
+    "queueResumesInOrderAfterRestart": true,
+    "noProcessLeft": true,
+    "isolationKept": true,
+    "all": true
+  },
+  "limits": [
+    "Three kill-and-relaunch replays on 13/10: this record (resumed A then B, in order, one answer each), m1-10-queue-restart-replay-macos.json (same), and an earlier run of a previous version of this script (m1-10-queue-macos-run1.json, kept as measured) where the stored queue survived the kill, the recovered rows showed, the queue was then taken by the host (A's row first, then B's, storage emptied) but neither expected token came back within 240 s. That run had no timeline; the later runs show the model weighing the 'reply with exactly' prompts as possible prompt injection in its thinking, so a reply without the token is the likely cause, unproven.",
+    "The resumed execution after a restart is the engine's own queue (the app shows the rows as 'Saved before restart — verify the host queue' and never replays them itself, by design: src/lib/queuedTurns.ts).",
+    "Guide (steer) is reported under 'informational': accepted by the host with the running turn's id, but on a plain text generation it landed as a separate turn after the queued A, so it did not redirect the running turn. Not in the plan's acceptance; engine behaviour.",
+    "A server refusal of unqueue (removal racing the turn's own start) was not aimed at: the removals here all landed while the first turn ran."
+  ],
+  "informational": {
+    "guideRedirectsRunningTurn": false
+  },
+  "consoleErrors": [],
+  "notesAddedAfterRun": [
+    "limits"
+  ]
+}
