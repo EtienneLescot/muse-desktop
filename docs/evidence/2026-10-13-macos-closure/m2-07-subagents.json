@@ -1,0 +1,2410 @@
+{
+  "schema": "muse-desktop.m2-07-subagents.macos.v1",
+  "ticket": "M2-07",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 2,
+  "harness": "scripts/macos/m2-07-subagents.mjs on scripts/macos/test-instance.mjs, bridge port 9456",
+  "method": "One isolated instance, global posture Yolo (allowAll) in its own data folder so the children's shell steps run without cards. Two conversations in two project folders started from the welcome screen (typed message, real Enter). Lane states are read from each conversation's stored log every second (both threads at the same instant); controls are the lane block's own buttons in the DOM. The sub-agent processes are counted under the app with ps (`sleep 45`).",
+  "prompts": {
+    "A": "M2-07 macOS proof. Start three sub-agents at the same time, in parallel, without waiting for one before starting the next. Each sub-agent must run the shell command `sleep 45` and then answer with the single word DONE. Do not wait for them to finish: as soon as the three are started, reply with just the word SPAWNED.",
+    "B": "M2-07 macOS proof, second thread. Start two sub-agents at the same time, in parallel. Each sub-agent must run the shell command `sleep 45` and then answer with the single word DONE. Do not wait for them: once both are started, reply with just the word SPAWNED."
+  },
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<e3abe330-e519-5ef1-9961-07289a8e623d>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "posture": [
+    "Current posture: YOLO",
+    "Current isolation: Workspace only"
+  ],
+  "startA": "ready",
+  "startB": "ready",
+  "samples": [
+    {
+      "t": 0,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 1,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 2,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 3,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 4,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 5,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 6,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 0,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 7,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 8,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 1,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 1,
+        "A": 1,
+        "B": 0
+      }
+    },
+    {
+      "t": 9,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 10,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 11,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 12,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 13,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 14,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 15,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 0,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 16,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 17,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 3,
+        "A": 3,
+        "B": 0
+      }
+    },
+    {
+      "t": 18,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 4,
+        "A": 3,
+        "B": 1
+      }
+    },
+    {
+      "t": 19,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 20,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 21,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 22,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 23,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 24,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 25,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 26,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 27,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 28,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 29,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 30,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 31,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 32,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 33,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 34,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 35,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 36,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 37,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 38,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 39,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 40,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 41,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 42,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 43,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 44,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 45,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 46,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 47,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 48,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 49,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 50,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 5,
+        "A": 3,
+        "B": 2
+      }
+    },
+    {
+      "t": 51,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 4,
+        "A": 2,
+        "B": 2
+      }
+    },
+    {
+      "t": 52,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 4,
+        "A": 2,
+        "B": 2
+      }
+    },
+    {
+      "t": 53,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 54,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 55,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 56,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 57,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 58,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 59,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 60,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 2,
+        "A": 0,
+        "B": 2
+      }
+    },
+    {
+      "t": 61,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 1,
+        "A": 0,
+        "B": 1
+      }
+    },
+    {
+      "t": 62,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 1,
+        "A": 0,
+        "B": 1
+      }
+    },
+    {
+      "t": 63,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 64,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 65,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 66,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 67,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 68,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 69,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 70,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 71,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 72,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 73,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 74,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 1,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 75,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 2,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 76,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 77,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 78,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 79,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 1,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 80,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 81,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 82,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 83,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 84,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 85,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 86,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 87,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 88,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 89,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 90,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 91,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 92,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 93,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 94,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 95,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 96,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 97,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 98,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 99,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 100,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 101,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 102,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 103,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 104,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 105,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 106,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 107,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 108,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 109,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 110,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 111,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 112,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 113,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 114,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 115,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 116,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 117,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 118,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 119,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 120,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 121,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 3,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 122,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 123,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 3,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 124,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    },
+    {
+      "t": 125,
+      "aRunning": 0,
+      "bRunning": 0,
+      "aLanes": 0,
+      "bLanes": 0,
+      "aChildren": 0,
+      "aSpawnAccepted": 3,
+      "bSpawnAccepted": 2,
+      "aInternalRunning": 0,
+      "bInternalRunning": 0,
+      "sleeps": {
+        "all": 0,
+        "A": 0,
+        "B": 0
+      }
+    }
+  ],
+  "stop": null,
+  "finished": {
+    "a": [],
+    "b": [],
+    "dom": [],
+    "internalLanes": {
+      "a": 10,
+      "b": 7
+    },
+    "childrenA": [
+      [
+        "0114a426-e93b-46db-afb1-f66cd5137fe2",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "307746c2-8f26-4c26-8d45-45657a74e9d4",
+        "tool",
+        false,
+        null,
+        false
+      ],
+      [
+        "e9f66fa7-5529-4ee8-bb3c-1d055d621aee",
+        "tool",
+        false,
+        null,
+        false
+      ],
+      [
+        "7581cf7a-c472-42b5-9b0c-86de7bb610b7",
+        "tool",
+        false,
+        null,
+        false
+      ],
+      [
+        "ad2bb60d-3ce3-40e4-a444-90ab750a0e42",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "a5908e17-1213-4919-8429-9e7b4d8a759f",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "4b7f50a6-6543-4496-991f-8e15db956a76",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "fa8b5355-6883-4a1e-aeaa-f48a94f00ce4",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "4d213f8b-5840-4a09-a36d-856b8e169d2b",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "230f5b1c-5d53-4ad4-bf46-24b5d7f13cf8",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "137ddadd-4ef6-4cce-90c5-90fe097c6f6d",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "9fc2bc4c-c068-4dad-8d87-d02799231959",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "5637bdcf-5ee8-4400-be6d-0f713538e76e",
+        "subagent",
+        true,
+        "completed",
+        false
+      ]
+    ]
+  },
+  "readResult": {
+    "clicked": false,
+    "ipc": []
+  },
+  "afterResume": {
+    "a": [],
+    "dom": [],
+    "childrenA": [
+      [
+        "0114a426-e93b-46db-afb1-f66cd5137fe2",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "307746c2-8f26-4c26-8d45-45657a74e9d4",
+        "tool",
+        false,
+        null,
+        false
+      ],
+      [
+        "e9f66fa7-5529-4ee8-bb3c-1d055d621aee",
+        "tool",
+        false,
+        null,
+        false
+      ],
+      [
+        "7581cf7a-c472-42b5-9b0c-86de7bb610b7",
+        "tool",
+        false,
+        null,
+        false
+      ],
+      [
+        "ad2bb60d-3ce3-40e4-a444-90ab750a0e42",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "a5908e17-1213-4919-8429-9e7b4d8a759f",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "4b7f50a6-6543-4496-991f-8e15db956a76",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "fa8b5355-6883-4a1e-aeaa-f48a94f00ce4",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "4d213f8b-5840-4a09-a36d-856b8e169d2b",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "230f5b1c-5d53-4ad4-bf46-24b5d7f13cf8",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "137ddadd-4ef6-4cce-90c5-90fe097c6f6d",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "9fc2bc4c-c068-4dad-8d87-d02799231959",
+        "subagent",
+        true,
+        "completed",
+        false
+      ],
+      [
+        "5637bdcf-5ee8-4400-be6d-0f713538e76e",
+        "subagent",
+        true,
+        "completed",
+        false
+      ]
+    ]
+  },
+  "verdicts": {
+    "spawnAcceptedInBothThreads": true,
+    "childrenRanConcurrentlyInOneThread": true,
+    "childrenRanConcurrentlyAcrossThreads": true,
+    "internalChildrenGetNoDeadControls": true,
+    "parentResumeKeepsHistory": true
+  },
+  "controllableLaneCriteria": {
+    "controllableLanesRendered": "not reachable on Muse 1.4.2: the host emits no subagent item for the sub-agents its model spawns (m2-07-msp-subagent-notifications-1.4.2.json)",
+    "laneStoppedThroughItsControl": "not reachable on Muse 1.4.2: the host emits no subagent item for the sub-agents its model spawns (m2-07-msp-subagent-notifications-1.4.2.json)",
+    "stopTouchesOnlyThatLane": "not reachable on Muse 1.4.2: the host emits no subagent item for the sub-agents its model spawns (m2-07-msp-subagent-notifications-1.4.2.json)",
+    "finishedLaneControlsBounded": "not reachable on Muse 1.4.2: the host emits no subagent item for the sub-agents its model spawns (m2-07-msp-subagent-notifications-1.4.2.json)"
+  },
+  "measures": {
+    "maxRunningA": 0,
+    "maxRunningB": 0,
+    "maxRunningAcrossThreads": 0,
+    "maxSleepProcesses": 5,
+    "maxSleepsA": 3,
+    "maxSleepsB": 2,
+    "stoppedLaneStatus": null
+  },
+  "consoleErrors": [],
+  "stopApp": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "limits": [
+    "How many lanes run at once is the model's choice; the prompts ask for parallel children and the samples say what the host did.",
+    "Engine session store and Keychain shared with the user (ADR 0003 amendment)."
+  ],
+  "passed": false
+}
