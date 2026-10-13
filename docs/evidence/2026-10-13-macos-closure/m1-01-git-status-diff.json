@@ -1,0 +1,78 @@
+{
+  "schema": "muse-desktop.macos-ticket-proof.v1",
+  "ticket": "M1-01",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "build": {
+    "exe": "~/muse-proofs/app/08b291d/muse-desktop",
+    "exeSha256": "40ee4e0fbf0d270763c0bb97abee827f598272211c98473cc06b42ad58e50548"
+  },
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with the embedded frontend, isolated test mode (ADR 0003, macOS amendment), WKWebView driven through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "engineBinary": "~/muse-proofs/engine/1.4.2-R4684.1/muse-bin",
+  "engineSha256": "e9987ef4267a648dc1931c2836a23f6f16f8b4417368b126a810bece2abd308d",
+  "liveTurns": 2,
+  "harness": "node scripts/macos/m1-01-04-git-review.mjs --exe <exe> --port 9431 --base <tmp> --out-dir <dir> (scripts/macos/test-instance.mjs launch(), scripts/cdp-harness.mjs IPC trace)",
+  "isolation": {
+    "data": "<tmp>/m1-git-mv6gxrt0/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<1adb859f-4d5f-5529-99ef-7822932e1837>",
+    "defaultStoresUnchangedAtStart": true,
+    "stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    },
+    "consoleErrors": [],
+    "processesDuringRun": [
+      "muse-desktop",
+      "muse-bin serve --sandbox-network restricted --trust-workspace"
+    ]
+  },
+  "method": "One isolated instance drove the four tickets in one conversation, in a scratch repository with local identity (git config in the repo) and local bare remotes, all under the run's temp folder. The project folder was picked from the welcome screen (folder dialog answered through dialogQueue), the first message typed with Input.insertText and sent with a real Enter (Input.dispatchKeyEvent). Panel buttons were clicked in the page (element.click()), fields filled through React's value setter, as in the Windows record. Every repository claim was read back with /usr/bin/git, independently of the UI. Files were changed on disk only after send_input was traced (the baseline is the git_status read before it), while the turn ran.",
+  "windowsReference": "docs/evidence/2026-09-26-m1-closure/m1-01-04-git-native.json",
+  "checks": {
+    "lastTurnSnapshot": {
+      "turn": 1,
+      "files": [
+        "config.properties",
+        "fake.docx",
+        "notes.txt"
+      ],
+      "gitPorcelainPaths": [
+        "config.properties",
+        "fake.docx",
+        "notes.txt"
+      ]
+    },
+    "officeBinary": {
+      "diffSaysBinary": true,
+      "rowBadge": false,
+      "gitNumstat": "-\t-\tfake.docx"
+    },
+    "largeStatus": {
+      "domRows": 804,
+      "countText": "804 changed files",
+      "gitPorcelainEntries": 804
+    },
+    "unicodeName": {
+      "row": "café-ünïcode.txt",
+      "rowIsNfc": true,
+      "gitQuotesOff": "?? café-ünïcode.txt"
+    }
+  },
+  "verdicts": {
+    "turnSnapshotListsChangedFiles": true,
+    "officeFilesFlaggedBinary": true,
+    "largeStatusHandled": true,
+    "unicodeNameListed": true,
+    "ticketMacos": "☑"
+  },
+  "limits": [
+    "The status row of the office file carries no binary badge; the marker is in the diff view ('Binary file'), as on Windows.",
+    "The Unicode name check (NFC name listed as git names it) goes beyond the Windows record; it is not a closing criterion.",
+    "The 800-file status is 800 untracked files plus 4 other entries: the app lists untracked files one by one (as git status -uall)."
+  ]
+}

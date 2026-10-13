@@ -1,0 +1,87 @@
+{
+  "schema": "muse-desktop.macos-ticket-proof.v1",
+  "ticket": "M1-04",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "build": {
+    "exe": "~/muse-proofs/app/08b291d/muse-desktop",
+    "exeSha256": "40ee4e0fbf0d270763c0bb97abee827f598272211c98473cc06b42ad58e50548"
+  },
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with the embedded frontend, isolated test mode (ADR 0003, macOS amendment), WKWebView driven through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "engineBinary": "~/muse-proofs/engine/1.4.2-R4684.1/muse-bin",
+  "engineSha256": "e9987ef4267a648dc1931c2836a23f6f16f8b4417368b126a810bece2abd308d",
+  "liveTurns": 2,
+  "harness": "node scripts/macos/m1-01-04-git-review.mjs --exe <exe> --port 9431 --base <tmp> --out-dir <dir> (scripts/macos/test-instance.mjs launch(), scripts/cdp-harness.mjs IPC trace)",
+  "isolation": {
+    "data": "<tmp>/m1-git-mv6gxrt0/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<1adb859f-4d5f-5529-99ef-7822932e1837>",
+    "defaultStoresUnchangedAtStart": true,
+    "stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    },
+    "consoleErrors": [],
+    "processesDuringRun": [
+      "muse-desktop",
+      "muse-bin serve --sandbox-network restricted --trust-workspace"
+    ]
+  },
+  "method": "One isolated instance drove the four tickets in one conversation, in a scratch repository with local identity (git config in the repo) and local bare remotes, all under the run's temp folder. The project folder was picked from the welcome screen (folder dialog answered through dialogQueue), the first message typed with Input.insertText and sent with a real Enter (Input.dispatchKeyEvent). Panel buttons were clicked in the page (element.click()), fields filled through React's value setter, as in the Windows record. Every repository claim was read back with /usr/bin/git, independently of the UI. The rejected push used a second local bare remote whose pre-receive hook exits 1 (no network). Open pull request was clicked with the local origin: the app ran the user's real gh, found through the login-shell PATH the app adopts on macOS (src-tauri/src/login_env.rs); gh refuses before any API call because no remote points to a GitHub host. No PR was created anywhere.",
+  "windowsReference": "docs/evidence/2026-09-26-m1-closure/m1-01-04-git-native.json; docs/evidence/2026-09-26-m1-closure/m1-04-pr-roundtrip.json",
+  "checks": {
+    "commit": {
+      "lastCommit": "qualif: gamma clarifier change (macOS)",
+      "clean": true
+    },
+    "push": {
+      "remoteHeads": "d9dcb673ab3612402c1dac549516283ba278a759\trefs/heads/master",
+      "localHead": "d9dcb673ab3612402c1dac549516283ba278a759",
+      "pushArgs": {
+        "sessionId": "01a1348e-6a42-7b50-9110-5e96d5ade931",
+        "remote": "origin",
+        "branch": "master",
+        "expectedHead": "d9dcb673ab3612402c1dac549516283ba278a759"
+      }
+    },
+    "fetchPull": {
+      "fetchShows": "behind",
+      "headBefore": "d9dcb673",
+      "headAfter": "34fa40c7",
+      "remoteMaster": "34fa40c7",
+      "mergeCommits": "0"
+    },
+    "rejectedPush": {
+      "alerts": [
+        "Git review unavailable: remote: qualif: pushes are refused by policy To <tmp>/m1-git-mv6gxrt0/rejecting.git ! [remote rejected] HEAD -> master (pre-receive hook declined) error: failed to push some refs to '<tmp>/m1-git-mv6gxrt0/rejecting.git'"
+      ],
+      "guardedRemoteHeads": "",
+      "appAlive": true
+    },
+    "prAgainstLocalRemote": {
+      "ok": false,
+      "result": "\"none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`\"",
+      "alerts": [
+        "Git review unavailable: none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`"
+      ],
+      "link": null
+    }
+  },
+  "verdicts": {
+    "commitStaged": true,
+    "pushExplicitRefspec": true,
+    "pullLatestFfOnly": true,
+    "rejectedPushClean": true,
+    "prPathReachesGhAndSurfacesRefusal": true,
+    "remotePrRoundTrip": "not run (no external effect allowed)",
+    "ticketMacos": "◐"
+  },
+  "limits": [
+    "The live PR round trip (open a PR on GitHub through the form, gh confirms it, a second click reports 'Existing pull request') was proved on Windows on a disposable GitHub repo; it is not replayed on macOS because the run may not reach GitHub. It needs a disposable repo and Étienne's go-ahead. Until then M1-04 stays ◐ on macOS for that criterion only.",
+    "The Windows record's forbidden remote was a GitHub URL; here a local hook rejection stands in for it."
+  ]
+}

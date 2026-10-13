@@ -1,0 +1,170 @@
+{
+  "schema": "muse-desktop.macos-ticket-proof.v1",
+  "ticket": "M1-07",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "build": {
+    "exe": "~/muse-proofs/app/08b291d/muse-desktop",
+    "exeSha256": "40ee4e0fbf0d270763c0bb97abee827f598272211c98473cc06b42ad58e50548"
+  },
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build with the embedded frontend, isolated test mode (ADR 0003, macOS amendment), WKWebView driven through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "engineBinary": "~/muse-proofs/engine/1.4.2-R4684.1/muse-bin",
+  "engineSha256": "e9987ef4267a648dc1931c2836a23f6f16f8b4417368b126a810bece2abd308d",
+  "liveTurns": 1,
+  "harness": "node scripts/macos/m1-07-files.mjs --exe <exe> --port 9432 --base <tmp> --out-dir <dir> (scripts/macos/test-instance.mjs launch(), scripts/cdp-harness.mjs)",
+  "isolation": {
+    "data": "<tmp>/m1-files-mv6h0fw9/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<5b2c28ec-e95e-5fa7-8671-3658a50ca436>",
+    "defaultStoresUnchangedAtStart": true,
+    "stop": {
+      "quitBy": "window closed",
+      "leftAfterQuit": [],
+      "groupLeftAfterQuit": [],
+      "exitCode": 0,
+      "defaultStoresUnchangedAtEnd": true,
+      "testStoreDeleted": true
+    },
+    "consoleErrors": [],
+    "processesDuringRun": [
+      "muse-desktop",
+      "muse-bin serve --sandbox-network restricted --trust-workspace"
+    ]
+  },
+  "method": "One isolated instance, one conversation created from the welcome screen on a scratch workspace under the run's temp folder (itself below /var/folders, a symlinked root on macOS). The Files tab was driven in the page (element.click() on rows and buttons, as in the Windows record); files were created, renamed and deleted on disk by the harness with Node's fs, never through the app.",
+  "windowsReference": "docs/evidence/2026-09-26-m1-closure/m1-07-09-files-fork.json (M1-07 half)",
+  "checks": {
+    "project": {
+      "start": "ready"
+    },
+    "root-listing": {
+      "rows": [
+        {
+          "name": "fake.docx",
+          "disabled": false,
+          "title": "fake.docx"
+        },
+        {
+          "name": "main.rs",
+          "disabled": false,
+          "title": "main.rs"
+        },
+        {
+          "name": "zz-inside-link.rs ↗",
+          "disabled": false,
+          "title": "zz-inside-link.rs"
+        },
+        {
+          "name": "zz-outside-link ↗",
+          "disabled": true,
+          "title": "Symlink target is outside this workspace"
+        }
+      ]
+    },
+    "text-preview": {
+      "head": "main.rs",
+      "size": "301 B",
+      "firstLine": "fn main() {"
+    },
+    "add-to-prompt": {
+      "composerExcerpt": "\n[Workspace file · main.rs · 301 bytes · observed 2026-10-13T09:20:44.641Z]\n<workspace-file-data>\nfn main() {\n    println!(\"files on macOS\");\n    // filler line 1\n    // filler line 2\n    // filler line 3\n    // filler line 4\n    // filler line 5\n    // filler",
+      "length": 423
+    },
+    "office-preview": {
+      "guarded": true,
+      "textPreview": false
+    },
+    "symlink-guard": {
+      "linkRows": [
+        {
+          "name": "zz-inside-link.rs ↗",
+          "disabled": false,
+          "title": "zz-inside-link.rs"
+        },
+        {
+          "name": "zz-outside-link ↗",
+          "disabled": true,
+          "title": "Symlink target is outside this workspace"
+        }
+      ],
+      "outsideClickable": false,
+      "afterOutside": {
+        "path": "Disk · .",
+        "preview": "fake.docx",
+        "error": null
+      }
+    },
+    "watcher-stale": {
+      "banner": "Workspace changed on disk. Refresh to update this view · watched.txt."
+    },
+    "bounded-listing": {
+      "rows": 200,
+      "note": "Showing the first 200 entries. Open a subfolder to narrow the view.",
+      "path": "Disk · bulk"
+    },
+    "bounded-listing-which-200": {
+      "shownFirst5": [
+        "f-0000.txt",
+        "f-0001.txt",
+        "f-0002.txt",
+        "f-0003.txt",
+        "f-0004.txt"
+      ],
+      "shownLast": "f-0549.txt",
+      "shownAmongFirst200ByName": 75
+    },
+    "rename-in-truncated-folder": {
+      "hasRenamed": false,
+      "hasOld": false,
+      "rows": 200,
+      "shownFirst3": [
+        "f-0001.txt",
+        "f-0002.txt",
+        "f-0003.txt"
+      ]
+    },
+    "rename-reflected": {
+      "hasRenamed": true,
+      "hasOld": false,
+      "names": [
+        "one.txt",
+        "three.txt",
+        "two-renamed.txt"
+      ]
+    },
+    "deleted-folder": {
+      "error": "cannot resolve workspace path bulk: No such file or directory (os error 2)"
+    },
+    "recovered-up": {
+      "rows": [
+        "small/",
+        "fake.docx",
+        "main.rs",
+        "watched.txt",
+        "zz-inside-link.rs ↗",
+        "zz-outside-link ↗"
+      ],
+      "errorGone": true
+    }
+  },
+  "verdicts": {
+    "textPreviewAndPrompt": true,
+    "promptCarriesProvenance": true,
+    "officeGuarded": true,
+    "symlinkLeavingWorkspaceNotOpened": true,
+    "watcherFlagsStale": true,
+    "boundedListing": true,
+    "boundedListingIsFirst200ByName": false,
+    "renameReflectedInTruncatedFolder": false,
+    "renameReflected": true,
+    "deletedFolderBoundedError": true,
+    "appSurvivesAndUpRecovers": true,
+    "allWindowsCriteria": true,
+    "ticketMacos": "◐"
+  },
+  "limits": [
+    "macOS defect holding the ticket at ◐: a folder over the 200-entry bound lists 200 entries taken in read_dir order and only then sorted (src-tauri/src/files.rs, list: the loop stops pushing at max_entries before entries.sort_by). NTFS returns names in order, so on Windows these are the first 200 by name; APFS returns them in hash order, so on macOS the view shows an arbitrary 200, sorted, under a note that says 'the first 200 entries' (measured: 75 of the 200 shown are among the first 200 by name), and an entry renamed on disk may never appear after Refresh (the Windows replay of the rename inside the 550-entry folder fails; the same rename in a folder under the bound appears). Not data loss, not security. Fix direction (not applied): collect the names, sort, then truncate.",
+    "Open in app (the system default handler, LaunchServices here) was not clicked: it would open an app on the user's desktop; the Windows record did not click it either.",
+    "The watcher and symlink checks go beyond the Windows record (ticket text); they are recorded, not closing criteria."
+  ]
+}
