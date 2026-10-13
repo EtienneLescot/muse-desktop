@@ -1,0 +1,875 @@
+{
+  "schema": "muse-desktop.m0-05-approvals-questions-macos.v1",
+  "ticket": "M0-05",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, debug build with embedded frontend, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 9,
+  "harness": "scripts/macos/m0-05-approvals-questions.mjs (+ scripts/macos/m0-05-06-common.mjs), port 9424",
+  "isolation": "One isolated test instance per phase (scripts/macos/test-instance.mjs): fresh data folder and WKWebView store under the run folder, projects in folders under the run folder created through the Projects panel (folder dialog answered by the IPC trace), the pinned engine with MUSE_NO_AUTO_UPDATE=1; each phase's stop records the default stores unchanged and no process left. The engine's session store is shared with the user (ADR 0003).",
+  "method": "Real 1.4.2 turns. The approval recipe is a shell write with a variable argument (m='<tag>'; printf ... > probe.txt), which the host cannot clear statically; the question recipes call request_user_input with fixed ids and options. Clicks are real mouse events through the bridge (Input.dispatchMouseEvent, isTrusted), first messages are typed (Input.insertText) and sent with Enter. Decisions and answers are counted on the page's IPC transport (window.__baselineIpc); host state is read through list_pending_requests. The 'same id in two conversations' cases copy A's exact tool_request / input_request event into B's poll_events response, the path every bridge event takes to the renderer. Incidents: Page.reload, SIGKILL of the app, SIGKILL of one engine with the app open, a graceful close from the window (Tauri window close).",
+  "posture": "Ask -> promptUnmatched, no client auto-approval (decision 05/10); the reject phase switches to the middle posture (onRequest) and back with a card pending",
+  "phases": {
+    "reject": {
+      "at": "2026-10-13T09:02:20.807Z",
+      "liveTurns": 1,
+      "isolation": {
+        "data": "<run>/reject/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<0c04affb-f5b7-56d1-8e74-9a66d5fa7a89>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "posture": "ask",
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "promptUnmatched"
+      },
+      "engineArgv": [
+        "serve --sandbox-network restricted --trust-workspace"
+      ],
+      "card": {
+        "msToCard": 4251,
+        "host": {
+          "approvalId": "01a1347f-5ccd-7be2-9620-3d7be9ec16a0",
+          "requirement": {
+            "approvalId": "01a1347f-5ccd-7be2-9620-3d7be9ec16a0",
+            "sourceIndex": 0
+          },
+          "toolName": "bash",
+          "choices": [
+            {
+              "choiceId": "allow_once",
+              "label": "Allow once",
+              "decision": "approved"
+            },
+            {
+              "choiceId": "abort",
+              "label": "Reject",
+              "decision": "abort"
+            }
+          ]
+        },
+        "dom": {
+          "key": "01a1347f-4b7d-7a31-8bb3-4c92a402f029:01a1347f-5ccd-7be2-9620-3d7be9ec16a0",
+          "title": "bash",
+          "command": "m='m05-reject'; printf '%s\\n' \"$m\" > probe.txt",
+          "buttons": [
+            "Allow once",
+            "Reject"
+          ],
+          "noChoices": false
+        }
+      },
+      "cardButtonsAreHostChoices": true,
+      "toMiddle": {
+        "clicked": true,
+        "via": "composer menu",
+        "stored": "workspace"
+      },
+      "afterSwitch": {
+        "stillPending": true,
+        "sameRequirement": true,
+        "cardStillPainted": true
+      },
+      "backToAsk": {
+        "clicked": true,
+        "via": "composer menu",
+        "stored": "ask"
+      },
+      "setApprovalMode": [
+        {
+          "mode": "workspace",
+          "ok": true,
+          "result": "{\"applyOutcome\":\"completed\",\"commandId\":\"01a1347f-5e84-7000-8f02-6dc51281a4ea\",\"effectiveMode\":{\"lastCommandId\":\"01a1347f-5e84-7000-8f02-6dc51281a4ea\",\"mode\":\"onRequest\",\"source\":\"approvalReconfigure\"},\"status\":\"accepted\"}"
+        },
+        {
+          "mode": "ask",
+          "ok": true,
+          "result": "{\"applyOutcome\":\"completed\",\"commandId\":\"01a1347f-66c7-7000-8bc2-420ed383ac90\",\"effectiveMode\":{\"lastCommandId\":\"01a1347f-66c7-7000-8bc2-420ed383ac90\",\"mode\":\"promptUnmatched\",\"source\":\"approvalReconfigure\"},\"status\":\"accepted\"}"
+        }
+      ],
+      "stages": [
+        {
+          "requirement": "{\"approvalId\":\"01a1347f-5ccd-7be2-9620-3d7be9ec16a0\",\"sourceIndex\":0}",
+          "toolName": "bash",
+          "choices": [
+            "allow_once/approved",
+            "abort/abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject"
+          ],
+          "command": "m='m05-reject'; printf '%s\\n' \"$m\" > probe.txt",
+          "label": "Reject",
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "decideCalls": [
+        {
+          "sessionId": true,
+          "choiceId": "abort",
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "end": {
+        "idle": true,
+        "msToEnd": 8453,
+        "healthSamples": [
+          {
+            "atMs": 1,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 8453,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "noFalseResume": true,
+      "file": null,
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: bash: m='m05-reject'; printf '%s\\n' \"$m\" > probe.txt"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command blocked: approval aborted. "
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "cardShowsHostChoices": true,
+        "postureSwitchKeepsCardDecidable": true,
+        "postureReachedHost": true,
+        "rejectDenies": true,
+        "noFalseResume": true
+      }
+    },
+    "reload": {
+      "at": "2026-10-13T09:03:30.627Z",
+      "liveTurns": 1,
+      "isolation": {
+        "data": "<run>/reload/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<fd5332cf-fc1e-5709-bd53-6651e7e068ca>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "promptUnmatched"
+      },
+      "beforeReload": {
+        "approvalId": "01a13480-623c-78e3-8160-032076cb4525",
+        "requirement": {
+          "approvalId": "01a13480-623c-78e3-8160-032076cb4525",
+          "sourceIndex": 0
+        },
+        "cards": 1
+      },
+      "afterReload": {
+        "cardBack": true,
+        "cards": 1,
+        "sameApproval": true,
+        "sameRequirement": true,
+        "decideCallsBeforeAnyClick": 0
+      },
+      "doubleClick": {
+        "clicked": true,
+        "count": 2
+      },
+      "afterDoubleClick": {
+        "approveCalls": [
+          {
+            "requirement": "{\"approvalId\":\"01a13480-623c-78e3-8160-032076cb4525\",\"sourceIndex\":0}",
+            "choiceId": "allow_once",
+            "ok": true,
+            "result": "true"
+          }
+        ],
+        "alerts": []
+      },
+      "staleReplay": {
+        "refused": "unknown or stale approval: 01a13480-623c-78e3-8160-032076cb4525"
+      },
+      "rest": [],
+      "end": {
+        "idle": true,
+        "msToEnd": 14780,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 14779,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "file": "m05-reload",
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: bash: m='m05-reload'; printf '%s\\n' \"$m\" > probe.txt"
+        },
+        {
+          "role": "assistant",
+          "text": "Done, probe written. "
+        },
+        {
+          "role": "tool",
+          "text": "bash · Write reload probe marker file { \"chunk_id\": \"exec-1-1\", \"command\": \"m='m05-reload'; printf '%s\\\\n' \\\"$m\\\" > probe.txt\", \"description\": \"Write reload probe marker file\", \"exit_code\": 0, \"terminal_status\": \"completed\", \"output\": \"\", \""
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "cardRebuiltAfterReloadWithoutAction": true,
+        "doubleClickOneDecision": true,
+        "staleTokenRefused": true,
+        "turnEndsWithTheAction": true
+      },
+      "fileWritten": true
+    },
+    "two": {
+      "at": "2026-10-13T09:07:20.418Z",
+      "liveTurns": 2,
+      "isolation": {
+        "data": "<run>/two/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<b2ffa146-0f84-5cdc-8867-8a160e3f27a7>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "together": {
+        "aPending": 1,
+        "bPending": 1
+      },
+      "bCardsWithForged": [
+        {
+          "key": "01a13483-acbd-74c0-a771-d788d4536672:01a13483-b808-7862-9b21-06cbf3e058bc",
+          "buttons": [
+            "Allow once",
+            "Reject"
+          ]
+        },
+        {
+          "key": "01a13483-acbd-74c0-a771-d788d4536672:01a13483-a175-7102-8070-fef830cd2325",
+          "buttons": [
+            "Allow once",
+            "Reject"
+          ]
+        }
+      ],
+      "forgedApplied": true,
+      "aStages": [
+        {
+          "requirement": "{\"approvalId\":\"01a13483-a175-7102-8070-fef830cd2325\",\"sourceIndex\":0}",
+          "toolName": "bash",
+          "choices": [
+            "allow_once/approved",
+            "abort/abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject"
+          ],
+          "command": "m='m05-two-a'; printf '%s\\n' \"$m\" > probe.txt",
+          "label": "Allow once",
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "aEnd": {
+        "idle": true,
+        "msToEnd": 11259,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 704,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 1408,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 11258,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "aApproveCalls": [
+        {
+          "toA": true,
+          "toB": false,
+          "ok": true
+        }
+      ],
+      "bAfterA": {
+        "hostStillPending": 1,
+        "sameRequirement": true,
+        "cards": [
+          {
+            "key": "01a13483-acbd-74c0-a771-d788d4536672:01a13483-b808-7862-9b21-06cbf3e058bc",
+            "buttons": [
+              "Allow once",
+              "Reject"
+            ]
+          },
+          {
+            "key": "01a13483-acbd-74c0-a771-d788d4536672:01a13483-a175-7102-8070-fef830cd2325",
+            "buttons": [
+              "Allow once",
+              "Reject"
+            ]
+          }
+        ]
+      },
+      "bStages": [
+        {
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "bHostPendingAfter": 0,
+      "bReplied": true,
+      "files": {
+        "A": "m05-two-a",
+        "B": "m05-two-b"
+      },
+      "bCardsBeforeReload": [
+        "01a13483-acbd-74c0-a771-d788d4536672:01a13483-a175-7102-8070-fef830cd2325"
+      ],
+      "bEnd": {
+        "idle": true,
+        "msToEnd": 5643,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 5639,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "bCardsAfterReload": [],
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "bothWaitingTogether": true,
+        "forgedSameIdInB": true,
+        "decidingAReachesOnlyA": true,
+        "bUntouched": true,
+        "bDecidedAfterwards": true,
+        "forgedCardGoneAfterReload": true
+      }
+    },
+    "kill": {
+      "at": "2026-10-13T09:10:18.392Z",
+      "liveTurns": 1,
+      "isolation": {
+        "data": "<run>/kill/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<97b6f895-d525-5d72-8746-49a6fbea0001>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "cardPending": true,
+      "appKilled": true,
+      "enginesAliveAfterKill": 0,
+      "stopKilled": {
+        "quitBy": "SIGKILL",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": null,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "connected": true,
+      "afterRelaunch": {
+        "activeSid": "01a13484-5681-7f32-aada-1a5a641a2bd6",
+        "health": null,
+        "cards": [],
+        "inputs": [],
+        "alerts": []
+      },
+      "hostPending": {
+        "approvals": [],
+        "inputs": [],
+        "rawKeys": [
+          "approvals",
+          "userInputs"
+        ]
+      },
+      "cancelLines": 1,
+      "transcript": [
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "Approval requested: bash: m='m05-kill'; printf '%s\\n' \"$m\" > probe.txt"
+        },
+        {
+          "role": "system",
+          "text": "Approval cancelled: Muse closed before you answered, so the action did not run."
+        }
+      ],
+      "running": "false",
+      "decideCalls": 0,
+      "file": null,
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "appForceKilled": true,
+        "enginesEndedWithTheApp": true,
+        "reopenedAndConnected": true,
+        "noPhantomCard": true,
+        "cancelLineOnce": true,
+        "notLeftWorking": true,
+        "noDecisionSentNoFile": true
+      }
+    },
+    "questions": {
+      "at": "2026-10-13T09:27:30.311Z",
+      "liveTurns": 2,
+      "isolation": {
+        "data": "<run>/questions/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<9add9029-7256-5a5d-943f-aee40449c489>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "together": {
+        "a": 1,
+        "b": 1,
+        "rawKeys": [
+          "approvals",
+          "userInputs"
+        ]
+      },
+      "bInputsWithForged": [
+        {
+          "key": "01a13495-ef5f-7942-8eec-f7ff6204dece:01a13495-fa40-74f0-b89d-3d5619eb45d7",
+          "questions": [
+            "Pick exactly two colors"
+          ],
+          "options": [
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "error": null
+        },
+        {
+          "key": "01a13495-ef5f-7942-8eec-f7ff6204dece:01a13495-e305-7c62-a8bf-653efc0096cd",
+          "questions": [
+            "Which fruit should I name?"
+          ],
+          "options": [
+            "Apple",
+            "Banana",
+            "Cherry"
+          ],
+          "error": null
+        }
+      ],
+      "aPick": {
+        "clicked": true,
+        "count": 1
+      },
+      "focusBeforeKey": "BODY:Skip to message inpu",
+      "keysSeen": [
+        {
+          "key": "Enter",
+          "meta": true,
+          "ctrl": false,
+          "target": "BODY",
+          "trusted": true
+        }
+      ],
+      "aAnswer": [],
+      "aAnswerFallbackClick": {
+        "clicked": true,
+        "count": 1
+      },
+      "aAnswerByClick": [
+        {
+          "toA": true,
+          "toB": false,
+          "answers": [
+            {
+              "questionId": "fruit",
+              "selectedLabel": "Apple"
+            }
+          ],
+          "ok": true
+        }
+      ],
+      "bAfterAAnswer": {
+        "hostInputs": [
+          "01a13495-fa40-74f0-b89d-3d5619eb45d7"
+        ],
+        "sameAsBefore": true
+      },
+      "aSecondQuestion": true,
+      "skipDouble": {
+        "clicked": true,
+        "count": 2
+      },
+      "skipCalls": [
+        {
+          "toA": true,
+          "ok": true
+        }
+      ],
+      "answersAfterSkip": 1,
+      "aEnd": {
+        "idle": true,
+        "msToEnd": 11972,
+        "healthSamples": [
+          {
+            "atMs": 1,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 705,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 11969,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "aReply": "first=APPLE second=SKIPPED",
+      "bFirst": {
+        "calls": [
+          {
+            "toB": true,
+            "ok": false,
+            "result": "\"MSP error -32057: answer is invalid for user input 01a13495-fa40-74f0-b89d-3d5619eb45d7 [userInputAnswerInvalid] (invalid_target) [retryable=false]\""
+          }
+        ],
+        "card": {
+          "present": true,
+          "redTicked": true,
+          "error": null
+        },
+        "alerts": [
+          "Your response could not be submitted. — MSP error -32057: answer is invalid for user input 01a13495-fa40-74f0-b89d-3d5619eb45d7 [userInputAnswerInvalid] (invalid_target) [retryable=false]"
+        ],
+        "hostStillWaiting": true
+      },
+      "bSecond": [
+        {
+          "toB": true,
+          "ok": true,
+          "answers": [
+            {
+              "questionId": "colors",
+              "selectedLabels": [
+                "Red",
+                "Green"
+              ]
+            }
+          ]
+        }
+      ],
+      "bReply": "RED+GREEN",
+      "bHostInputsAfter": 0,
+      "bInputsBeforeReload": [
+        [
+          "Which fruit should I name?"
+        ]
+      ],
+      "bEnd": {
+        "idle": true,
+        "msToEnd": 9860,
+        "healthSamples": [
+          {
+            "atMs": 3,
+            "health": "Waiting for the desktop host The turn is marked active, but no host event has reached this window yet. Sync now Reconnect Stop",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 9856,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "bAfterReload": {
+        "inputs": 0,
+        "cancelLines": 0
+      },
+      "consoleErrors": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "bothWaitingTogether": true,
+        "forgedSameQuestionInB": true,
+        "answerReachesAOnly": true,
+        "bUnchangedWhileAAnswered": true,
+        "skipDoubleClickOneCancel": true,
+        "aReplyFollowsAnswers": true,
+        "oneBoxRefused": true,
+        "refusalShown": true,
+        "correctedOnSameCard": true,
+        "forgedCardGoneAfterReloadNoCancelLine": true
+      },
+      "observations": {
+        "cmdEnterAfterMousePick": "not answered (key reached BODY, focus BODY:Skip to message inpu); answered by a click on Send answer"
+      }
+    },
+    "death": {
+      "at": "2026-10-13T09:32:00.292Z",
+      "liveTurns": 2,
+      "isolation": {
+        "data": "<run>/death/data",
+        "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<2e5d782e-5e55-5a34-9e8a-2aaa92661f4b>",
+        "defaultStoresUnchangedAtStart": true
+      },
+      "onlyAsEngineKilled": true,
+      "aAfterDeath": {
+        "cardRemoved": true,
+        "cancelLines": 1,
+        "pill": "Connecting"
+      },
+      "aReconnected": true,
+      "aAfterReconnect": {
+        "cards": 0,
+        "answers": 0,
+        "cancelLines": 1,
+        "running": "false"
+      },
+      "bPendingAtClose": 1,
+      "consoleErrorsFirst": [],
+      "stopFirst": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true
+      },
+      "bConnected": true,
+      "bAfterRelaunch": {
+        "cards": 0,
+        "hostInputs": 0,
+        "cancelLines": 1,
+        "running": "false",
+        "health": null,
+        "transcript": [
+          {
+            "role": "thinking",
+            "text": "Constructing a single single-select request_user_input call with id restart and three labeled options."
+          },
+          {
+            "role": "tool",
+            "text": "Input requested: request_user_input"
+          },
+          {
+            "role": "tool",
+            "text": "{\"status\":\"aborted\",\"answers\":[],\"reason\":\"run_aborted\"}"
+          },
+          {
+            "role": "system",
+            "text": "Input cancelled: Muse closed before you answered."
+          }
+        ]
+      },
+      "consoleErrorsSecond": [],
+      "stop": {
+        "quitBy": "window closed",
+        "leftAfterQuit": [],
+        "groupLeftAfterQuit": [],
+        "exitCode": 0,
+        "defaultStoresUnchangedAtEnd": true,
+        "testStoreDeleted": true
+      },
+      "verdict": {
+        "onlyAsEngineKilled": true,
+        "aCardRemovedWithCancelLine": true,
+        "aReconnectWorks": true,
+        "aNoPhantomCardNoAnswer": true,
+        "bPendingAtClose": true,
+        "bClosedFromItsWindow": true,
+        "bReopenedConnected": true,
+        "bNoPhantomCard": true,
+        "bCancelLineOnce": true,
+        "bNotLeftWorking": true
+      }
+    }
+  },
+  "verdicts": {
+    "reject": {
+      "cardShowsHostChoices": true,
+      "postureSwitchKeepsCardDecidable": true,
+      "postureReachedHost": true,
+      "rejectDenies": true,
+      "noFalseResume": true
+    },
+    "reload": {
+      "cardRebuiltAfterReloadWithoutAction": true,
+      "doubleClickOneDecision": true,
+      "staleTokenRefused": true,
+      "turnEndsWithTheAction": true
+    },
+    "two": {
+      "bothWaitingTogether": true,
+      "forgedSameIdInB": true,
+      "decidingAReachesOnlyA": true,
+      "bUntouched": true,
+      "bDecidedAfterwards": true,
+      "forgedCardGoneAfterReload": true
+    },
+    "kill": {
+      "appForceKilled": true,
+      "enginesEndedWithTheApp": true,
+      "reopenedAndConnected": true,
+      "noPhantomCard": true,
+      "cancelLineOnce": true,
+      "notLeftWorking": true,
+      "noDecisionSentNoFile": true
+    },
+    "questions": {
+      "bothWaitingTogether": true,
+      "forgedSameQuestionInB": true,
+      "answerReachesAOnly": true,
+      "bUnchangedWhileAAnswered": true,
+      "skipDoubleClickOneCancel": true,
+      "aReplyFollowsAnswers": true,
+      "oneBoxRefused": true,
+      "refusalShown": true,
+      "correctedOnSameCard": true,
+      "forgedCardGoneAfterReloadNoCancelLine": true
+    },
+    "death": {
+      "onlyAsEngineKilled": true,
+      "aCardRemovedWithCancelLine": true,
+      "aReconnectWorks": true,
+      "aNoPhantomCardNoAnswer": true,
+      "bPendingAtClose": true,
+      "bClosedFromItsWindow": true,
+      "bReopenedConnected": true,
+      "bNoPhantomCard": true,
+      "bCancelLineOnce": true,
+      "bNotLeftWorking": true
+    }
+  },
+  "limits": [
+    "Same scenario as the Windows closure, on the macOS engine 1.4.2: one approval stage per command here (bash), where Windows' PowerShell raised two or three.",
+    "WebKit does not focus a button on a mouse click: after a mouse pick, Cmd+Enter (the card's documented shortcut) lands on <body> and does not answer (questions.observations); the answer path itself is proved by a click. Recorded for the backlog, not an M0-05 criterion.",
+    "The forged copies (A's card or question in B) stay painted in B until the page re-reads the host; a reload removes them with no cancel line.",
+    "The engine keeps listing a dead turn's question after a resume (upstream #92), as on Windows; the app filters on the running turn.",
+    "Live turns: 9 recorded here; 9 more were spent in discarded attempts while the harness was being fixed (reload wait, input row ids, forged-card cleanup, the restart cancel line)."
+  ]
+}
