@@ -5,7 +5,7 @@
  * (scripts/macos/test-instance.mjs); nothing here starts or isolates an app.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { argValue, redactor, sleep, waitFor } from "../cdp-harness.mjs";
@@ -126,4 +126,32 @@ export const assistantHas = async (app, sid, token) => (await transcript(app, si
 export const calls = (app, cmd) => app.ev(`(window.__baselineIpc?.calls || []).filter((c) => c.cmd === ${J(cmd)})`);
 
 export const now = () => new Date().toISOString();
+
+/**
+ * The runs of one engine session as the engine itself recorded them (its
+ * durable log, ~/.local/share/muse/sessions/<yyyy>/<mm>/<dd>/<sid>/session.jsonl,
+ * read only): run id, start and terminal state with its reason.
+ */
+export function engineRuns(sid) {
+  const root = join(homedir(), ".local", "share", "muse", "sessions");
+  let file = null;
+  for (const y of safeList(root)) for (const m of safeList(join(root, y))) for (const d of safeList(join(root, y, m))) {
+    const candidate = join(root, y, m, d, sid, "session.jsonl");
+    if (existsSync(candidate)) file = candidate;
+  }
+  if (!file) return null;
+  const runs = new Map();
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const p = rec.payload;
+    if (!p || p.kind !== "run" || !p.run_id || !p.event) continue;
+    const run = runs.get(p.run_id) ?? { runId: p.run_id, started: false, terminal: null, reason: null };
+    if (p.event.kind === "started") run.started = true;
+    if (p.event.kind === "terminal") { run.terminal = p.event.terminal ?? null; run.reason = p.event.reason ?? null; }
+    runs.set(p.run_id, run);
+  }
+  return [...runs.values()];
+}
+const safeList = (dir) => { try { return readdirSync(dir).filter((n) => /^\d+$/.test(n)); } catch { return []; } };
 export { sleep, waitFor };
