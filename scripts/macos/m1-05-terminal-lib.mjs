@@ -106,6 +106,20 @@ export function terminalDriver(app) {
       if (opened && !opened.error) t.current = opened.terminalId;
       return opened;
     },
+    /**
+     * Shows the Terminal tab of the active conversation `sid` and binds the
+     * driver to that conversation's terminal (the panel may already have
+     * opened it when the conversation was selected).
+     */
+    async attach(sid) {
+      await t.workTab("Terminal");
+      const opened = await waitFor(async () => {
+        const mine = (await t.taps()).opens.filter((o) => o.sessionId === sid);
+        return mine.at(-1) ?? null;
+      }, 20_000, 200);
+      if (opened && !opened.error) t.current = opened.terminalId;
+      return opened;
+    },
     async focusInput() {
       return app.ev("(() => { const i = document.querySelector('form.terminal-input input'); if (!i) return false; i.focus(); return document.activeElement === i; })()");
     },
