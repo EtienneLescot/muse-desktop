@@ -1,0 +1,1439 @@
+{
+  "schema": "muse-desktop.macos-m3-02-remote-mcp.v1",
+  "ticket": "M3-02",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 08b291d with embedded frontend, WKWebView through the test bridge (src-tauri/src/test_bridge.rs)",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 1,
+  "harness": "scripts/macos/m3-02-remote-mcp.mjs on scripts/macos/test-instance.mjs, with the local server scripts/mcp-bearer-test-server.mjs (port in the proof's range)",
+  "criteria": "docs/plans/2026-09-15-agent-implementation-plan.md \u00a7M3-02 (a real test server, an expired token, a network refusal and a disconnection; the UI status confirmed by an actual exchange) and docs/ROADMAP.md \u00a7M3-02 (bearer in the native credential store, here the macOS Keychain; Forget token; remote networking outside Windows)",
+  "isolation": {
+    "data": "<proof>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<61c74cc0-6a87-5d1f-9f26-6a1c41c5c263>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "endpoint": {
+    "choice": "The local bearer-protected server on 127.0.0.1, named to the test instance through MUSE_DESKTOP_TEST_REMOTE_MCP (its one test-mode allowance; every other URL keeps the public-HTTPS rule). Nothing leaves the machine.",
+    "notCovered": "TLS on macOS (WKWebView's network stack and the macOS trust store) is not exercised: no external endpoint in this proof."
+  },
+  "method": [
+    "One isolated instance of the debug build (ADR 0003 amendment): fresh data folder, its own WKWebView store, the pinned engine with MUSE_NO_AUTO_UPDATE=1, CDP through the test bridge. The relaunch reuses the same data folder and store.",
+    "Tokens are dummies drawn by the harness. The server holds only the sha256 of the token it accepts and logs every request with the Authorization header as bearer:<sha256/12>; a request with the webview's Origin header is the app's, one without is the engine's.",
+    "The page tap hashes every secret before keeping it (secure_store_set's value, secure_store_get's result, the Authorization header in start_session's MCP servers); the Keychain value is the bearer bound to its URL, {url, token} (remoteMcp.ts encodeStoredBearer), so its hash is compared with that envelope's and records the webview's own requests to the server (path, JSON-RPC method, status or error, time).",
+    "The Keychain is read with security find-generic-password -s com.muse.desktop.mcp -a <this run's account>: presence only, never a value (no -w). The connector name is unique per run (proof-g6-<id>), so no other entry can be read, overwritten or removed.",
+    "The token is typed into the password field with CDP Input.insertText. Every Reconnect is clicked with the token field empty, so the bearer can only come from the Keychain.",
+    "Fingerprint (size, mtime) of ~/.config/muse and ~/.local/share/muse/{plugins,skills} before and after."
+  ],
+  "phases": {
+    "start": {
+      "connectorName": "proof-g6-<id>",
+      "keychainAccount": "remote-mcp-remote-proof-g6-<id>",
+      "keychainBefore": {
+        "present": false,
+        "exit": 44
+      },
+      "appLoopbackAllowance": "http://127.0.0.1:9463",
+      "profile": {
+        "remotes": 0,
+        "posture": "ask"
+      },
+      "verdict": {
+        "allowanceIsServerOrigin": true,
+        "emptyRemoteRegistry": true,
+        "accountUnused": true
+      }
+    },
+    "refusals": {
+      "scenarios": {
+        "privateAddress": {
+          "clicked": true,
+          "tokenCharsTyped": 0,
+          "settledMs": 19,
+          "tokenFieldEmpty": true,
+          "notice": [
+            "Remote connector unreachable: the host looks like a private/VPN address. Remote MCP requires a public-internet HTTPS endpoint with allowlisted IPs; VPN or firewall-private hosts (localhost, 10/8, 172.16/12, 192.168/16, *.local/*.internal) cannot be reached. Expose the server publicly or run it locally as a local connector instead."
+          ],
+          "banners": [],
+          "connectedBlock": null,
+          "tools": [],
+          "callOutput": null,
+          "statusRows": [],
+          "useInMuse": [],
+          "registry": [],
+          "webviewRequests": [],
+          "serverSaw": [],
+          "expectRequest": false
+        },
+        "notMcpPath": {
+          "clicked": true,
+          "tokenCharsTyped": 0,
+          "settledMs": 163,
+          "tokenFieldEmpty": true,
+          "notice": [
+            "remote MCP returned HTTP 404"
+          ],
+          "banners": [],
+          "connectedBlock": null,
+          "tools": [],
+          "callOutput": null,
+          "statusRows": [],
+          "useInMuse": [],
+          "registry": [],
+          "webviewRequests": [
+            {
+              "atMs": 892,
+              "origin": "http://127.0.0.1:9463",
+              "path": "/elsewhere/mcp",
+              "redirect": "manual",
+              "rpc": "initialize",
+              "status": 404,
+              "type": "cors",
+              "ms": 13
+            }
+          ],
+          "serverSaw": [
+            {
+              "from": "webview",
+              "path": "/elsewhere/mcp",
+              "http": "POST",
+              "rpc": "initialize",
+              "auth": "none",
+              "token": null,
+              "session": null,
+              "status": 404
+            }
+          ],
+          "expectRequest": true
+        },
+        "redirect": {
+          "clicked": true,
+          "tokenCharsTyped": 0,
+          "settledMs": 157,
+          "tokenFieldEmpty": true,
+          "notice": [
+            "remote MCP endpoint answered with a redirect: Muse does not follow it. Register the address it redirects to."
+          ],
+          "banners": [],
+          "connectedBlock": null,
+          "tools": [],
+          "callOutput": null,
+          "statusRows": [],
+          "useInMuse": [],
+          "registry": [],
+          "webviewRequests": [
+            {
+              "atMs": 1570,
+              "origin": "http://127.0.0.1:9463",
+              "path": "/redirect",
+              "redirect": "manual",
+              "rpc": "initialize",
+              "status": 0,
+              "type": "opaqueredirect",
+              "ms": 12
+            }
+          ],
+          "serverSaw": [
+            {
+              "from": "webview",
+              "path": "/redirect",
+              "http": "POST",
+              "rpc": "initialize",
+              "auth": "none",
+              "token": null,
+              "session": null,
+              "status": 307
+            }
+          ],
+          "expectRequest": true
+        },
+        "heldStream": {
+          "clicked": true,
+          "tokenCharsTyped": 0,
+          "settledMs": 30113,
+          "tokenFieldEmpty": true,
+          "notice": [
+            "remote MCP request timed out"
+          ],
+          "banners": [],
+          "connectedBlock": null,
+          "tools": [],
+          "callOutput": null,
+          "statusRows": [],
+          "useInMuse": [],
+          "registry": [],
+          "webviewRequests": [
+            {
+              "atMs": 2243,
+              "origin": "http://127.0.0.1:9463",
+              "path": "/hold",
+              "redirect": "manual",
+              "rpc": "initialize",
+              "status": 200,
+              "type": "cors",
+              "ms": 11
+            }
+          ],
+          "serverSaw": [
+            {
+              "from": "webview",
+              "path": "/hold",
+              "http": "POST",
+              "rpc": "initialize",
+              "auth": "none",
+              "token": null,
+              "session": null,
+              "status": 200,
+              "held": true
+            }
+          ],
+          "expectRequest": true
+        },
+        "connectionRefused": {
+          "clicked": true,
+          "tokenCharsTyped": 0,
+          "settledMs": 162,
+          "tokenFieldEmpty": true,
+          "notice": [
+            "remote MCP request failed: Load failed"
+          ],
+          "banners": [],
+          "connectedBlock": null,
+          "tools": [],
+          "callOutput": null,
+          "statusRows": [],
+          "useInMuse": [],
+          "registry": [],
+          "webviewRequests": [
+            {
+              "atMs": 32989,
+              "origin": "http://127.0.0.1:9463",
+              "path": "/mcp",
+              "redirect": "manual",
+              "rpc": "initialize",
+              "error": "Load failed",
+              "ms": 11
+            }
+          ],
+          "serverSaw": "server down",
+          "expectRequest": true
+        }
+      },
+      "registryAfter": [],
+      "removedRefusal": {
+        "removed": false,
+        "remotesAfter": 0
+      },
+      "verdict": {
+        "privateRefusedBeforeAnyRequest": true,
+        "notMcpPathHonest": true,
+        "redirectNotFollowed": true,
+        "heldStreamBounded": true,
+        "connectionRefusedHonest": true,
+        "noRefusalLeftConnected": true
+      }
+    },
+    "add": {
+      "tokenA": {
+        "sha12": "f13ecb859991",
+        "storedSha12": "ab3dfd2fe09b"
+      },
+      "connect": {
+        "clicked": true,
+        "tokenCharsTyped": 35,
+        "settledMs": 159,
+        "tokenFieldEmpty": true,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to m3-02-bearer-test 1.0.0 \u00b7 1 tool(s) \u00b7 39 ms",
+        "tools": [
+          "echo_nonce"
+        ],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "initialize",
+          "auth": "bearer:f13ecb859991",
+          "token": "current",
+          "session": "created",
+          "status": 200
+        },
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "notifications/initialized",
+          "auth": "bearer:f13ecb859991",
+          "token": "current",
+          "session": "known",
+          "status": 202
+        },
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "tools/list",
+          "auth": "bearer:f13ecb859991",
+          "token": "current",
+          "session": "known",
+          "status": 200
+        }
+      ],
+      "ipc": [
+        {
+          "atMs": 33818,
+          "cmd": "secure_store_set",
+          "args": {
+            "key": "remote-mcp-remote-proof-g6-mv6gcp5a",
+            "secretSha12": "ab3dfd2fe09b"
+          },
+          "ok": true
+        }
+      ],
+      "keychain": {
+        "present": true,
+        "exit": 0
+      },
+      "call": {
+        "nonce": "n-ee7601",
+        "clicked": true,
+        "label": "Review and call",
+        "approvedOnce": true,
+        "settledMs": 158,
+        "tokenFieldEmpty": true,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to m3-02-bearer-test 1.0.0 \u00b7 1 tool(s) \u00b7 39 ms",
+        "tools": [
+          "echo_nonce"
+        ],
+        "callOutput": "{ \"content\": [ { \"type\": \"text\", \"text\": \"echo_nonce: nonce=n-ee7601 proof=abaeebfeff\" } ], \"isError\": false }",
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/call",
+            "auth": "bearer:f13ecb859991",
+            "token": "current",
+            "session": "known",
+            "status": 200,
+            "tool": "echo_nonce",
+            "nonce": "n-ee7601",
+            "proof": "abaeebfeff"
+          }
+        ]
+      },
+      "verdict": {
+        "connected": true,
+        "toolListed": true,
+        "serverGotTokenA": true,
+        "storedUnderTestKey": true,
+        "keychainEntry": true,
+        "authenticatedCall": true
+      }
+    },
+    "relaunch": {
+      "closed": {
+        "quitBy": "window closed",
+        "leftAfterQuit": []
+      },
+      "scanWithAppClosed": {
+        "files": 27,
+        "bytes": 804360,
+        "unreadable": 0,
+        "hits": [],
+        "storeFolderScanned": true
+      },
+      "afterRelaunch": {
+        "tokenFieldEmpty": true,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": true
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ]
+      },
+      "keychainAfterRelaunch": {
+        "present": true,
+        "exit": 0
+      },
+      "reconnect": {
+        "clicked": true,
+        "settledMs": 191,
+        "tokenFieldEmpty": true,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to m3-02-bearer-test 1.0.0 \u00b7 1 tool(s) \u00b7 36 ms",
+        "tools": [
+          "echo_nonce"
+        ],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "initialize",
+          "auth": "bearer:f13ecb859991",
+          "token": "current",
+          "session": "created",
+          "status": 200
+        },
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "notifications/initialized",
+          "auth": "bearer:f13ecb859991",
+          "token": "current",
+          "session": "known",
+          "status": 202
+        },
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "tools/list",
+          "auth": "bearer:f13ecb859991",
+          "token": "current",
+          "session": "known",
+          "status": 200
+        }
+      ],
+      "ipc": [
+        {
+          "atMs": 358,
+          "cmd": "secure_store_get",
+          "args": {
+            "key": "remote-mcp-remote-proof-g6-mv6gcp5a"
+          },
+          "ok": true,
+          "result": {
+            "sha12": "ab3dfd2fe09b"
+          }
+        }
+      ],
+      "verdict": {
+        "closedCleanly": true,
+        "relaunchedDisconnected": true,
+        "reconnectedWithoutTyping": true,
+        "bearerReadFromKeychain": true,
+        "serverGotTokenA": true,
+        "tokenNotInAppStorage": true
+      }
+    },
+    "expire": {
+      "serverExpired": {
+        "expired": [
+          "f13ecb859991"
+        ]
+      },
+      "before": [
+        {
+          "text": "Connected \u00b7 server v1.0.0",
+          "buttons": [
+            "Disconnect",
+            "Forget token"
+          ]
+        }
+      ],
+      "call": {
+        "nonce": "n-4d7663",
+        "clicked": true,
+        "label": "Review and call",
+        "approvedOnce": true,
+        "settledMs": 158,
+        "tokenFieldEmpty": true,
+        "notice": [
+          "remote MCP authentication was rejected or expired"
+        ],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": true
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "error",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/call",
+            "auth": "bearer:f13ecb859991",
+            "token": "expired",
+            "session": null,
+            "status": 401
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "bearer:f13ecb859991",
+            "token": "expired",
+            "session": null,
+            "status": 401
+          }
+        ]
+      },
+      "afterTenSeconds": {
+        "tokenFieldEmpty": true,
+        "notice": [
+          "remote MCP authentication was rejected or expired"
+        ],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": true
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "error",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ]
+      },
+      "reconnect": {
+        "clicked": true,
+        "settledMs": 171,
+        "tokenFieldEmpty": true,
+        "notice": [
+          "remote MCP authentication was rejected or expired"
+        ],
+        "banners": [],
+        "connectedBlock": null,
+        "tools": [],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": true
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "error",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "bearer:f13ecb859991",
+            "token": "expired",
+            "session": null,
+            "status": 401
+          }
+        ]
+      },
+      "verdict": {
+        "callFailedHonestly": true,
+        "bounded": true,
+        "oneRehandshakeOnly": true,
+        "noFakeConnected": true,
+        "reconnectRefusedHonestly": true
+      }
+    },
+    "renew": {
+      "tokenB": {
+        "sha12": "dc69f8d24e3b",
+        "storedSha12": "dc5fd29b78c9"
+      },
+      "connect": {
+        "clicked": true,
+        "tokenCharsTyped": 35,
+        "settledMs": 160,
+        "tokenFieldEmpty": true,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to m3-02-bearer-test 1.0.0 \u00b7 1 tool(s) \u00b7 28 ms",
+        "tools": [
+          "echo_nonce"
+        ],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "initialize",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "created",
+          "status": 200
+        },
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "notifications/initialized",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 202
+        },
+        {
+          "from": "webview",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "tools/list",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 200
+        }
+      ],
+      "ipc": [
+        {
+          "atMs": 15840,
+          "cmd": "secure_store_set",
+          "args": {
+            "key": "remote-mcp-remote-proof-g6-mv6gcp5a",
+            "secretSha12": "dc5fd29b78c9"
+          },
+          "ok": true
+        }
+      ],
+      "disconnect": [
+        {
+          "text": "Disconnected \u00b7 server v1.0.0",
+          "buttons": [
+            "Reconnect",
+            "Forget token"
+          ]
+        }
+      ],
+      "reconnect": {
+        "clicked": true,
+        "settledMs": 161,
+        "tokenFieldEmpty": true,
+        "notice": [],
+        "banners": [],
+        "connectedBlock": "Connected to m3-02-bearer-test 1.0.0 \u00b7 1 tool(s) \u00b7 34 ms",
+        "tools": [
+          "echo_nonce"
+        ],
+        "callOutput": null,
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "useInMuse": [
+          {
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "registry": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ],
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "created",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "notifications/initialized",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 202
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/list",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 200
+          }
+        ],
+        "read": {
+          "atMs": 16907,
+          "cmd": "secure_store_get",
+          "args": {
+            "key": "remote-mcp-remote-proof-g6-mv6gcp5a"
+          },
+          "ok": true,
+          "result": {
+            "sha12": "dc5fd29b78c9"
+          }
+        }
+      },
+      "keychain": {
+        "present": true,
+        "exit": 0
+      },
+      "verdict": {
+        "connected": true,
+        "serverGotTokenB": true,
+        "keychainNowHoldsB": true,
+        "oneEntry": true
+      }
+    },
+    "checks": {
+      "otherPath": {
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/elsewhere/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "none",
+            "token": null,
+            "session": null,
+            "status": 404
+          }
+        ],
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "notice": [
+          "remote MCP returned HTTP 404"
+        ],
+        "restored": [
+          {
+            "id": "remote-proof-g6-mv6gcp5a",
+            "name": "proof-g6-mv6gcp5a",
+            "status": "installed",
+            "url": "http://127.0.0.1:9463/mcp",
+            "tools": [
+              "echo_nonce"
+            ],
+            "useInMuse": false
+          }
+        ]
+      },
+      "sessionEnded": {
+        "dropped": {
+          "dropped": 5
+        },
+        "nonce": "n-e7d6b8",
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "callOutput": "{ \"content\": [ { \"type\": \"text\", \"text\": \"echo_nonce: nonce=n-e7d6b8 proof=92bc92beae\" } ], \"isError\": false }",
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/call",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "unknown",
+            "status": 404
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "created",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "notifications/initialized",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 202
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/list",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/call",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 200,
+            "tool": "echo_nonce",
+            "nonce": "n-e7d6b8",
+            "proof": "92bc92beae"
+          }
+        ]
+      },
+      "verdict": {
+        "storedBearerStaysWithItsUrl": true,
+        "registryKeptItsUrl": true,
+        "sessionEndRecovered": true
+      }
+    },
+    "down": {
+      "connectedBefore": true,
+      "call": {
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "notice": [
+          "remote MCP request failed: Load failed"
+        ],
+        "banners": [],
+        "connectedBlock": null,
+        "settledMs": 161,
+        "webview": [
+          {
+            "atMs": 21017,
+            "origin": "http://127.0.0.1:9463",
+            "path": "/mcp",
+            "redirect": "manual",
+            "rpc": "tools/call",
+            "error": "Load failed",
+            "ms": 19
+          }
+        ]
+      },
+      "reconnect": {
+        "settledMs": 165,
+        "statusRows": [
+          {
+            "text": "Connected \u00b7 server v1.0.0",
+            "buttons": [
+              "Disconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "created",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "notifications/initialized",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 202
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/list",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 200
+          }
+        ]
+      },
+      "callAfter": {
+        "nonce": "n-bc8a96",
+        "callOutput": "{ \"content\": [ { \"type\": \"text\", \"text\": \"echo_nonce: nonce=n-bc8a96 proof=1f1df9ae96\" } ], \"isError\": false }",
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "tools/call",
+            "auth": "bearer:dc69f8d24e3b",
+            "token": "current",
+            "session": "known",
+            "status": 200,
+            "tool": "echo_nonce",
+            "nonce": "n-bc8a96",
+            "proof": "1f1df9ae96"
+          }
+        ]
+      },
+      "verdict": {
+        "disconnectionDetected": true,
+        "bounded": true,
+        "reconnectByExchange": true,
+        "callAfterReconnect": true
+      }
+    },
+    "turn": {
+      "useInMuse": {
+        "ok": true,
+        "checked": true
+      },
+      "startSession": {
+        "authorizationMode": "ask",
+        "mcpServers": [
+          {
+            "transport": "streamableHttp",
+            "url": "http://127.0.0.1:9463/mcp",
+            "mode": "optional",
+            "headerNames": [
+              "Authorization"
+            ],
+            "authorizationSha12": "dc69f8d24e3b"
+          }
+        ]
+      },
+      "firstMessageRefused": [
+        {
+          "blockedByHarness": true
+        }
+      ],
+      "engineAtStart": [
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "initialize",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "created",
+          "status": 200
+        },
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "notifications/initialized",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 202
+        },
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "tools/list",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 200
+        }
+      ],
+      "nonce": "N302-6F451C46",
+      "turn": {
+        "finished": true,
+        "ms": 14556,
+        "approvals": [
+          {
+            "card": "mcp__mcp_1__echo_nonce scope: once \u00b7 session \u00b7 localPersistent Allow once Allow for this session Always allow this MCP tool Reject",
+            "choices": [
+              "Allow once",
+              "Allow for this session",
+              "Always allow this MCP tool",
+              "Reject"
+            ],
+            "clicked": "Allow once"
+          }
+        ],
+        "entries": [
+          {
+            "role": "user",
+            "text": "Setup message, refused by the test harness (no turn)."
+          },
+          {
+            "role": "user",
+            "text": "Call the echo_nonce tool of the connected MCP server with nonce \"N302-6F451C46\", then reply with the tool's text output exactly, nothing else."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: mcp__mcp_1__echo_nonce"
+          },
+          {
+            "role": "assistant",
+            "text": "echo_nonce: nonce=N302-6F451C46 proof=3876a78cfe"
+          },
+          {
+            "role": "tool",
+            "text": "Mcp 1 \u00b7 echo nonce\necho_nonce: nonce=N302-6F451C46 proof=3876a78cfe"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "engineRequests": [
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "initialize",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "created",
+          "status": 200
+        },
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "notifications/initialized",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 202
+        },
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "tools/list",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 200
+        },
+        {
+          "from": "engine",
+          "path": "/mcp",
+          "http": "POST",
+          "rpc": "tools/call",
+          "auth": "bearer:dc69f8d24e3b",
+          "token": "current",
+          "session": "known",
+          "status": 200,
+          "tool": "echo_nonce",
+          "nonce": "N302-6F451C46",
+          "proof": "3876a78cfe"
+        }
+      ],
+      "verdict": {
+        "turnFinished": true,
+        "remoteInjectedWithBearer": true,
+        "engineAuthenticated": true,
+        "modelCalledEchoNonce": true,
+        "replyHasServerAnswer": true
+      }
+    },
+    "forget": {
+      "keychainBefore": {
+        "present": true,
+        "exit": 0
+      },
+      "forget": {
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "notice": [
+          "Remote credential forgotten. Reconnect will require a new token. 1 open conversation still has its token: it keeps using it until you use \"Reconnect with current connectors\" on it or close it, and a tool already allowed there keeps working without asking."
+        ],
+        "ipc": [
+          {
+            "atMs": 40904,
+            "cmd": "secure_store_remove",
+            "args": {
+              "key": "remote-mcp-remote-proof-g6-mv6gcp5a"
+            },
+            "ok": true
+          }
+        ]
+      },
+      "keychainAfter": {
+        "present": false,
+        "exit": 44
+      },
+      "reconnect": {
+        "requests": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "http": "POST",
+            "rpc": "initialize",
+            "auth": "none",
+            "token": null,
+            "session": null,
+            "status": 401
+          }
+        ],
+        "read": {
+          "atMs": 41541,
+          "cmd": "secure_store_get",
+          "args": {
+            "key": "remote-mcp-remote-proof-g6-mv6gcp5a"
+          },
+          "ok": true,
+          "result": null
+        }
+      },
+      "after": {
+        "statusRows": [
+          {
+            "text": "Disconnected \u00b7 server v1.0.0",
+            "buttons": [
+              "Reconnect",
+              "Forget token"
+            ]
+          }
+        ],
+        "notice": [
+          "remote MCP authentication was refused: no token was sent (none typed or stored for this connector). Enter a bearer token, then connect."
+        ]
+      },
+      "verdict": {
+        "entryGone": true,
+        "removedThroughApp": true,
+        "forgetNotice": true,
+        "disconnected": true,
+        "reconnectSendsNoBearer": true,
+        "reconnectSaysNoTokenStored": true
+      }
+    },
+    "cleanup": {
+      "remove": {
+        "removed": true,
+        "remotesAfter": 0
+      },
+      "keychainEnd": {
+        "present": false,
+        "exit": 44
+      },
+      "scan": {
+        "files": 32,
+        "bytes": 1050430,
+        "unreadable": 0,
+        "hits": [],
+        "appOutputHits": 0,
+        "folders": [
+          "<proof>",
+          "the instance's WKWebView store"
+        ]
+      },
+      "scanSelfCheck": [
+        "utf16le"
+      ],
+      "storeDeleted": true,
+      "verdict": {
+        "removedInApp": true,
+        "noKeychainEntryLeft": true,
+        "tokensNeverOnDisk": true
+      }
+    }
+  },
+  "verdicts": {
+    "real test server, UI status by exchange (add)": true,
+    "Keychain: re-read after relaunch, token not in app storage": true,
+    "expired token: honest, bounded, one re-handshake": true,
+    "new token: connected, Keychain holds it": true,
+    "network refusal (private address, refused connection, non-MCP, redirect, held stream)": true,
+    "disconnection: server down detected, Reconnect by exchange": true,
+    "stored bearer stays with its URL; ended MCP session recovered": true,
+    "live turn: the engine calls echo_nonce with the bearer": true,
+    "Forget token: Keychain entry gone, no bearer sent": true,
+    "cleanup: no Keychain entry, no token on disk": true,
+    "clean exit, no process left": true,
+    "user engine settings untouched": true
+  },
+  "limits": [
+    "TLS is not exercised on macOS: the endpoint is loopback HTTP through the test-mode allowance (Windows proved TLS against a public endpoint on 27/09 and the invalid-TLS refusals on 05/10).",
+    "The Keychain is the login keychain of this Mac, shared with the user (ADR 0003): the proof touches only its own account, checked absent before and after. A Keychain access prompt never appeared; whether the installed, signed app prompts is a release-build question.",
+    "The engine's session store is shared with the user (ADR 0003): the proof conversation stays there."
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true
+  },
+  "leftoverProcesses": [],
+  "userEngineConfig": {
+    "before": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "after": {
+      "files": 189,
+      "digest": "e41a7b47a1dc"
+    },
+    "unchanged": true,
+    "changed": []
+  },
+  "passed": true,
+  "previousRun": "A first run on the same build and engine (same day) failed three verdicts on a harness expectation only: it compared the Keychain value's hash with the raw token, while the app stores the bearer bound to its URL ({url, token}). Its other facts matched this run. Its live turn is spent and not kept: 2 live turns in all for M3-02."
+}
