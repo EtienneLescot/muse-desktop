@@ -1,0 +1,417 @@
+{
+  "schema": "muse-desktop.m1-09-fork-app.v1",
+  "ticket": "M1-09",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64; debug build 08b291d, WKWebView through the test bridge",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "isolation": {
+    "data": "<tmp>/app-MV6GA01H/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<a1f9a5f5-b630-55c5-98e9-d545bf6738bf>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "liveTurns": 4,
+  "steps": {
+    "start": "ready",
+    "turn2Send": {
+      "ok": true
+    },
+    "source": {
+      "entries": [
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "The code word of this message is ALPHA-MV6GA01H. Do not call any tool and do not…"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-7fea-7809-88de-c94db9046603",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-7fea-7809-88de-c94db9046603",
+          "text": "OK1"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "The code word of this message is BETA-MV6GA01H. Do not call any tool and do not …"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-b8bc-7235-85f0-f8666e05b7e3",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-b8bc-7235-85f0-f8666e05b7e3",
+          "text": "OK2"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        }
+      ],
+      "userTurns": 2
+    },
+    "sourceDraft": "DRAFT-MV6GA01H unsent",
+    "forkEarlierTurn": {
+      "clicked": true,
+      "anchorIsTurn1": true,
+      "ok": false,
+      "hostError": "\"MSP error -32023: invalid fork boundary for session <source>: InvalidCut [forkBoundaryInvalid] [retryable=false]\"",
+      "banner": "That turn is no longer available on the host. Use Fork conversation in the header to branch from the latest completed turn.",
+      "sessionsUnchanged": true,
+      "activeUnchanged": true
+    },
+    "forkUnknownAnchor": {
+      "ok": false,
+      "hostError": "MSP error -32023: invalid fork boundary for session <source>: InvalidCut [forkBoundaryInvalid] [retryable=false]",
+      "sessionsUnchanged": true
+    },
+    "forkLatestTurn": {
+      "clicked": true,
+      "anchorIsTurn2": true,
+      "newId": true,
+      "title": "Branch of The code word of this message is ALPHA-MV6…",
+      "sameWorkspace": true,
+      "workspace": "<project>",
+      "active": true,
+      "entries": [
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "The code word of this message is ALPHA-MV6GA01H. Do not call any tool and do not…"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-7fea-7809-88de-c94db9046603",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-7fea-7809-88de-c94db9046603",
+          "text": "OK1"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "The code word of this message is BETA-MV6GA01H. Do not call any tool and do not …"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-b8bc-7235-85f0-f8666e05b7e3",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-b8bc-7235-85f0-f8666e05b7e3",
+          "text": "OK2"
+        }
+      ],
+      "noOpenEntries": true,
+      "hasBothTurns": true,
+      "banner": null,
+      "branchComposer": "",
+      "branchDraftStored": "",
+      "sourceDraftKept": true
+    },
+    "b1Send": {
+      "ok": true,
+      "toB1": true
+    },
+    "b1Turn": {
+      "reply": "ALPHA-<id>, BETA-<id>, GAMMA-<id>",
+      "knowsAlpha": true,
+      "knowsBeta": true,
+      "knowsGamma": true
+    },
+    "sourceComposerOnReturn": "DRAFT-<id> unsent",
+    "sourceSend": {
+      "ok": true,
+      "toSource": true
+    },
+    "forkActiveSource": {
+      "runningSeen": true,
+      "menuClicked": true,
+      "sourceRunningBeforeFork": true,
+      "sourceRunningAfterFork": true,
+      "anchorless": true,
+      "branchRunning": false,
+      "sourceOpenEntriesAtFork": 1,
+      "sourceRiverAnswerAtFork": "",
+      "entries": [
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "The code word of this message is ALPHA-MV6GA01H. Do not call any tool and do not…"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-7fea-7809-88de-c94db9046603",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-7fea-7809-88de-c94db9046603",
+          "text": "OK1"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "The code word of this message is BETA-MV6GA01H. Do not call any tool and do not …"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-b8bc-7235-85f0-f8666e05b7e3",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347d-b8bc-7235-85f0-f8666e05b7e3",
+          "text": "OK2"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "open": false,
+          "turnId": null,
+          "text": "Reminder child session"
+        },
+        {
+          "role": "user",
+          "open": false,
+          "turnId": null,
+          "text": "Do not call any tool and do not read or save memory. Write a numbered list of ei…"
+        },
+        {
+          "role": "assistant",
+          "open": false,
+          "turnId": "01a1347e-1585-762d-8881-d960e6b0faf1",
+          "text": ""
+        }
+      ],
+      "noOpenEntries": true,
+      "carriesRunningTurnUserMessage": true,
+      "carriesPartialAnswer": false,
+      "banner": null
+    },
+    "sourceTurn3": {
+      "settled": true,
+      "knowsAlpha": true,
+      "knowsBeta": true,
+      "knowsGamma": false,
+      "lastLine": "ALPHA-<id>, BETA-<id>"
+    },
+    "b2UntouchedBySourceTurn": true,
+    "afterReload": {
+      "branchesListed": true,
+      "titles": [
+        "The code word of this message is ALPHA-MV6…",
+        "Branch of The code word of this message is ALPHA-MV6…",
+        "Branch of The code word of this message is ALPHA-MV6…"
+      ],
+      "messagesKept": {
+        "source": true,
+        "b1": true,
+        "b2": true
+      },
+      "messageCounts": {
+        "source": [
+          6,
+          6
+        ],
+        "b1": [
+          6,
+          6
+        ],
+        "b2": [
+          5,
+          5
+        ]
+      },
+      "rowsOnScreen": [
+        "Branch of The code word of this message is ALPHA-MV6…",
+        "Branch of The code word of this message is ALPHA-MV6…",
+        "The code word of this message is ALPHA-MV6…"
+      ]
+    }
+  },
+  "processes": [
+    "muse-desktop",
+    "muse-bin serve --sandbox-network restricted --trust-workspace"
+  ],
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "engineRecord": {
+    "source": {
+      "workspaceIsProject": true,
+      "turnCount": 3,
+      "forkedFrom": null,
+      "userMessages": [
+        "The code word of this message is ALPHA-<id>. Do not call any tool and do not save anything to memory. Reply with exactly…",
+        "The code word of this message is BETA-<id>. Do not call any tool and do not save anything to memory. Reply with exactly …",
+        "Do not call any tool and do not read or save memory. Write a numbered list of eight short facts about rivers. Then, on a…"
+      ],
+      "agentMessages": 3
+    },
+    "b1": {
+      "workspaceIsProject": true,
+      "turnCount": 3,
+      "forkedFrom": {
+        "sourceIsTheSource": true,
+        "cutExplicit": true,
+        "cut": "turn:2"
+      },
+      "userMessages": [
+        "The code word of this message is ALPHA-<id>. Do not call any tool and do not save anything to memory. Reply with exactly…",
+        "The code word of this message is BETA-<id>. Do not call any tool and do not save anything to memory. Reply with exactly …",
+        "The code word of this message is GAMMA-<id>. Do not call any tool and do not read or save memory. List every code word t…"
+      ],
+      "agentMessages": 3
+    },
+    "b2": {
+      "workspaceIsProject": true,
+      "turnCount": 2,
+      "forkedFrom": {
+        "sourceIsTheSource": true,
+        "cutExplicit": false,
+        "cut": "turn:2"
+      },
+      "userMessages": [
+        "The code word of this message is ALPHA-<id>. Do not call any tool and do not save anything to memory. Reply with exactly…",
+        "The code word of this message is BETA-<id>. Do not call any tool and do not save anything to memory. Reply with exactly …",
+        "Do not call any tool and do not read or save memory. Write a numbered list of eight short facts about rivers. Then, on a…"
+      ],
+      "agentMessages": 2
+    }
+  },
+  "verdict": {
+    "engineIs142": true,
+    "earlierTurnForkFailsCleanly": true,
+    "invalidPointRefused": true,
+    "branchCreatedFromLatestTurn": true,
+    "draftsNotShared": true,
+    "branchHasRealHistory": true,
+    "activeSourceForkCreated": true,
+    "activeSourceBranchOnScreenStopsAtLastCompletedTurn": false,
+    "activeSourceBranchInEngineStopsAtLastCompletedTurn": false,
+    "sourceUnchangedAndIndependent": true,
+    "survivesReload": true,
+    "engineProvenance": true,
+    "engineBranchIsTheRealCopy": true,
+    "noProcessLeft": true,
+    "defaultStoresUnchanged": true
+  }
+}
