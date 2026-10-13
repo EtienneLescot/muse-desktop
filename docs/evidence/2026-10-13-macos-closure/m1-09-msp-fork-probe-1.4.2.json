@@ -1,0 +1,171 @@
+{
+  "schema": "muse-desktop.m1-09-msp-fork-probe.v1",
+  "ticket": "M1-09",
+  "date": "2026-10-13",
+  "commit": "08b291d",
+  "platform": "macOS 26.5 (25F71), arm64",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "argv": [
+    "serve",
+    "--sandbox-network",
+    "restricted",
+    "--trust-workspace",
+    "--provider",
+    "echo",
+    "--disable-sandbox"
+  ],
+  "liveTurns": 2,
+  "serverVersion": "1.4.2",
+  "platformOs": "macos",
+  "sourceTurns": [
+    "completed",
+    "completed",
+    "completed"
+  ],
+  "source": {
+    "turnCount": 3,
+    "messages": [
+      "u:turn 1 ALPHA",
+      "a:echo: turn 1 ALPHA",
+      "u:turn 2 BETA",
+      "a:echo: turn 2 BETA",
+      "u:turn 3 GAMMA",
+      "a:echo: turn 3 GAMMA"
+    ],
+    "itemKinds": [
+      "agentMessage",
+      "reminderChild",
+      "userMessage"
+    ]
+  },
+  "forks": {
+    "atTurn1": {
+      "created": false,
+      "code": -32023,
+      "kind": "forkBoundaryInvalid",
+      "detail": "session/fork failed: invalid fork boundary for session <source>: InvalidCut"
+    },
+    "atTurn2": {
+      "created": false,
+      "code": -32023,
+      "kind": "forkBoundaryInvalid",
+      "detail": "session/fork failed: invalid fork boundary for session <source>: InvalidCut"
+    },
+    "atTurn3Latest": {
+      "created": true,
+      "ms": 167,
+      "newId": true,
+      "status": "idle",
+      "turnCount": 3,
+      "forkedFrom": {
+        "sourceIsTheSource": true,
+        "cutExplicit": true,
+        "cutCursor": "session:<source>:turn:3"
+      }
+    },
+    "atUnknownTurn": {
+      "created": false,
+      "code": -32023,
+      "kind": "forkBoundaryInvalid",
+      "detail": "session/fork failed: invalid fork boundary for session <source>: InvalidCut"
+    },
+    "anchorless": {
+      "created": true,
+      "ms": 159,
+      "newId": true,
+      "status": "idle",
+      "turnCount": 3,
+      "forkedFrom": {
+        "sourceIsTheSource": true,
+        "cutExplicit": false,
+        "cutCursor": "session:<source>:turn:3"
+      }
+    }
+  },
+  "writeFailedSeen": false,
+  "branches": {
+    "atTurn3Latest": {
+      "sameWorkspace": true,
+      "turnCount": 3,
+      "messages": [
+        "u:turn 1 ALPHA",
+        "a:echo: turn 1 ALPHA",
+        "u:turn 2 BETA",
+        "a:echo: turn 2 BETA",
+        "u:turn 3 GAMMA",
+        "a:echo: turn 3 GAMMA"
+      ],
+      "historyEqualsSource": true
+    },
+    "anchorless": {
+      "sameWorkspace": true,
+      "turnCount": 3,
+      "messages": [
+        "u:turn 1 ALPHA",
+        "a:echo: turn 1 ALPHA",
+        "u:turn 2 BETA",
+        "a:echo: turn 2 BETA",
+        "u:turn 3 GAMMA",
+        "a:echo: turn 3 GAMMA"
+      ],
+      "historyEqualsSource": true
+    }
+  },
+  "independence": {
+    "branchTurn": "completed",
+    "sourceTurn": "completed",
+    "sourceTurnCount": 4,
+    "branchTurnCount": 4,
+    "sourceHasBranchTurn": false,
+    "branchHasSourceTurn": false,
+    "sourceKeepsItsHistory": true,
+    "branchKeepsTheCopiedHistory": true
+  },
+  "durableProvenance": {
+    "readByAnotherHost": true,
+    "status": "notLoaded",
+    "forkedFromKept": true
+  },
+  "activeSource": {
+    "sourceStatusAtFork": "running",
+    "sourceTurnEndedBeforeForks": false,
+    "anchorless": {
+      "created": true,
+      "cut": "turn:1",
+      "cutExplicit": false,
+      "turnCount": 1,
+      "turnsInHistory": 2,
+      "userMessages": [
+        "Do not call any tool. Reply with exactly OK1 and n…",
+        "Do not call any tool. Write a numbered list of twe…"
+      ],
+      "runningTurnPromptCopied": true,
+      "runningTurnIdReused": false
+    },
+    "atLastCompletedTurn": {
+      "created": true,
+      "cut": "turn:1",
+      "cutExplicit": true,
+      "turnCount": 1,
+      "turnsInHistory": 2,
+      "userMessages": [
+        "Do not call any tool. Reply with exactly OK1 and n…",
+        "Do not call any tool. Write a numbered list of twe…"
+      ],
+      "runningTurnPromptCopied": true,
+      "runningTurnIdReused": false
+    }
+  },
+  "verdict": {
+    "engineIs142": true,
+    "noWriteFailed": true,
+    "forkAtLatestTurnCreated": true,
+    "anchorlessForkCreated": true,
+    "branchesAreRealCopies": true,
+    "unknownTurnRefused": true,
+    "independentBothWays": true,
+    "provenanceDurable": true,
+    "forkAtEarlierCompletedTurnCreated": false,
+    "activeSourceForkStopsAtLastCompletedTurn": false
+  }
+}
