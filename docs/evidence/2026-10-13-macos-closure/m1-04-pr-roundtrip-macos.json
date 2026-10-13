@@ -1,0 +1,67 @@
+{
+  "schema": "muse-desktop.m1-04-pr-roundtrip-macos.v1",
+  "ticket": "M1-04",
+  "date": "2026-10-13",
+  "commit": "3196ce2",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon; debug build 3196ce2 with embedded frontend, WKWebView through the test bridge",
+  "harness": "scripts/macos/m1-04-pr-roundtrip.mjs on scripts/macos/test-instance.mjs (macOS replay of scripts/cdp-m1-04-pr-roundtrip.mjs)",
+  "disposableRepo": "https://github.com/EtienneLescot/m1-qualif-pr (private, disposable, reused from the Windows proof of 26/09)",
+  "liveTurns": 1,
+  "steps": {
+    "scratch": {
+      "branch": "qualif-pr-macos-mv6n0bdp",
+      "ahead": "1"
+    },
+    "start": "ready",
+    "turn": {
+      "replied": true
+    },
+    "panel": {
+      "branchShown": true
+    },
+    "branch-pushed": {
+      "panelSaysPushed": true,
+      "ref": "refs/heads/qualif-pr-macos-mv6n0bdp"
+    },
+    "pr-opened": {
+      "url": "https://github.com/EtienneLescot/m1-qualif-pr/pull/2",
+      "text": "Open pull request · qualif-pr-macos-mv6n0bdp → master"
+    },
+    "gh-verification": {
+      "baseRefName": "master",
+      "headRefName": "qualif-pr-macos-mv6n0bdp",
+      "title": "macOS PR round trip mv6n0bdp",
+      "url": "https://github.com/EtienneLescot/m1-qualif-pr/pull/2"
+    },
+    "pr-idempotent": {
+      "url": "https://github.com/EtienneLescot/m1-qualif-pr/pull/2",
+      "text": "Existing pull request · qualif-pr-macos-mv6n0bdp → master"
+    },
+    "cleanup": {
+      "prClosed": true,
+      "branchLeftOnGithub": false
+    }
+  },
+  "verdicts": {
+    "branchPushed": true,
+    "prCreated": true,
+    "ghConfirmsPr": true,
+    "prIdempotent": true
+  },
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "isolation": {
+    "data": "<run>/data",
+    "store": "~/Library/WebKit/muse-desktop/WebsiteDataStore/<dc145f61-1654-5b3e-885b-14aa9bde7ac0>",
+    "defaultStoresUnchangedAtStart": true
+  },
+  "consoleErrors": [],
+  "stop": {
+    "quitBy": "window closed",
+    "leftAfterQuit": [],
+    "groupLeftAfterQuit": [],
+    "exitCode": 0,
+    "defaultStoresUnchangedAtEnd": true,
+    "testStoreDeleted": true
+  },
+  "passed": true
+}
