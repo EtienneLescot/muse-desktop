@@ -362,6 +362,8 @@ export function EmptySessionScreen({
         )}
         <textarea
           autoFocus
+          // No quote or dash substitution on macOS: code reaches the engine as typed.
+          spellCheck={false}
           aria-label="Your first message"
           placeholder="Describe what you want to build…"
           value={draft}

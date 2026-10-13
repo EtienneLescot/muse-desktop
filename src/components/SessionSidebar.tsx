@@ -1,5 +1,4 @@
 import { Icon } from "./Icon";
-import { primaryModifier } from "../lib/a11y";
 import { useMemo, useRef, useState } from "react";
 import type { MuseSession } from "../hooks/useMuseSessions";
 import {
@@ -250,7 +249,8 @@ export function SessionSidebar({
     <div className="session-list" role="navigation" aria-label="Conversations">
       <div
         className="section-label threads-label"
-        title={`↑↓ to navigate · ${primaryModifier()}+Tab to switch conversations`}
+        // Ctrl+Tab on every OS (App.tsx): on macOS Cmd+Tab is the system's app switcher.
+        title="↑↓ to navigate · Ctrl+Tab to switch conversations"
       >
         <span>
           Conversations

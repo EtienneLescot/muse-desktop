@@ -542,6 +542,13 @@ export function SettingsPanel({
             layer (PowerShell, curl.exe); plain HTTP works. Elevated access
             reaches HTTPS.</>
           )}
+          {hostPlatform() === "macos" && (
+            // Measured with 1.4.2 on 13/10/2026 (docs/evidence/2026-10-13-
+            // macos-closure/m0-06-policy-in-force.json).
+            <> On macOS with Muse 1.4.2, Workspace only also lets commands write
+            in the system's temporary folders ($TMPDIR, /tmp); other writes
+            outside the folder are refused, and names do not resolve.</>
+          )}
         </p>
         <div className="authorization-mode-list" role="radiogroup" aria-label="Isolation">
           {SANDBOX_MODES.map(({ mode, label, detail }) => (

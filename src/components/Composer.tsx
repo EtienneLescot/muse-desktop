@@ -1015,6 +1015,8 @@ export function Composer({
           )}
           <textarea
             ref={areaRef}
+            // No quote or dash substitution on macOS: code reaches the engine as typed.
+            spellCheck={false}
             value={text}
             onChange={(e) => {
               setText(e.target.value);

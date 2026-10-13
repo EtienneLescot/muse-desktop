@@ -70,19 +70,27 @@ pub fn list(
         .unwrap_or(DEFAULT_ENTRY_LIMIT)
         .clamp(1, MAX_ENTRY_LIMIT);
     let mut entries = Vec::new();
-    let mut total = 0usize;
     let read_dir = fs::read_dir(&directory).map_err(|e| {
         format!(
             "cannot list {}: {e}",
             display_relative(&canonical_root, &directory)
         )
     })?;
-    for item in read_dir {
-        let item = item.map_err(|e| format!("cannot read workspace entry: {e}"))?;
-        total += 1;
-        if entries.len() >= max_entries {
-            continue;
-        }
+    let mut items = read_dir
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("cannot read workspace entry: {e}"))?;
+    let total = items.len();
+    // The bound keeps the first entries in display order (folders, then names).
+    // read_dir's own order is the file system's: alphabetical on NTFS, a hash
+    // order on APFS, where "the first 200" were any 200 (M1-07, 13/10/2026).
+    items.sort_by_cached_key(|item| {
+        (
+            !item.file_type().is_ok_and(|kind| kind.is_dir()),
+            item.file_name().to_string_lossy().to_ascii_lowercase(),
+        )
+    });
+    items.truncate(max_entries);
+    for item in items {
         let path = item.path();
         let relative = path
             .strip_prefix(&canonical_root)
@@ -338,6 +346,24 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn a_bounded_listing_keeps_the_first_entries_in_display_order() {
+        // APFS hands entries back in a hash order: the bound applied before
+        // the sort kept any 50, not the first 50 (M1-07, 13/10/2026).
+        let root = temp_root();
+        for index in (0..120).rev() {
+            fs::write(root.join(format!("file-{index:03}.txt")), "x").unwrap();
+        }
+        fs::create_dir_all(root.join("zz-folder")).unwrap();
+        let snapshot = list(&root, None, Some(50)).unwrap();
+        assert!(snapshot.truncated);
+        let names: Vec<&str> = snapshot.entries.iter().map(|entry| entry.name.as_str()).collect();
+        let mut expected = vec!["zz-folder".to_string()];
+        expected.extend((0..49).map(|index| format!("file-{index:03}.txt")));
+        assert_eq!(names, expected);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

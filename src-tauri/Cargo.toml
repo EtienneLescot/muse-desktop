@@ -40,6 +40,10 @@ windows = { version = "0.61.3", features = [
   "Win32_UI_Accessibility",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+# kill(2) of a worktree setup's process group (git.rs stop_setup); already in the tree.
+libc = "0.2"
+
 # The WKWebView test bridge (test_bridge.rs, debug builds only) and the test
 # instance's data store id. All of these are already in the tree through wry.
 [target.'cfg(target_os = "macos")'.dependencies]
