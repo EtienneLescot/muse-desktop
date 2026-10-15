@@ -16,8 +16,7 @@ Draft for Partner Center, product `9NBPFWQBGLZG` (reserved on 14/10/2026, to sub
 ## Properties
 
 - **Category:** Developer tools (subcategory: none).
-- **Privacy policy URL:** required, to write (the app stores conversations locally, sends nothing
-  itself; the engine talks to Muse's service).
+- **Privacy policy URL:** https://github.com/EtienneLescot/muse-desktop/blob/main/docs/PRIVACY.md
 - **Support contact:** GitHub issues, https://github.com/EtienneLescot/muse-desktop/issues
 
 ## Listing — English (en-us)
@@ -93,7 +92,5 @@ Nécessite un compte Muse Code.
 ## Still missing before submission
 
 - **Upload the MSIX** built by `scripts/build-msix.mjs` (release workflow artifact `store-msix`, kept 30 days) to a draft submission.
-- **Screenshots**, at least one at 1366×768 or larger, per language.
-- **Store logo** (300×300) if the package logos are not enough.
-- **Privacy policy URL.**
+- **Screenshots:** `docs/store/screenshots/` (1920×1080, real app, demo repo), to upload to the listing.
 - **Age rating questionnaire** (IARC), answered in Partner Center.
