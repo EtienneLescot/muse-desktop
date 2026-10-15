@@ -92,6 +92,24 @@ jobs:
       - name: Build the installer
         run: npx tauri build --bundles nsis
 
+      # Packs the app and engine `tauri build` just left in target/release.
+      # Pre-releases never reach the Store, and MSIX has no place for their
+      # suffix.
+      - name: Package the Store MSIX
+        if: ${{ !contains(env.VERSION, '-') }}
+        run: node scripts/build-msix.mjs
+
+      - name: Keep the Store MSIX
+        if: ${{ !contains(env.VERSION, '-') }}
+        uses: actions/upload-artifact@v4
+        with:
+          # Not muse-desktop-*: the package is unsigned until the Store signs
+          # it, so it is not published with the release.
+          name: store-msix
+          path: src-tauri/target/msix/*.msix
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Run supervisor tests
         run: cargo test --release --manifest-path src-tauri/Cargo.toml
 
@@ -217,6 +235,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist-release
+          pattern: muse-desktop-*
           merge-multiple: true
 
       - name: Publish
