@@ -1,7 +1,7 @@
 # Microsoft Store listing — Desktop for Muse Code
 
-Draft for Partner Center, product `9NBPFWQBGLZG` (reserved on 14/10/2026, to submit before
-**14/01/2027** or the name is lost).
+Listing of Partner Center product `9NBPFWQBGLZG`, reserved on 14/10/2026 and submitted for
+certification on 15/10/2026 (0.4.0, manual publishing after certification).
 
 ## Product identity (MSIX manifest)
 
@@ -89,8 +89,13 @@ Nécessite un compte Muse Code.
 `muse code` · `agent ia` · `assistant de code` · `éditeur de code ia` · `outils développeur` ·
 `client git` · `mcp`
 
-## Still missing before submission
+## Submission assets
 
-- **Upload the MSIX** built by `scripts/build-msix.mjs` (release workflow artifact `store-msix`, kept 30 days) to a draft submission.
-- **Screenshots:** `docs/store/screenshots/` (1920×1080, real app, demo repo), to upload to the listing.
-- **Age rating questionnaire** (IARC), answered in Partner Center.
+- **Package:** `scripts/build-msix.mjs`, built by the release workflow as the `store-msix` artifact
+  (kept 30 days).
+- **Screenshots:** `docs/store/screenshots/` (1920×1080, real app, demo repo), uploaded to both
+  listings.
+- **Logos:** `docs/store/logos/`, generated from `src-tauri/icons/macos-icon-1024.png`. The 1:1 tiles
+  (300, 150, 71) keep the icon's transparent corners; the poster and box art, used by games only,
+  sit on white.
+- **Age rating:** IARC 3+ (PEGI 3, ESRB Everyone, "Users Interact"), answered in Partner Center.
