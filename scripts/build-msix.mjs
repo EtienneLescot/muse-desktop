@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+
+/**
+ * Package the release build as an MSIX for the Microsoft Store.
+ *
+ * Tauri bundles NSIS and MSI only. This takes what `tauri build` left in
+ * src-tauri/target/release (the app and its `muse.exe` sidecar), adds the Store
+ * tiles and a manifest carrying the identity Partner Center assigned to product
+ * 9NBPFWQBGLZG, and packs them with the Windows SDK's makeappx. The package is
+ * unsigned on purpose: the Store signs what it publishes.
+ *
+ *   npx tauri build --no-bundle && node scripts/build-msix.mjs
+ *
+ * MAKEAPPX overrides the makeappx.exe path; otherwise the newest Windows Kits
+ * x64 copy is used.
+ */
+import { execFileSync, execSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+// Partner Center > Desktop for Muse Code > Product identity (reserved 14/10/2026).
+export const STORE_IDENTITY = {
+  name: "EtienneLescot.DesktopforMuseCode",
+  publisher: "CN=03B0FC8C-2067-45D9-BE82-9F15CE264B4A",
+  publisherDisplayName: "Etienne Lescot",
+  displayName: "Desktop for Muse Code",
+};
+
+// Tiles `tauri icon` generates for Windows that the manifest references.
+const TILES = ["StoreLogo.png", "Square44x44Logo.png", "Square71x71Logo.png", "Square150x150Logo.png"];
+
+/** Store versions have four parts and the last one must be 0. */
+export function msixVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!match) throw new Error(`MSIX needs a plain x.y.z version, got "${version}"`);
+  return `${match[1]}.${match[2]}.${match[3]}.0`;
+}
+
+export function appxManifest(version, identity = STORE_IDENTITY) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+  <Identity Name="${identity.name}" Publisher="${identity.publisher}" Version="${msixVersion(version)}" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>${identity.displayName}</DisplayName>
+    <PublisherDisplayName>${identity.publisherDisplayName}</PublisherDisplayName>
+    <Logo>Assets\\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="fr-fr" />
+  </Resources>
+  <Applications>
+    <Application Id="App" Executable="muse-desktop.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="${identity.displayName}" Description="Desktop app for the Muse Code coding agent"
+        BackgroundColor="transparent" Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png">
+        <uap:DefaultTile Square71x71Logo="Assets\\Square71x71Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
+`;
+}
+
+function findMakeappx() {
+  if (process.env.MAKEAPPX) return process.env.MAKEAPPX;
+  const kits = "C:\\Program Files (x86)\\Windows Kits\\10\\bin";
+  const versions = existsSync(kits) ? readdirSync(kits).filter((v) => /^10\./.test(v)).sort().reverse() : [];
+  for (const v of versions) {
+    const candidate = join(kits, v, "x64", "makeappx.exe");
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error("makeappx.exe not found: install the Windows SDK or set MAKEAPPX");
+}
+
+function main() {
+  const root = resolve(import.meta.dirname, "..");
+  const release = join(root, "src-tauri", "target", "release");
+  const out = join(root, "src-tauri", "target", "msix");
+  const layout = join(out, "layout");
+  const version = JSON.parse(readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8")).version;
+
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(join(layout, "Assets"), { recursive: true });
+  for (const file of ["muse-desktop.exe", "muse.exe"]) {
+    const from = join(release, file);
+    if (!existsSync(from)) throw new Error(`${from} is missing: run \`npx tauri build --no-bundle\` first`);
+    copyFileSync(from, join(layout, file));
+  }
+
+  const icons = join(out, "icons");
+  const master = join(root, "src-tauri", "icons", "macos-icon-1024.png");
+  execSync(`npx tauri icon "${master}" -o "${icons}"`, { cwd: root, stdio: "inherit" });
+  for (const tile of TILES) copyFileSync(join(icons, tile), join(layout, "Assets", tile));
+
+  writeFileSync(join(layout, "AppxManifest.xml"), appxManifest(version));
+  const msix = join(out, `Desktop-for-Muse-Code_${version}_x64.msix`);
+  execFileSync(findMakeappx(), ["pack", "/o", "/d", layout, "/p", msix], { stdio: "inherit" });
+  console.log(msix);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) main();
