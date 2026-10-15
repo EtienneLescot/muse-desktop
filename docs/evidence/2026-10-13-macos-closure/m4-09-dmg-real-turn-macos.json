@@ -1,0 +1,30 @@
+{
+  "schema": "muse-desktop.m4-09-dmg-real-turn-macos.v1",
+  "ticket": "M4-09 (release smoke, last check before the 0.4.0 tag)",
+  "date": "2026-10-14",
+  "commit": "8e95eaa (main after PR #240; same tree as e0c029b plus documentation)",
+  "platform": "macOS 26.5 (25F71), arm64, Apple Silicon",
+  "package": "Muse-Desktop 0.4.0 installed in /Applications from the release dry-run DMG of e0c029b (Notarized Developer ID), see m4-09-dmg-smoke-macos.json",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1): ~/.local/bin/muse-bin-1.4.2-R4684.1 serve, started by the app through the launcher, app launched with MUSE_NO_AUTO_UPDATE=1 (open --env)",
+  "liveTurns": 1,
+  "harness": "Native driving of the installed release app through macOS accessibility (computer-use, background app control granted by Étienne on 14/10/2026); no bridge, no test mode.",
+  "method": "The app opened on the user's own data (an existing openscreen conversation, left untouched). New conversation, the user's existing project openscreen chosen in the picker (the macOS open panel could not be driven in background mode to pick a scratch folder), the message typed into the composer and sent with the send button. Then Muse-Desktop > Quit Muse-Desktop from the menu bar (Cmd+Q).",
+  "checks": {
+    "launch": "the 0.4.0 window opened on the user's data, Connected",
+    "engineProcess": "~/.local/bin/muse-bin-1.4.2-R4684.1 serve --disable-sandbox --sandbox-network enabled --trust-workspace (the user's own Isolation and YOLO settings)",
+    "prompt": "Reply with exactly SMOKE-040-OK and nothing else. Do not use any tool.",
+    "reply": "SMOKE-040-OK, shown in the transcript; the conversation then went from Working to Ready",
+    "quit": "Quit Muse-Desktop: the app process and the engine exited",
+    "afterQuit": "cua-driver serve --socket $TMPDIR/muse-desktop-computer.sock --dangerously-bypass-approvals still running under launchd"
+  },
+  "verdicts": {
+    "realTurnInInstalledApp": true,
+    "engineIs142": true,
+    "quitStopsAppAndEngine": true,
+    "computerUseServiceStoppedOnQuit": false
+  },
+  "observations": [
+    "The computer-use service is started at launch by computer::resume for the level on record in the user's profile (Act), and nothing stops it when the app quits, by Cmd+Q as by SIGTERM (m4-09-dmg-smoke-macos.json). The driver bounds the grant itself (12 h expiry, 30 min idle timeout, computer.rs EXPIRES_AFTER / IDLE_TIMEOUT), so it is not unbounded; whether quitting the app should stop it is a product decision for Étienne. The service was stopped with `cua-driver stop` after the check; the recorded consent is untouched.",
+    "The new conversation 'Reply with exactly SMOKE-040-OK…' stays in the user's openscreen project."
+  ]
+}
