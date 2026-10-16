@@ -121,7 +121,7 @@ export function MuseSetupScreen({ initialStep = "install", onReady, onClose }: P
       <h2>{step === "install" ? "Set up Muse" : "Sign in to Muse"}</h2>
       <p className="muse-setup-lead" role="status" aria-live="polite">
         {state === "idle" && step === "install"
-          ? "Muse-Desktop needs the Muse CLI to work. Install it once — it stays up to date on its own."
+          ? "MuDesktop needs the Muse CLI to work. Install it once — it stays up to date on its own."
           : installHeadline(current ?? (step === "login" ? { kind: "login", state: "idle", log: "", exitCode: null, awaitingEnter: false, cliPath: "", installed: true, signInCode: null } : null))}
       </p>
 
@@ -206,7 +206,7 @@ export function MuseSetupScreen({ initialStep = "install", onReady, onClose }: P
         ) : (
           useApiKey
             ? <>Saved with <code>muse auth set</code>, which keeps it for the Muse CLI. A <code>META_API_KEY</code> environment variable takes priority over it.</>
-            : <>Runs <code>muse login</code>. The Muse CLI stores the credential; Muse-Desktop never sees it.</>
+            : <>Runs <code>muse login</code>. The Muse CLI stores the credential; MuDesktop never sees it.</>
         )}
       </p>
     </div>

@@ -8294,7 +8294,7 @@ export function useMuseSessions(): UseMuseSessions {
   const openWorkspacePath = useCallback(
     async (sessionId: string, path: string): Promise<void> => {
       if (!isTauriRuntime()) {
-        setError("Opening workspace files requires the Muse Desktop runtime.");
+        setError("Opening workspace files requires the MuDesktop runtime.");
         return;
       }
       try {

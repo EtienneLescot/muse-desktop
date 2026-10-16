@@ -853,7 +853,7 @@ export default function App() {
           <span className="muse-logo">
             <img src="muse-logo.png" alt="" />
           </span>
-          <span className="brand-text" title={zoomShortcutTitle()}>Muse-Desktop</span>
+          <span className="brand-text" title={zoomShortcutTitle()}>MuDesktop</span>
           <button
             className="icon"
             onClick={() => setCollapsed(!collapsed)}
@@ -1006,7 +1006,7 @@ export default function App() {
             <span>
               {(active && page === "task"
                 ? folderName(active.workspace)
-                : workspaceName) || "Muse-Desktop"}
+                : workspaceName) || "MuDesktop"}
             </span>
             <span className="separator">/</span>
             <span>

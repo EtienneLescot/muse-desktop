@@ -1,7 +1,9 @@
-# Microsoft Store listing — Desktop for Muse Code
+# Microsoft Store listing — MuDesktop
 
 Listing of Partner Center product `9NBPFWQBGLZG`, reserved on 14/10/2026 and submitted for
-certification on 15/10/2026 (0.4.0, manual publishing after certification).
+certification on 15/10/2026 (0.4.0, manual publishing after certification). Rejected on 16/10/2026
+under 10.1.1.1 ("Desktop for Muse Code" names another product); renamed **MuDesktop**, reserved
+on the same product, package identity unchanged.
 
 ## Product identity (MSIX manifest)
 
@@ -23,7 +25,7 @@ certification on 15/10/2026 (0.4.0, manual publishing after certification).
 
 **Description**
 
-> Desktop for Muse Code is an independent desktop app for Muse Code. It is not made, endorsed or
+> MuDesktop is an independent desktop app for Muse Code. It is not made, endorsed or
 > supported by Meta.
 
 Run your Muse Code coding agent in a real desktop app instead of a terminal. Open several projects
@@ -65,7 +67,7 @@ First Store release: 0.4.0, qualified on Windows with the Muse Code 1.4.2 engine
 
 **Description**
 
-> Desktop for Muse Code est une application de bureau indépendante pour Muse Code. Elle n'est ni
+> MuDesktop est une application de bureau indépendante pour Muse Code. Elle n'est ni
 > créée, ni approuvée, ni prise en charge par Meta.
 
 Utilisez l'agent de code Muse Code dans une vraie application de bureau plutôt que dans un
