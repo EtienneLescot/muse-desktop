@@ -16,8 +16,8 @@ class AppErrorBoundary extends React.Component<
     if (this.state.error !== null) {
       return (
         <div id="boot-screen" role="alert">
-          <img src="/favicon.png" alt="Muse-Desktop" />
-          <span>Muse-Desktop could not load. Restart the app to try again.</span>
+          <img src="/favicon.png" alt="MuDesktop" />
+          <span>MuDesktop could not load. Restart the app to try again.</span>
         </div>
       );
     }

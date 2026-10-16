@@ -83,7 +83,7 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onSetAtt
         </header>
         <p className="computer-use-summary">{describeComputerUse(status)}</p>
         <p className="computer-use-note">
-          Muse Desktop drives this computer through{" "}
+          MuDesktop drives this computer through{" "}
           <a href={DRIVER_HOME} target="_blank" rel="noreferrer">
             cua-driver
           </a>

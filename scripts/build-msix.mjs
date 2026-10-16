@@ -19,12 +19,14 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync,
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// Partner Center > Desktop for Muse Code > Product identity (reserved 14/10/2026).
+// Partner Center > product 9NBPFWQBGLZG > Product identity (reserved 14/10/2026). The display
+// name must be one of the product's reserved names: "MuDesktop" since the 16/10/2026 rejection
+// (10.1.1.1, no third-party product in the name).
 export const STORE_IDENTITY = {
   name: "EtienneLescot.DesktopforMuseCode",
   publisher: "CN=03B0FC8C-2067-45D9-BE82-9F15CE264B4A",
   publisherDisplayName: "Etienne Lescot",
-  displayName: "Desktop for Muse Code",
+  displayName: "MuDesktop",
 };
 
 // Tiles `tauri icon` generates for Windows that the manifest references.
@@ -58,7 +60,7 @@ export function appxManifest(version, identity = STORE_IDENTITY) {
   </Resources>
   <Applications>
     <Application Id="App" Executable="muse-desktop.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="${identity.displayName}" Description="Desktop app for the Muse Code coding agent"
+      <uap:VisualElements DisplayName="${identity.displayName}" Description="Desktop app for an AI coding agent"
         BackgroundColor="transparent" Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png">
         <uap:DefaultTile Square71x71Logo="Assets\\Square71x71Logo.png" />
       </uap:VisualElements>
@@ -104,7 +106,7 @@ function main() {
   for (const tile of TILES) copyFileSync(join(icons, tile), join(layout, "Assets", tile));
 
   writeFileSync(join(layout, "AppxManifest.xml"), appxManifest(version));
-  const msix = join(out, `Desktop-for-Muse-Code_${version}_x64.msix`);
+  const msix = join(out, `MuDesktop_${version}_x64.msix`);
   execFileSync(findMakeappx(), ["pack", "/o", "/d", layout, "/p", msix], { stdio: "inherit" });
   console.log(msix);
 }

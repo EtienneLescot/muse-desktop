@@ -159,7 +159,7 @@ describe("visible failures", () => {
     } finally {
       delete host.window;
     }
-    assert.deepEqual(calls[0], ["plugin:dialog|message", { message: "Move?", title: "Muse-Desktop", kind: "warning", buttons: "OkCancel" }]);
+    assert.deepEqual(calls[0], ["plugin:dialog|message", { message: "Move?", title: "MuDesktop", kind: "warning", buttons: "OkCancel" }]);
   });
 
   it("drops an exited host's approval and question cards and says so", () => {

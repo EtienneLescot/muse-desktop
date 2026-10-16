@@ -160,7 +160,7 @@ function macRecoverySteps(kind: SidecarErrorKind, message: string): SidecarRecov
   if (kind === "missing") {
     add(
       "Install the Muse CLI",
-      "Choose Install Muse CLI above, or run `curl -fsSL https://dev.meta.ai/install.sh | bash` in Terminal. Muse-Desktop uses ~/.local/bin/muse.",
+      "Choose Install Muse CLI above, or run `curl -fsSL https://dev.meta.ai/install.sh | bash` in Terminal. MuDesktop uses ~/.local/bin/muse.",
     );
   }
   if (

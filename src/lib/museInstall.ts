@@ -84,6 +84,6 @@ export function installHeadline(status: InstallStatus | null): string {
     case "cancelled":
       return "Installation cancelled.";
     default:
-      return "Muse-Desktop runs on the Muse CLI, which is not installed yet.";
+      return "MuDesktop runs on the Muse CLI, which is not installed yet.";
   }
 }

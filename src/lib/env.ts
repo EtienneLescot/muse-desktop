@@ -16,7 +16,7 @@ export function isTauriRuntime(): boolean {
  */
 export async function confirmAction(message: string): Promise<boolean> {
   return isTauriRuntime()
-    ? confirm(message, { title: "Muse-Desktop", kind: "warning" })
+    ? confirm(message, { title: "MuDesktop", kind: "warning" })
     : window.confirm(message);
 }
 
