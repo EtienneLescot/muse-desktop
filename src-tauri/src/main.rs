@@ -1955,7 +1955,7 @@ fn resolve_sidecar() -> Result<PathBuf, String> {
             let bundled = dir.join(if cfg!(windows) { "muse.exe" } else { "muse" });
             tried.push(bundled.clone());
             if bundled.is_file() {
-                return Ok(bundled);
+                return engine_outside_msix(bundled);
             }
             let p = dir.join(&file);
             tried.push(p.clone());
@@ -1971,6 +1971,64 @@ fn resolve_sidecar() -> Result<PathBuf, String> {
         return Ok(p);
     }
     Err(sidecar_missing_message(&file, &tried))
+}
+
+/// The Store (MSIX) installs the app under `C:\Program Files\WindowsApps`,
+/// whose ACLs only the system may change. Muse's Windows sandbox runs every
+/// shell command by relaunching its own exe as a sandbox user, after granting
+/// that user read/execute on it: from the package that grant fails (os error
+/// 5) and every command fails, measured on the 0.4.1 Store build. A copy out
+/// of the package, one per app version, gives the sandbox the footing it has
+/// in the NSIS install. `~/.local/share` rather than AppData: MSIX redirects a
+/// packaged app's AppData writes into its private store.
+#[cfg(not(target_os = "macos"))]
+fn engine_outside_msix(bundled: PathBuf) -> Result<PathBuf, String> {
+    if !is_msix_install(&bundled) {
+        return Ok(bundled);
+    }
+    let home = muse_auth::home_dir().ok_or("no home directory to copy the Muse engine to")?;
+    stage_engine(&bundled, &home.join(".local/share/muse-desktop/engine"), env!("CARGO_PKG_VERSION"))
+}
+
+fn is_msix_install(path: &Path) -> bool {
+    // Split by hand: `Path::components` only knows `\` on Windows.
+    path.to_string_lossy().split(['\\', '/']).any(|c| c.eq_ignore_ascii_case("WindowsApps"))
+}
+
+/// Copy `src` into `root/<version>/`, reusing a copy of the same size, and
+/// drop the copies of other versions (each is the full engine, ~440 MB).
+/// ponytail: size is the staleness check, so an engine swapped without an app
+/// version bump is caught only when its size changes.
+fn stage_engine(src: &Path, root: &Path, version: &str) -> Result<PathBuf, String> {
+    let name = src.file_name().ok_or("engine path has no file name")?;
+    let dir = root.join(version);
+    let dest = dir.join(name);
+    let len = std::fs::metadata(src).map_err(|e| format!("cannot read the bundled Muse engine: {e}"))?.len();
+    let staged = |p: &Path| std::fs::metadata(p).map(|m| m.len() == len).unwrap_or(false);
+    if !staged(&dest) {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        let part = dir.join(format!("{}.{}-{nonce}.part", name.to_string_lossy(), std::process::id()));
+        std::fs::copy(src, &part).map_err(|e| format!("cannot copy the Muse engine to {}: {e}", dir.display()))?;
+        // Another start may have won the race and be running its copy.
+        if let Err(e) = std::fs::rename(&part, &dest) {
+            let _ = std::fs::remove_file(&part);
+            if !staged(&dest) {
+                return Err(format!("cannot stage the Muse engine at {}: {e}", dest.display()));
+            }
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if entry.file_name() != *version {
+                let _ = std::fs::remove_dir_all(entry.path()); // in use: left for next time
+            }
+        }
+    }
+    Ok(dest)
 }
 
 fn spawn_sidecar(
@@ -9749,6 +9807,34 @@ mod tests {
             sidecar_file_name_for("aarch64-apple-darwin", false),
             "binaries/muse-aarch64-apple-darwin"
         );
+    }
+
+    #[test]
+    fn msix_engine_is_copied_once_per_version_out_of_the_package() {
+        assert!(is_msix_install(Path::new(r"C:\Program Files\WindowsApps\App_1.0_x64__id\muse.exe")));
+        assert!(!is_msix_install(Path::new(r"C:\Users\me\AppData\Local\Muse-Desktop\muse.exe")));
+
+        let tmp = std::env::temp_dir().join(format!("muse-stage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src = tmp.join("pkg").join("muse.exe");
+        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+        std::fs::write(&src, b"engine-v1").unwrap();
+        let root = tmp.join("engine");
+        std::fs::create_dir_all(root.join("0.0.1")).unwrap();
+
+        let dest = stage_engine(&src, &root, "0.4.2").unwrap();
+        assert_eq!(dest, root.join("0.4.2").join("muse.exe"));
+        assert_eq!(std::fs::read(&dest).unwrap(), b"engine-v1");
+        assert!(!root.join("0.0.1").exists(), "other versions are dropped");
+
+        // Same size: reused as is. Different size: copied again.
+        std::fs::write(&dest, b"engine-xx").unwrap();
+        stage_engine(&src, &root, "0.4.2").unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"engine-xx");
+        std::fs::write(&src, b"engine-v2-longer").unwrap();
+        stage_engine(&src, &root, "0.4.2").unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"engine-v2-longer");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
