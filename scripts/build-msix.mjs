@@ -11,12 +11,12 @@
  *
  *   npx tauri build --no-bundle && node scripts/build-msix.mjs
  *
- * MAKEAPPX overrides the makeappx.exe path; otherwise the newest Windows Kits
- * x64 copy is used.
+ * MAKEAPPX overrides the makeappx.exe path (makepri.exe is taken next to it);
+ * otherwise the newest Windows Kits x64 copy is used.
  */
 import { execFileSync, execSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Partner Center > product 9NBPFWQBGLZG > Product identity (reserved 14/10/2026). The display
@@ -31,6 +31,11 @@ export const STORE_IDENTITY = {
 
 // Tiles `tauri icon` generates for Windows that the manifest references.
 const TILES = ["StoreLogo.png", "Square44x44Logo.png", "Square71x71Logo.png", "Square150x150Logo.png"];
+
+// Without unplated variants of the 44x44 logo, Windows draws the accent-coloured
+// plate behind the icon in the taskbar and Start's app list (reported on 0.4.1).
+// It picks these by pixel size; "lightunplated" is the light-taskbar variant.
+const UNPLATED_SIZES = [16, 24, 32, 48, 256];
 
 /** Store versions have four parts and the last one must be 0. */
 export function msixVersion(version) {
@@ -104,10 +109,25 @@ function main() {
   const master = join(root, "src-tauri", "icons", "macos-icon-1024.png");
   execSync(`npx tauri icon "${master}" -o "${icons}"`, { cwd: root, stdio: "inherit" });
   for (const tile of TILES) copyFileSync(join(icons, tile), join(layout, "Assets", tile));
+  const sized = join(out, "icons-unplated");
+  execSync(`npx tauri icon "${master}" -o "${sized}" -p ${UNPLATED_SIZES.join(",")}`, { cwd: root, stdio: "inherit" });
+  for (const n of UNPLATED_SIZES) {
+    for (const form of ["altform-unplated", "altform-lightunplated"]) {
+      copyFileSync(join(sized, `${n}x${n}.png`), join(layout, "Assets", `Square44x44Logo.targetsize-${n}_${form}.png`));
+    }
+  }
 
-  writeFileSync(join(layout, "AppxManifest.xml"), appxManifest(version));
+  const manifest = join(layout, "AppxManifest.xml");
+  writeFileSync(manifest, appxManifest(version));
+  // Qualified assets (targetsize, altform) only resolve through a resource
+  // index: without resources.pri Windows ignores the unplated icons.
+  const makeappx = findMakeappx();
+  const makepri = join(dirname(makeappx), "makepri.exe");
+  const priconfig = join(out, "priconfig.xml");
+  execFileSync(makepri, ["createconfig", "/cf", priconfig, "/dq", "en-US", "/pv", "10.0.0", "/o"], { stdio: "inherit" });
+  execFileSync(makepri, ["new", "/pr", layout, "/cf", priconfig, "/mn", manifest, "/of", join(layout, "resources.pri"), "/o"], { stdio: "inherit" });
   const msix = join(out, `MuDesktop_${version}_x64.msix`);
-  execFileSync(findMakeappx(), ["pack", "/o", "/d", layout, "/p", msix], { stdio: "inherit" });
+  execFileSync(makeappx, ["pack", "/o", "/d", layout, "/p", msix], { stdio: "inherit" });
   console.log(msix);
 }
 
