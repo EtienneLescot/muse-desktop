@@ -25,18 +25,11 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  # Creating the release, and reading the draft release that holds the engine.
+  # Creating the release.
   contents: write
 
-env:
-  # The Muse engine bundled in the installer is not in the repository. It
-  # lives in a draft release, visible to repository members only, and is
-  # checked against this digest before anything is built with it. A draft has
-  # no tag (GitHub shows it as untagged-…), so it is found by its title.
-  SIDECAR_RELEASE: "CI input — Muse engine 1.4.2 — DO NOT PUBLISH"
-  SIDECAR_FILE: muse-x86_64-pc-windows-msvc.exe
-  SIDECAR_SHA256: 39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba
-
+# No build bundles the Muse engine: the app uses the one the user installed
+# with Meta's official installer.
 jobs:
   windows:
     name: Windows x64 installer
@@ -74,25 +67,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Fetch the Muse engine
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
-            --jq ".[] | select(.draft and .name == env.SIDECAR_RELEASE) | .assets[] | select(.name == env.SIDECAR_FILE) | .id")
-          test -n "$asset" || { echo "::error::engine draft \"$SIDECAR_RELEASE\" not found"; exit 1; }
-          mkdir -p src-tauri/binaries
-          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset" \
-            -H "Accept: application/octet-stream" > "src-tauri/binaries/$SIDECAR_FILE"
-          echo "$SIDECAR_SHA256  src-tauri/binaries/$SIDECAR_FILE" | sha256sum --check
-
       - name: Run unit tests
         run: npm test
 
       - name: Build the installer
         run: npx tauri build --bundles nsis
 
-      # Packs the app and engine `tauri build` just left in target/release.
+      # Packs the app `tauri build` just left in target/release.
       # Pre-releases never reach the Store, and MSIX has no place for their
       # suffix.
       - name: Package the Store MSIX
@@ -117,8 +98,7 @@ jobs:
         run: |
           installer="$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.exe"
           test -f "$installer" || { ls "$BUNDLE"; echo "::error::installer not found"; exit 1; }
-          node scripts/release-manifest.mjs --artifact "$installer" \
-            --sidecar "src-tauri/binaries/$SIDECAR_FILE" --version "$VERSION" \
+          node scripts/release-manifest.mjs --artifact "$installer" --version "$VERSION" \
             --output "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
           cat "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
 
@@ -161,7 +141,6 @@ jobs:
           [ -f dist/index.html ] || printf '<!doctype html><title>CI</title>\n' > dist/index.html
           cargo test --manifest-path src-tauri/Cargo.toml
 
-      # macOS bundles no engine: the app installs the Muse CLI on first run.
       - name: Import the signing certificate
         env:
           MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
