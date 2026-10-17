@@ -4487,9 +4487,11 @@ export function useMuseSessions(): UseMuseSessions {
         createdAt: Date.now(),
         running: meta.running,
         ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+        // The host's own model when none is requested: without it the
+        // composer read "Model" for a conversation whose model is known.
         ...(requestedModelId && requestedModelId !== "default"
           ? { model_id: requestedModelId }
-          : {}),
+          : meta.model_id ? { model_id: meta.model_id } : {}),
       };
       setGrantedCapabilitiesBySession((cur) => ({
         ...cur,
@@ -4500,6 +4502,10 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
+      // The catalog is read per conversation (setActive does it on a switch).
+      // A new conversation skipped it, so its picker stayed empty and inert
+      // whenever no model was requested — measured on 0.4.2.
+      void refreshModels(meta.session_id);
       // The host only accepts model changes through session/setModel. Apply a
       // concrete project/global model after admission; `default` deliberately
       // leaves the engine's own default untouched.
@@ -4926,6 +4932,7 @@ export function useMuseSessions(): UseMuseSessions {
           setThreadProjects(next);
         }
         setActiveId(meta.session_id);
+        void refreshModels(meta.session_id);
         // A fork is a new host session, so the renderer-side copy of the
         // requested model must be applied through the same session/setModel
         // path as a normal start. Without this, Settings/Composer showed the
@@ -8163,22 +8170,29 @@ export function useMuseSessions(): UseMuseSessions {
           observedAt: number;
         }>("files_list", { sessionId, relativePath: path, limit: 200 });
         if (filesRequestSeq.current[sessionId] !== request) return;
-        setFilesBySession((cur) => ({
+        setFilesBySession((cur) => {
+          const prev = cur[sessionId] ?? emptyFilesBrowserState();
+          // A refresh of the same folder (the 30 s poll, or the first listing
+          // right after a message link opened a file) keeps the open preview;
+          // only moving to another folder clears it.
+          const keep = prev.observedAt === null || prev.path === result.path;
+          return {
           ...cur,
           [sessionId]: {
-            ...(cur[sessionId] ?? emptyFilesBrowserState()),
+            ...prev,
             path: result.path,
             entries: result.entries,
             truncated: result.truncated,
-            selectedPath: null,
-            preview: null,
+            selectedPath: keep ? prev.selectedPath : null,
+            preview: keep ? prev.preview : null,
             loading: false,
             error: null,
             observedAt: result.observedAt,
             stale: false,
             changedPaths: [],
           },
-        }));
+          };
+        });
       } catch (e) {
         if (filesRequestSeq.current[sessionId] !== request) return;
         setFilesBySession((cur) => ({

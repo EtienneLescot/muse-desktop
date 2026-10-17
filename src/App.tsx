@@ -10,7 +10,8 @@ import { conflictRestart, hostPostureNotice, hostSandboxConfigForProject } from 
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { MessageContent } from "./components/MessageContent";
+import { LinkOpenerContext, MessageContent } from "./components/MessageContent";
+import { classifyLink } from "./lib/messageLink";
 import {
   EmptySessionScreen,
   type NewConversationEnvironment,
@@ -347,6 +348,19 @@ export default function App() {
   const [workPanel, setWorkPanel] = useState<
     "browser" | "review" | "terminal" | "files" | null
   >(null);
+  // A link in a message: web pages open in the user's browser, a file of the
+  // conversation's folder in the Files panel. Anything else is ignored.
+  const openMessageLink = (sessionId: string, workspace: string | null, href: string) => {
+    const target = classifyLink(href, workspace);
+    if (target.kind === "web") {
+      invoke("open_external_url", { url: target.url }).catch((e) =>
+        setError(`could not open ${target.url}: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    } else if (target.kind === "file") {
+      setWorkPanel("files");
+      void readWorkspaceFile(sessionId, target.path);
+    }
+  };
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState(0);
@@ -1519,16 +1533,17 @@ export default function App() {
                 reasoningEffort={globalSettings.reasoningEffort}
                 onReasoningEffortChange={(value) => setGlobalSettings({ reasoningEffort: value })}
                 modelControl={
-                  liveModels !== null && liveModels.length > 0 ? (
-                    <ModelControl
-                      // The catalog's isActive row is the last conversation's
-                      // model; here the choice for the next one must win.
-                      models={liveModels.map((model) => ({ ...model, isActive: false }))}
-                      value={globalSettings.model === "default" ? null : globalSettings.model}
-                      onSelect={(modelId) => setGlobalSettings({ model: modelId })}
-                      compact
-                    />
-                  ) : null
+                  <ModelControl
+                    // The catalog's isActive row is the last conversation's
+                    // model; here the choice for the next one must win. Before
+                    // any engine has run there is no catalog yet: the control
+                    // still shows, disabled, instead of vanishing.
+                    models={liveModels?.map((model) => ({ ...model, isActive: false })) ?? null}
+                    value={globalSettings.model === "default" ? null : globalSettings.model}
+                    onSelect={(modelId) => setGlobalSettings({ model: modelId })}
+                    fallbackLabel="Default model"
+                    compact
+                  />
                 }
               />
             ) : (
@@ -1608,6 +1623,7 @@ export default function App() {
                     onApprove={(id) => void approveReview(id)}
                     onDiscard={(id) => discardReview(id)}
                   />
+                  <LinkOpenerContext.Provider value={(href) => openMessageLink(active.session_id, active.workspace, href)}>
                   <StreamView
                     entries={activeLog}
                     sessionId={active.session_id}
@@ -1660,6 +1676,7 @@ export default function App() {
                         readItemOutput(active.session_id, entry, offsetBytes),
                     }}
                   />
+                  </LinkOpenerContext.Provider>
 
                   {queuedTurns.length > 0 && (
                     <section className="queued-turns" aria-label="Queued messages">
