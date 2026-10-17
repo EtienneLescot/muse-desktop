@@ -254,7 +254,7 @@ jobs:
   store:
     name: Submit to the Microsoft Store
     # Stable tags only, after the GitHub release: the Store gets the same
-    # build, as an update of product 9NBPFWQBGLZG left for manual publishing.
+    # build, as an update of product 9NBPFWQBGLZG published as soon as it passes certification.
     if: github.event_name == 'push' && !contains(github.ref_name, '-')
     needs: [windows, publish]
     runs-on: ubuntu-latest
@@ -289,4 +289,4 @@ jobs:
           packages=(store/*.msix)
           [ "${#packages[@]}" = 1 ] && [ -f "${packages[0]}" ] || { echo "::error::expected one MSIX, found: ${packages[*]}"; exit 1; }
           bash scripts/store-submit.sh "${packages[0]}"
-          echo "Submitted $(basename "${packages[0]}") to the Store; certification then Publish now in Partner Center." >> "$GITHUB_STEP_SUMMARY"
+          echo "Submitted $(basename "${packages[0]}") to the Store; it goes live once certification passes." >> "$GITHUB_STEP_SUMMARY"

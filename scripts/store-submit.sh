@@ -7,8 +7,8 @@
 # The API is what the CLI calls underneath:
 #   token → new submission (a copy of the live one) → swap the package →
 #   upload the zipped package → commit → wait for the commit to settle.
-# The submission goes to certification with targetPublishMode "Manual":
-# nothing reaches customers until someone clicks Publish now.
+# The submission goes to certification with targetPublishMode "Immediate":
+# it reaches customers as soon as it passes, as OpenScreen's does.
 #
 #   STORE_TENANT_ID STORE_CLIENT_ID STORE_CLIENT_SECRET STORE_APP_ID \
 #     scripts/store-submit.sh path/to/App_1.2.3_x64.msix
@@ -45,7 +45,7 @@ echo "Created submission $id"
 jq --arg file "$(basename "$msix")" '
   .applicationPackages |= (map(.fileStatus = "PendingDelete")
     + [{fileName: $file, fileStatus: "PendingUpload", minimumDirectXVersion: "None", minimumSystemRam: "None"}])
-  | .targetPublishMode = "Manual"' <<<"$submission" > submission.json
+  | .targetPublishMode = "Immediate"' <<<"$submission" > submission.json
 call -X PUT "$api/submissions/$id" --data @submission.json > /dev/null
 
 zip -j -q package.zip "$msix"
