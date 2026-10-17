@@ -250,3 +250,43 @@ jobs:
             --title "Muse-Desktop $version (Windows x64, macOS Apple Silicon)" \
             --notes-file "docs/releases/$version.md" \
             dist-release/*
+
+  store:
+    name: Submit to the Microsoft Store
+    # Stable tags only, after the GitHub release: the Store gets the same
+    # build, as an update of product 9NBPFWQBGLZG left for manual publishing.
+    if: github.event_name == 'push' && !contains(github.ref_name, '-')
+    needs: [windows, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Collect the Store package
+        uses: actions/download-artifact@v4
+        with:
+          name: store-msix
+          path: store
+
+      - name: Submit
+        env:
+          STORE_APP_ID: 9NBPFWQBGLZG
+          STORE_TENANT_ID: ${{ secrets.MSSTORE_TENANT_ID }}
+          STORE_CLIENT_ID: ${{ secrets.MSSTORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.MSSTORE_CLIENT_SECRET }}
+        run: |
+          # All three or none: with none the Store step is reported as not
+          # configured (upload by hand); with only some, a secret is misnamed.
+          set=0; for v in STORE_TENANT_ID STORE_CLIENT_ID STORE_CLIENT_SECRET; do [ -n "${!v}" ] && set=$((set+1)); done
+          if [ "$set" = 0 ]; then
+            echo "::warning::Microsoft Store secrets not set: upload the store-msix artifact by hand"
+            echo "Store submission skipped: MSSTORE_* secrets not set. Upload the store-msix artifact in Partner Center." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [ "$set" = 3 ] || { echo "::error::MSSTORE_TENANT_ID, MSSTORE_CLIENT_ID and MSSTORE_CLIENT_SECRET must all be set"; exit 1; }
+          packages=(store/*.msix)
+          [ "${#packages[@]}" = 1 ] && [ -f "${packages[0]}" ] || { echo "::error::expected one MSIX, found: ${packages[*]}"; exit 1; }
+          bash scripts/store-submit.sh "${packages[0]}"
+          echo "Submitted $(basename "${packages[0]}") to the Store; certification then Publish now in Partner Center." >> "$GITHUB_STEP_SUMMARY"
