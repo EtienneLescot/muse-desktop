@@ -13,6 +13,7 @@ import {
   isSidecarError,
   needsWindowsSandboxSetup,
   startupRecoverySteps,
+  WINDOWS_INSTALL_COMMAND,
 } from "../src/lib/sidecarError.ts";
 
 const MISSING =
@@ -71,38 +72,33 @@ describe("tried-path extraction", () => {
 });
 
 describe("startup recovery guidance", () => {
-  it("explains the WSL and Muse checks from bridge evidence", () => {
+  it("explains the native Windows Muse checks without WSL", () => {
     const steps = startupRecoverySteps(
       "start-failed",
-      "Muse WSL adapter: Install Muse in WSL (~/.local/bin/muse) first; WSL cannot open this workspace",
+      "could not spawn sidecar `muse serve` in C:\\w: muse command failed; workspace unreachable",
       "windows",
     );
-    const titles = steps.map((step) => step.title);
-    assert.deepEqual(titles, [
-      "Check WSL",
-      "Check Muse in WSL",
-      "Choose an accessible folder",
-      "Retry the connection",
-    ]);
-    assert.match(steps[1]?.detail ?? "", /--version/);
+    assert.deepEqual(
+      steps.map((step) => step.title),
+      ["Check Muse Code", "Choose an accessible folder", "Retry the connection"],
+    );
+    assert.match(steps[0]?.detail ?? "", /--version/);
+    assert.ok(steps.every((step) => !/WSL/.test(step.detail)));
   });
 
-  it("gives a concrete sidecar step for a missing binary", () => {
-    const steps = startupRecoverySteps("missing", MISSING, "windows");
-    assert.equal(steps[0]?.title, "Provide the matching sidecar");
-    assert.equal(steps.at(-1)?.title, "Retry the connection");
-  });
-
-  it("keeps authentication guidance explicit and local to WSL", () => {
+  it("points a missing Windows engine at Meta's installer and muse login", () => {
     const steps = startupRecoverySteps(
-      "start-failed",
-      "MSP handshake failed: Muse authentication credentials are missing",
+      "missing",
+      "sidecar binary not found: Muse Code is not installed (tried C:\\Users\\me\\AppData\\Local\\Programs\\muse\\muse-bin-<version>.exe). Install it with Meta's official installer, run `muse login` in a new terminal, then retry.",
       "windows",
     );
-    const auth = steps.find((step) => step.title === "Sign in to Muse");
-    assert.ok(auth);
-    assert.match(auth.detail, /inside WSL/);
-    assert.match(auth.detail, /never bundled/);
+    assert.deepEqual(
+      steps.map((step) => step.title),
+      ["Install Muse Code", "Sign in to Muse", "Retry the connection"],
+    );
+    assert.ok(steps[0]?.detail.includes(WINDOWS_INSTALL_COMMAND));
+    assert.match(steps[1]?.detail ?? "", /muse login/);
+    assert.match(steps[1]?.detail ?? "", /never bundled/);
   });
 
   it("does not expose an installation success claim for unknown errors", () => {

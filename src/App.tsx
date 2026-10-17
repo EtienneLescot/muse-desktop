@@ -5,7 +5,7 @@ import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
-import { isMacPlatform } from "./lib/platform";
+import { hostPlatform, isMacPlatform } from "./lib/platform";
 import { conflictRestart, hostPostureNotice, hostSandboxConfigForProject } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
@@ -635,9 +635,10 @@ export default function App() {
   const sidecarKind = classifySidecarError(error);
   // A posture conflict restarts the host that refused, not the default folder's.
   const hostRestart = conflictRestart(error, errorHost);
-  // macOS does not bundle the engine: a missing sidecar there means the Muse
-  // CLI is simply not installed yet — a first-run step, not an error.
-  const needsMuseSetup = sidecarKind === "missing" && isMacPlatform() && isTauriRuntime();
+  // No build bundles the engine: a missing sidecar on macOS or Windows means
+  // Muse is simply not installed yet, a first-run step, not an error.
+  const needsMuseSetup =
+    sidecarKind === "missing" && ["macos", "windows"].includes(hostPlatform()) && isTauriRuntime();
   const sidecarPanel = needsMuseSetup ? (
     <MuseSetupScreen
       onReady={() => {
