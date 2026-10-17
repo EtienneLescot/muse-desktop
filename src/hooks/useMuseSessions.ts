@@ -8170,22 +8170,29 @@ export function useMuseSessions(): UseMuseSessions {
           observedAt: number;
         }>("files_list", { sessionId, relativePath: path, limit: 200 });
         if (filesRequestSeq.current[sessionId] !== request) return;
-        setFilesBySession((cur) => ({
+        setFilesBySession((cur) => {
+          const prev = cur[sessionId] ?? emptyFilesBrowserState();
+          // A refresh of the same folder (the 30 s poll, or the first listing
+          // right after a message link opened a file) keeps the open preview;
+          // only moving to another folder clears it.
+          const keep = prev.observedAt === null || prev.path === result.path;
+          return {
           ...cur,
           [sessionId]: {
-            ...(cur[sessionId] ?? emptyFilesBrowserState()),
+            ...prev,
             path: result.path,
             entries: result.entries,
             truncated: result.truncated,
-            selectedPath: null,
-            preview: null,
+            selectedPath: keep ? prev.selectedPath : null,
+            preview: keep ? prev.preview : null,
             loading: false,
             error: null,
             observedAt: result.observedAt,
             stale: false,
             changedPaths: [],
           },
-        }));
+          };
+        });
       } catch (e) {
         if (filesRequestSeq.current[sessionId] !== request) return;
         setFilesBySession((cur) => ({
