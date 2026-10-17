@@ -26,6 +26,8 @@ token=$(curl -fsS "https://login.microsoftonline.com/$STORE_TENANT_ID/oauth2/tok
   --data-urlencode "client_id=$STORE_CLIENT_ID" \
   --data-urlencode "client_secret=$STORE_CLIENT_SECRET" \
   --data-urlencode resource=https://manage.devcenter.microsoft.com | jq -r .access_token)
+# POSTs carry an empty body: without one curl sends no Content-Length and the
+# API answers 411 (measured on the v0.4.3 release run).
 call() { curl -fsS -H "Authorization: Bearer $token" -H "Content-Type: application/json" "$@"; }
 
 # A draft already open in Partner Center belongs to whoever opened it:
@@ -36,7 +38,7 @@ if [ -n "$pending" ]; then
   exit 1
 fi
 
-submission=$(call -X POST "$api/submissions")
+submission=$(call -X POST --data "" "$api/submissions")
 id=$(jq -r .id <<<"$submission")
 upload_url=$(jq -r .fileUploadUrl <<<"$submission")
 echo "Created submission $id"
@@ -51,7 +53,7 @@ call -X PUT "$api/submissions/$id" --data @submission.json > /dev/null
 zip -j -q package.zip "$msix"
 # The SAS URL may carry "+", which Azure reads as a space unless encoded.
 curl -fsS -X PUT -H "x-ms-blob-type: BlockBlob" --upload-file package.zip "${upload_url//+/%2B}"
-call -X POST "$api/submissions/$id/commit" > /dev/null
+call -X POST --data "" "$api/submissions/$id/commit" > /dev/null
 
 for _ in $(seq 1 60); do
   status=$(call "$api/submissions/$id/status")
