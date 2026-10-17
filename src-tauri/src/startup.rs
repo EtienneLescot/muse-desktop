@@ -13,13 +13,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const DETAIL_LIMIT: usize = 180;
-const WSL_MUSE_TEST: &str = "test -x \"$HOME/.local/bin/muse\"";
-/// Presence only: `test -s` never reads the file. An exported key counts too,
-/// since the bridge runs Muse through the same login shell.
-const WSL_AUTH_TEST: &str = "test -s \"$HOME/.config/muse/auth.json\" || [ -n \"$META_API_KEY\" ]";
-/// Each probe may boot a stopped distribution: keep the scan short.
-const WSL_DISTRIBUTION_SCAN_LIMIT: usize = 4;
-
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct StartupCheck {
@@ -32,7 +25,6 @@ pub struct StartupCheck {
 pub struct StartupProbe {
     pub platform: String,
     pub sidecar: StartupCheck,
-    pub wsl: Option<StartupCheck>,
     pub muse_cli: Option<StartupCheck>,
     pub workspace: Option<StartupCheck>,
     pub checked_at: u64,
@@ -44,7 +36,7 @@ fn decode_probe_bytes(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
         return String::from_utf8_lossy(&bytes[3..]).into_owned();
     }
-    // `wsl.exe` and a few Windows console tools may include an explicit
+    // A few Windows console tools may include an explicit
     // UTF-16 BOM. Handle it before the heuristic below so short diagnostics
     // cannot be mistaken for an ANSI/UTF-8 byte stream.
     if bytes.starts_with(&[0xff, 0xfe]) {
@@ -251,100 +243,11 @@ fn wait_probe(mut child: Child) -> (Result<ExitStatus, String>, String) {
     (status, detail)
 }
 
-fn probe_command(program: &str, args: &[&str]) -> StartupCheck {
-    let mut command = Command::new(program);
-    command.args(args);
-    match spawn_probe(command) {
-        Ok(child) => finish_probe(child),
-        Err(error) if error.contains("not found") || error.contains("cannot find") => {
-            missing(format!("{program} is not available"))
-        }
-        Err(error) => unknown(format!("{program} probe failed: {}", clip_detail(&error))),
-    }
-}
-
-fn probe_wsl() -> (StartupCheck, StartupCheck) {
-    let wsl = probe_command("wsl.exe", &["--status"]);
-    if wsl.status != "ready" {
-        return (
-            wsl,
-            missing("WSL is available, but the Muse CLI was not checked"),
-        );
-    }
-    // `$WSL_DISTRO_NAME` names the default distribution without parsing the
-    // localized `wsl --status` text; it is the probe's first output line.
-    let muse = probe_command(
-        "wsl.exe",
-        &["--exec", "sh", "-lc", &format!("echo \"$WSL_DISTRO_NAME\"; {WSL_MUSE_TEST}")],
-    );
-    let muse = match muse.status.as_str() {
-        "ready" => signed_in_finding(&probe_command("wsl.exe", &["--exec", "sh", "-lc", WSL_AUTH_TEST])),
-        "blocked" => muse_elsewhere_finding(
-            &parse_wsl_distributions(&muse.detail).into_iter().next().unwrap_or_default(),
-        ),
-        _ => muse,
-    };
-    (wsl, muse)
-}
-
-fn signed_in_finding(auth: &StartupCheck) -> StartupCheck {
-    match auth.status.as_str() {
-        "ready" => ready("Muse CLI found and signed in in the default WSL distribution"),
-        "blocked" => missing("Muse CLI found in WSL but not signed in: run `muse login` inside WSL"),
-        _ => ready("Muse CLI found in the default WSL distribution (sign-in not verified)"),
-    }
-}
-
-/// Distribution names from `wsl.exe -l -q`, already decoded from UTF-16.
-/// Anything that is not a plain name (a localized "no distributions" line)
-/// is dropped.
-fn parse_wsl_distributions(listing: &str) -> Vec<String> {
-    listing
-        .lines()
-        .map(|line| line.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}' || c == '\0'))
-        .filter(|name| {
-            !name.is_empty()
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-        })
-        .map(str::to_string)
-        .collect()
-}
-
-/// The default distribution has no `~/.local/bin/muse`: look in the others
-/// so the finding names the one to make default.
-fn muse_elsewhere_finding(default: &str) -> StartupCheck {
-    let mut list = Command::new("wsl.exe");
-    list.args(["-l", "-q"]);
-    let listing = match spawn_probe(list).map(wait_probe) {
-        Ok((Ok(status), text)) if status.success() => text,
-        _ => String::new(),
-    };
-    let found = parse_wsl_distributions(&listing)
-        .into_iter()
-        // Docker Desktop's utility distributions never host Muse; skipping
-        // them keeps real distributions inside the scan limit.
-        .filter(|name| name != default && !name.starts_with("docker-desktop"))
-        .take(WSL_DISTRIBUTION_SCAN_LIMIT)
-        .find(|name| {
-            probe_command("wsl.exe", &["-d", name, "--exec", "sh", "-lc", WSL_MUSE_TEST]).status == "ready"
-        });
-    elsewhere_finding(default, found.as_deref())
-}
-
-fn elsewhere_finding(default: &str, found: Option<&str>) -> StartupCheck {
-    match found {
-        Some(name) => missing(format!(
-            "Muse found in {name}, default is {}: run `wsl --set-default {name}`",
-            if default.is_empty() { "another distribution" } else { default }
-        )),
-        None => missing("Install or make ~/.local/bin/muse executable in WSL"),
-    }
-}
-
-/// On macOS the sidecar *is* the native Muse CLI (no WSL layer). Running its
-/// `--version` proves the binary is executable — not quarantined by
-/// Gatekeeper, right architecture — without starting a server.
-#[cfg(target_os = "macos")]
+/// The sidecar *is* the native Muse engine: the CLI on macOS, the engine
+/// beside Meta's launcher on Windows. Running its `--version` proves the
+/// binary is executable (not quarantined by Gatekeeper, right architecture)
+/// without starting a server. Sign-in is not probed here: the Account
+/// settings report it.
 fn probe_native_cli(path: &Path) -> StartupCheck {
     let mut command = Command::new(path);
     command.arg("--version");
@@ -384,23 +287,6 @@ fn probe_workspace(path: Option<&Path>) -> Option<StartupCheck> {
     }
     match path.metadata() {
         Ok(metadata) if metadata.is_dir() => {
-            if cfg!(windows) {
-                let mut command = Command::new("wsl.exe");
-                command.args(["--cd", &path.to_string_lossy(), "--exec", "pwd"]);
-                return Some(match spawn_probe(command) {
-                    Ok(child) => {
-                        let check = finish_probe(child);
-                        if check.status == "ready" {
-                            ready("Workspace is reachable from WSL")
-                        } else {
-                            blocked("Workspace cannot be opened by the default WSL distribution")
-                        }
-                    }
-                    Err(error) => {
-                        unknown(format!("workspace probe failed: {}", clip_detail(&error)))
-                    }
-                });
-            }
             // macOS privacy protection (TCC) lets `metadata` succeed on
             // Desktop/Documents/Downloads and removable volumes while still
             // refusing to list them until the user allows the app.
@@ -424,10 +310,7 @@ fn probe_workspace(path: Option<&Path>) -> Option<StartupCheck> {
 /// `sidecar` is injected by the caller so tests can cover bundled/missing
 /// layouts without touching the machine's real installation.
 pub fn probe(sidecar: Result<PathBuf, String>, workspace: Option<&Path>) -> StartupProbe {
-    #[cfg(target_os = "macos")]
-    let native_cli = sidecar.as_ref().ok().map(|path| probe_native_cli(path));
-    #[cfg(not(target_os = "macos"))]
-    let native_cli: Option<StartupCheck> = None;
+    let muse_cli = sidecar.as_ref().ok().map(|path| probe_native_cli(path));
     let sidecar = match sidecar {
         Ok(path) => ready(format!(
             "Sidecar ready ({})",
@@ -435,16 +318,9 @@ pub fn probe(sidecar: Result<PathBuf, String>, workspace: Option<&Path>) -> Star
         )),
         Err(_) => missing("The sidecar binary for this platform is not installed"),
     };
-    let (wsl, muse_cli) = if cfg!(windows) {
-        let (wsl, muse) = probe_wsl();
-        (Some(wsl), Some(muse))
-    } else {
-        (None, native_cli)
-    };
     StartupProbe {
         platform: platform_name().to_string(),
         sidecar,
-        wsl,
         muse_cli,
         workspace: probe_workspace(workspace),
         checked_at: now_ms(),
@@ -526,53 +402,32 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn macos_probes_the_native_cli_sidecar() {
-        use std::os::unix::fs::PermissionsExt;
+    fn probes_the_native_engine_sidecar() {
         let root = std::env::temp_dir().join(format!("muse-startup-cli-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
-        let cli = root.join("muse-fake");
-        fs::write(&cli, "#!/bin/sh\necho 'muse 9.9.9'\n").unwrap();
-        fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).unwrap();
+        #[cfg(windows)]
+        let cli = {
+            let cli = root.join("muse-fake.cmd");
+            fs::write(&cli, "@echo muse 9.9.9\r\n").unwrap();
+            cli
+        };
+        #[cfg(unix)]
+        let cli = {
+            use std::os::unix::fs::PermissionsExt;
+            let cli = root.join("muse-fake");
+            fs::write(&cli, "#!/bin/sh\necho 'muse 9.9.9'\n").unwrap();
+            fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).unwrap();
+            cli
+        };
         let probe = probe(Ok(cli), Some(&root));
-        let cli = probe.muse_cli.expect("macOS reports the native CLI");
+        let cli = probe.muse_cli.expect("the native engine is reported");
         assert_eq!(cli.status, "ready");
         assert!(cli.detail.contains("9.9.9"), "{}", cli.detail);
-        assert!(probe.wsl.is_none());
         assert_eq!(probe.workspace.unwrap().status, "ready");
         let broken = probe_native_cli(&root.join("absent"));
         assert_eq!(broken.status, "blocked");
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn wsl_listing_keeps_only_distribution_names() {
-        let bytes = "Ubuntu\r\nDebian\r\ndocker-desktop\r\n\r\n"
-            .encode_utf16()
-            .flat_map(u16::to_le_bytes)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            parse_wsl_distributions(&decode_probe_bytes(&bytes)),
-            vec!["Ubuntu", "Debian", "docker-desktop"]
-        );
-        assert!(parse_wsl_distributions("Windows Subsystem for Linux has no installed distributions.").is_empty());
-    }
-
-    #[test]
-    fn wsl_findings_name_the_next_step() {
-        let elsewhere = elsewhere_finding("Ubuntu", Some("Debian"));
-        assert_eq!(elsewhere.status, "missing");
-        assert_eq!(
-            elsewhere.detail,
-            "Muse found in Debian, default is Ubuntu: run `wsl --set-default Debian`"
-        );
-        assert!(elsewhere_finding("Ubuntu", None).detail.contains("~/.local/bin/muse"));
-        let signed_out = signed_in_finding(&blocked(""));
-        assert_eq!(signed_out.status, "missing");
-        assert!(signed_out.detail.contains("muse login"));
-        assert_eq!(signed_in_finding(&ready("")).status, "ready");
-        assert_eq!(signed_in_finding(&unknown("probe timed out")).status, "ready");
     }
 
     #[test]

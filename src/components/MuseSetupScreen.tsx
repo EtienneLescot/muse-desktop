@@ -7,6 +7,9 @@ import {
   type MuseTask,
 } from "../lib/museInstall";
 import { userFacingError } from "../lib/errorCopy";
+import { hostPlatform } from "../lib/platform";
+import { WINDOWS_INSTALL_COMMAND } from "../lib/sidecarError";
+import type { StartupProbe } from "../lib/startupProbe";
 
 interface Props {
   /** First step to show: install the CLI, or only sign in. */
@@ -22,11 +25,92 @@ interface AuthStatusLike {
 }
 
 /**
- * macOS first run: install the Muse CLI with Meta's official installer, then
- * sign in with `muse login` — both without leaving the app. Nothing runs until
- * the user clicks; the native side owns the commands.
+ * First run without Muse. macOS: install the Muse CLI with Meta's official
+ * installer, then sign in with `muse login`, both without leaving the app.
+ * Nothing runs until the user clicks; the native side owns the commands.
+ * Windows: guide only (see `WindowsMuseSetup`).
  */
-export function MuseSetupScreen({ initialStep = "install", onReady, onClose }: Props) {
+export function MuseSetupScreen(props: Props) {
+  return hostPlatform() === "windows" ? <WindowsMuseSetup {...props} /> : <MacMuseSetup {...props} />;
+}
+
+/**
+ * Windows first run: the user installs Muse Code with Meta's installer in
+ * PowerShell, then signs in from a terminal. The app does not run the
+ * installer: the Store build is an MSIX package, whose AppData writes land in
+ * its private store, out of reach of the user's own `muse`.
+ */
+function WindowsMuseSetup({ onReady, onClose }: Props) {
+  const [checking, setChecking] = useState(false);
+  const [stillMissing, setStillMissing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const checkAgain = async () => {
+    setChecking(true);
+    try {
+      const probe = await invoke<StartupProbe>("probe_startup", { workspacePath: null });
+      if (probe.sidecar.status === "ready") {
+        await onReady();
+        return;
+      }
+      setStillMissing(true);
+    } catch {
+      setStillMissing(true);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="muse-setup">
+      <span className="muse-logo">
+        <img src="muse-logo.png" alt="" />
+      </span>
+      <h2>Set up Muse</h2>
+      <p className="muse-setup-lead" role="status" aria-live="polite">
+        {stillMissing
+          ? "Muse Code is still not installed. Run the command below, then check again."
+          : "MuDesktop runs on Muse Code, which is not installed yet. Install it once with Meta's installer; it stays up to date on its own."}
+      </p>
+      <ol className="muse-setup-guide">
+        <li>
+          Open PowerShell and run Meta's official installer:
+          <span className="muse-setup-command">
+            <code>{WINDOWS_INSTALL_COMMAND}</code>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(WINDOWS_INSTALL_COMMAND).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                );
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </span>
+        </li>
+        <li>
+          In a new terminal, run <code>muse login</code> and sign in with your Meta account.
+        </li>
+      </ol>
+      <div className="muse-setup-actions">
+        <button type="button" className="primary" disabled={checking} onClick={() => void checkAgain()}>
+          {checking ? "Checking…" : "Check again"}
+        </button>
+        {onClose && (
+          <button type="button" onClick={onClose}>Not now</button>
+        )}
+      </div>
+      <p className="muse-setup-note">
+        MuDesktop does not include the engine: it uses the one Meta's installer puts in{" "}
+        <code>%LOCALAPPDATA%\Programs\muse</code>. Run <code>muse</code> in a terminal to update it.
+      </p>
+    </div>
+  );
+}
+
+function MacMuseSetup({ initialStep = "install", onReady, onClose }: Props) {
   const [step, setStep] = useState<MuseTask>(initialStep);
   const [status, setStatus] = useState<InstallStatus | null>(null);
   const [error, setError] = useState<string | null>(null);

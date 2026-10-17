@@ -18,7 +18,7 @@ goes with it: the kind of client Claude Code and Codex users take for granted, b
 Muse. Projects, git worktrees, subagents, MCP, a diff review panel. And an agent that can
 see your screen and use your applications.
 
-> **0.4.3 · macOS (Apple Silicon) and Windows x64.**
+> **0.5.0 · macOS (Apple Silicon) and Windows x64.**
 > [Download the latest release](https://github.com/EtienneLescot/muse-desktop/releases/latest).
 > The macOS DMG is signed and notarised. The Windows installer is not signed yet.
 
@@ -72,8 +72,10 @@ and notarised, so there is no Gatekeeper warning. On first launch the app offers
 the Muse CLI for you.
 
 **Windows x64.** Run the installer. Windows will warn that the publisher is unknown: the
-build is not code-signed yet. It installs per-user, with no administrator rights. You need
-WSL with Muse already set up; see the [Windows setup notes](scripts/wsl-bridge/README.md).
+build is not code-signed yet. It installs per-user, with no administrator rights. The app
+does not include the Muse engine: install Muse Code with Meta's official installer, in
+PowerShell `irm https://dev.meta.ai/install.ps1 | iex`, then run `muse login` in a new
+terminal. On first launch the app shows these steps if Muse Code is missing.
 
 Either way you need a Muse Code account: authentication and model choice come from the
 engine, not from this app. For computer use, install the cua driver when Settings offers to.
@@ -93,7 +95,7 @@ To build a package:
 
 ```sh
 sh scripts/build-macos.sh --bundle dmg      # macOS
-npm run tauri -- build --bundles nsis       # Windows, sidecar in src-tauri/binaries/
+npm run tauri -- build --bundles nsis       # Windows
 ```
 
 Release tooling (manifests, signing, delta updates, channel indexes) is documented in

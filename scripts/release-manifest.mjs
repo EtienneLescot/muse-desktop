@@ -61,23 +61,17 @@ export function buildReleaseManifest({ artifactPath, sidecarPath, version, targe
   const checkedVersion = String(version ?? "").trim();
   const checkedTarget = String(target ?? "").trim();
   if (!checkedVersion || !checkedTarget) throw new Error("version and target are required");
-  // Windows releases bundle the Muse engine: a digest-less manifest would let
-  // the update chain stage a Windows install that can never start. Only the
-  // engine-not-bundled targets (macOS) may omit the sidecar.
-  if (/windows/.test(checkedTarget) && !sidecarPath) {
-    throw new Error(`sidecarPath is required for Windows target ${checkedTarget}`);
-  }
   const manifest = {
     schema: RELEASE_MANIFEST_SCHEMA,
     product: "Muse-Desktop",
     version: checkedVersion,
     target: checkedTarget,
     installer: fileDigest(artifactPath),
-    // Schema decision of 25/09/2026: macOS does not bundle the Muse engine
-    // (the app offers the official CLI installer on first launch), so a
-    // release without a sidecar carries `sidecar: null` and the whole update
-    // chain treats that as "no sidecar file". Windows manifests keep a
-    // digest here and stay byte-identical to the previous schema.
+    // Schema decision of 25/09/2026: a release that bundles no Muse engine
+    // carries `sidecar: null`, and the whole update chain treats that as "no
+    // sidecar file". Since 0.5.0 no release bundles it (macOS never did,
+    // Windows uses the engine of Meta's installer); a digest is still
+    // accepted for older manifests.
     sidecar: sidecarPath ? fileDigest(sidecarPath) : null,
   };
   return signingKey ? signReleaseManifest(manifest, { privateKey: signingKey, keyId }) : manifest;

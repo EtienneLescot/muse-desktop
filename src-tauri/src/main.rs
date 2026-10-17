@@ -1853,19 +1853,18 @@ fn sidecar_file_name_for(triple: &str, windows: bool) -> String {
     file
 }
 
-/// Human-readable "binary missing" error (US-33): names the expected
-/// triple-suffixed file, labels both searched locations (exe-dir bundled
-/// layout, then src-tauri/binaries dev tree), and lists the exact paths
-/// probed so the UI can show them instead of a blank screen.
+/// Human-readable "binary missing" error (US-33): the UI keys on its
+/// `sidecar binary not found` prefix and lists the `(tried …)` paths.
 /// Pure (unit-tested).
-fn sidecar_missing_message(file: &str, tried: &[PathBuf]) -> String {
+#[cfg(not(target_os = "macos"))]
+fn sidecar_missing_message(tried: &[PathBuf]) -> String {
     let tried_list = tried
         .iter()
         .map(|p| p.display().to_string())
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "sidecar binary not found: expected `{file}` (file name carries the target triple). Tried (1) bundled layout next to the app executable, then (2) dev tree src-tauri/binaries (tried {tried_list}). Place the binary matching your target triple at one of those locations (see src-tauri/binaries/README.md)."
+        "sidecar binary not found: Muse Code is not installed (tried {tried_list}). Install it with Meta's official installer (`irm https://dev.meta.ai/install.ps1 | iex` in PowerShell), run `muse login` in a new terminal, then retry."
     )
 }
 
@@ -1943,92 +1942,51 @@ fn muse_cli_install_cancel() -> muse_install::InstallStatus {
     muse_install::cancel()
 }
 
+/// Windows does not bundle the engine either. Meta's installer (`install.ps1`)
+/// puts a self-updating launcher in `%LOCALAPPDATA%\Programs\muse`, which
+/// downloads the engine beside it as `muse-bin-<version>.exe` and records that
+/// version in `.muse-version`. The app runs that engine directly, never the
+/// launcher, and with `MUSE_NO_AUTO_UPDATE=1` (see `spawn_sidecar`): updates
+/// come from running `muse` in a terminal. Then the dev tree (fixtures, local
+/// engine builds).
 #[cfg(not(target_os = "macos"))]
 fn resolve_sidecar() -> Result<PathBuf, String> {
-    let file = sidecar_file_name();
     let mut tried = Vec::new();
-    // 1. Next to the app exe (bundled layout, and dev if staged there).
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            // Tauri strips the target suffix and stages externalBin next to
-            // the installed app executable (not in the dev binaries folder).
-            let bundled = dir.join(if cfg!(windows) { "muse.exe" } else { "muse" });
-            tried.push(bundled.clone());
-            if bundled.is_file() {
-                return engine_outside_msix(bundled);
-            }
-            let p = dir.join(&file);
-            tried.push(p.clone());
-            if p.is_file() {
-                return Ok(p);
-            }
+    if let Some(dir) = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()) {
+        let dir = PathBuf::from(dir).join("Programs").join("muse");
+        if let Some(engine) = installed_engine(&dir) {
+            return Ok(engine);
         }
+        tried.push(dir.join("muse-bin-<version>.exe"));
     }
-    // 2. Dev source tree (compile-time manifest dir is absolute in dev).
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(&file);
-    tried.push(p.clone());
-    if p.is_file() {
-        return Ok(p);
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(sidecar_file_name());
+    tried.push(dev.clone());
+    if dev.is_file() {
+        return Ok(dev);
     }
-    Err(sidecar_missing_message(&file, &tried))
+    Err(sidecar_missing_message(&tried))
 }
 
-/// The Store (MSIX) installs the app under `C:\Program Files\WindowsApps`,
-/// whose ACLs only the system may change. Muse's Windows sandbox runs every
-/// shell command by relaunching its own exe as a sandbox user, after granting
-/// that user read/execute on it: from the package that grant fails (os error
-/// 5) and every command fails, measured on the 0.4.1 Store build. A copy out
-/// of the package, one per app version, gives the sandbox the footing it has
-/// in the NSIS install. `~/.local/share` rather than AppData: MSIX redirects a
-/// packaged app's AppData writes into its private store.
+/// The engine Meta's launcher installed in `dir`: the one `.muse-version`
+/// names, else the most recently written `muse-bin-*.exe`.
 #[cfg(not(target_os = "macos"))]
-fn engine_outside_msix(bundled: PathBuf) -> Result<PathBuf, String> {
-    if !is_msix_install(&bundled) {
-        return Ok(bundled);
-    }
-    let home = muse_auth::home_dir().ok_or("no home directory to copy the Muse engine to")?;
-    stage_engine(&bundled, &home.join(".local/share/muse-desktop/engine"), env!("CARGO_PKG_VERSION"))
-}
-
-fn is_msix_install(path: &Path) -> bool {
-    // Split by hand: `Path::components` only knows `\` on Windows.
-    path.to_string_lossy().split(['\\', '/']).any(|c| c.eq_ignore_ascii_case("WindowsApps"))
-}
-
-/// Copy `src` into `root/<version>/`, reusing a copy of the same size, and
-/// drop the copies of other versions (each is the full engine, ~440 MB).
-/// ponytail: size is the staleness check, so an engine swapped without an app
-/// version bump is caught only when its size changes.
-fn stage_engine(src: &Path, root: &Path, version: &str) -> Result<PathBuf, String> {
-    let name = src.file_name().ok_or("engine path has no file name")?;
-    let dir = root.join(version);
-    let dest = dir.join(name);
-    let len = std::fs::metadata(src).map_err(|e| format!("cannot read the bundled Muse engine: {e}"))?.len();
-    let staged = |p: &Path| std::fs::metadata(p).map(|m| m.len() == len).unwrap_or(false);
-    if !staged(&dest) {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or_default();
-        let part = dir.join(format!("{}.{}-{nonce}.part", name.to_string_lossy(), std::process::id()));
-        std::fs::copy(src, &part).map_err(|e| format!("cannot copy the Muse engine to {}: {e}", dir.display()))?;
-        // Another start may have won the race and be running its copy.
-        if let Err(e) = std::fs::rename(&part, &dest) {
-            let _ = std::fs::remove_file(&part);
-            if !staged(&dest) {
-                return Err(format!("cannot stage the Muse engine at {}: {e}", dest.display()));
-            }
+fn installed_engine(dir: &Path) -> Option<PathBuf> {
+    if let Ok(version) = std::fs::read_to_string(dir.join(".muse-version")) {
+        let named = dir.join(format!("muse-bin-{}.exe", version.trim()));
+        if named.is_file() {
+            return Some(named);
         }
     }
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            if entry.file_name() != *version {
-                let _ = std::fs::remove_dir_all(entry.path()); // in use: left for next time
-            }
-        }
-    }
-    Ok(dest)
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            name.starts_with("muse-bin-") && name.ends_with(".exe")
+        })
+        .filter_map(|entry| Some((entry.metadata().ok().filter(|m| m.is_file())?.modified().ok()?, entry.path())))
+        .max()
+        .map(|(_, path)| path)
 }
 
 fn spawn_sidecar(
@@ -2068,6 +2026,11 @@ fn spawn_sidecar(
         .map_err(|e| format!("sidecar command failed for {}: {e}", bin.display()))?
         .args(sandbox.cli_args())
         .current_dir(root);
+    // The engine beside Meta's launcher must not update itself from the app:
+    // the Store build is an MSIX package, whose AppData writes are redirected
+    // into its private store.
+    #[cfg(windows)]
+    let cmd = cmd.env("MUSE_NO_AUTO_UPDATE", "1");
     cmd.spawn().map_err(|e| {
         format!(
             "could not spawn sidecar `muse serve` in {}: {e}",
@@ -4374,7 +4337,7 @@ async fn output_export(path: String, data: String) -> Result<(), String> {
 
 
 /// Probe local prerequisites for the first-launch recovery screen. This is a
-/// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
+/// read-only, bounded check: it never starts a server or changes Muse.
 #[tauri::command]
 async fn probe_startup(
     workspace_path: Option<String>,
@@ -6909,6 +6872,7 @@ mod tests {
         assert!(!accepts_workspace_roots("1.3.0-R3401.1"));
         assert!(!accepts_workspace_roots("1.4.1"));
         assert!(accepts_workspace_roots("1.4.2-R4684.1"));
+        assert!(accepts_workspace_roots("1.4.10-R6427.1"));
         assert!(accepts_workspace_roots("2.0.0"));
     }
 
@@ -9821,32 +9785,31 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
-    fn msix_engine_is_copied_once_per_version_out_of_the_package() {
-        assert!(is_msix_install(Path::new(r"C:\Program Files\WindowsApps\App_1.0_x64__id\muse.exe")));
-        assert!(!is_msix_install(Path::new(r"C:\Users\me\AppData\Local\Muse-Desktop\muse.exe")));
+    fn windows_engine_is_the_one_the_launcher_installed() {
+        let dir = std::env::temp_dir().join(format!("muse-engine-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(installed_engine(&dir), None, "empty install dir");
+        assert_eq!(installed_engine(&dir.join("absent")), None);
 
-        let tmp = std::env::temp_dir().join(format!("muse-stage-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        let src = tmp.join("pkg").join("muse.exe");
-        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
-        std::fs::write(&src, b"engine-v1").unwrap();
-        let root = tmp.join("engine");
-        std::fs::create_dir_all(root.join("0.0.1")).unwrap();
-
-        let dest = stage_engine(&src, &root, "0.4.2").unwrap();
-        assert_eq!(dest, root.join("0.4.2").join("muse.exe"));
-        assert_eq!(std::fs::read(&dest).unwrap(), b"engine-v1");
-        assert!(!root.join("0.0.1").exists(), "other versions are dropped");
-
-        // Same size: reused as is. Different size: copied again.
-        std::fs::write(&dest, b"engine-xx").unwrap();
-        stage_engine(&src, &root, "0.4.2").unwrap();
-        assert_eq!(std::fs::read(&dest).unwrap(), b"engine-xx");
-        std::fs::write(&src, b"engine-v2-longer").unwrap();
-        stage_engine(&src, &root, "0.4.2").unwrap();
-        assert_eq!(std::fs::read(&dest).unwrap(), b"engine-v2-longer");
-        let _ = std::fs::remove_dir_all(&tmp);
+        let old = dir.join("muse-bin-1.4.2-R4684.1.exe");
+        let new = dir.join("muse-bin-1.4.10-R6427.1.exe");
+        std::fs::write(&old, b"old").unwrap();
+        std::fs::write(&new, b"new").unwrap();
+        std::fs::write(dir.join("muse.cmd"), b"launcher").unwrap();
+        let hour_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options().write(true).open(&old).unwrap().set_modified(hour_ago).unwrap();
+        // No `.muse-version`: the newest engine.
+        assert_eq!(installed_engine(&dir), Some(new.clone()));
+        // `.muse-version` wins, even over a newer file.
+        std::fs::write(dir.join(".muse-version"), "1.4.2-R4684.1\r\n").unwrap();
+        assert_eq!(installed_engine(&dir), Some(old.clone()));
+        // It names an engine not downloaded yet: the newest one present.
+        std::fs::write(dir.join(".muse-version"), "1.5.0").unwrap();
+        assert_eq!(installed_engine(&dir), Some(new));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -9857,19 +9820,18 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
-    fn sidecar_missing_message_names_file_and_both_locations() {
+    fn sidecar_missing_message_lists_the_paths_and_the_installer() {
         let tried = vec![
-            PathBuf::from("/app/binaries/muse-x86_64-unknown-linux-gnu"),
-            PathBuf::from("/src/src-tauri/binaries/muse-x86_64-unknown-linux-gnu"),
+            PathBuf::from(r"C:\Users\me\AppData\Local\Programs\muse\muse-bin-<version>.exe"),
+            PathBuf::from("/src/src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe"),
         ];
-        let msg = sidecar_missing_message("binaries/muse-x86_64-unknown-linux-gnu", &tried);
-        assert!(msg.contains("binaries/muse-x86_64-unknown-linux-gnu"), "{msg}");
-        assert!(msg.contains("target triple"), "{msg}");
-        assert!(msg.contains("/app/binaries/muse-x86_64-unknown-linux-gnu"), "{msg}");
-        assert!(msg.contains("/src/src-tauri/binaries/muse-x86_64-unknown-linux-gnu"), "{msg}");
-        assert!(msg.contains("src-tauri/binaries"), "{msg}");
-        assert!(msg.contains("src-tauri/binaries/README.md"), "{msg}");
+        let msg = sidecar_missing_message(&tried);
+        assert!(msg.starts_with("sidecar binary not found"), "{msg}");
+        assert!(msg.contains(r"Programs\muse\muse-bin-<version>.exe, /src/src-tauri"), "{msg}");
+        assert!(msg.contains("irm https://dev.meta.ai/install.ps1 | iex"), "{msg}");
+        assert!(msg.contains("muse login"), "{msg}");
     }
 
     #[test]

@@ -47,7 +47,7 @@ describe("release channel index", () => {
     assert.equal(selectRelease(index, { target: "x86_64-pc-windows-msvc", currentVersion: "1.3.0" }), null);
   });
 
-  it("accepts engine-not-bundled manifests whose sidecar is null (macOS)", () => {
+  it("accepts engine-not-bundled manifests whose sidecar is null", () => {
     const index = buildReleaseChannelIndex({
       channel: "stable",
       releases: [
@@ -69,17 +69,14 @@ describe("release channel index", () => {
       }),
       /sidecar digest is invalid/,
     );
-    // A digest-less Windows manifest is rejected: a Windows release bundles
-    // the engine, on the build side as well as through a channel.
-    assert.throws(
-      () => buildReleaseChannelIndex({
-        channel: "stable",
-        releases: [
-          { version: "1.4.0", target: "x86_64-pc-windows-msvc", manifest: manifestWithoutSidecar("1.4.0", "x86_64-pc-windows-msvc") },
-        ],
-      }),
-      /Windows release manifest must carry a sidecar digest/,
-    );
+    // Since 0.5.0 a Windows release bundles no engine either.
+    const windows = buildReleaseChannelIndex({
+      channel: "stable",
+      releases: [
+        { version: "1.4.0", target: "x86_64-pc-windows-msvc", manifest: manifestWithoutSidecar("1.4.0", "x86_64-pc-windows-msvc") },
+      ],
+    });
+    assert.equal(windows.releases[0]?.manifest.sidecar, null);
   });
 
   it("signs and verifies a path-free channel index", () => {    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
