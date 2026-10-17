@@ -36,9 +36,6 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Desktop shell around the Muse Code harness",
-    "externalBin": [
-      "binaries/muse"
-    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser"
