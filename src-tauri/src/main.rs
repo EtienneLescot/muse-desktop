@@ -1991,7 +1991,8 @@ fn engine_outside_msix(bundled: PathBuf) -> Result<PathBuf, String> {
 }
 
 fn is_msix_install(path: &Path) -> bool {
-    path.components().any(|c| c.as_os_str().eq_ignore_ascii_case("WindowsApps"))
+    // Split by hand: `Path::components` only knows `\` on Windows.
+    path.to_string_lossy().split(['\\', '/']).any(|c| c.eq_ignore_ascii_case("WindowsApps"))
 }
 
 /// Copy `src` into `root/<version>/`, reusing a copy of the same size, and
