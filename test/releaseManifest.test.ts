@@ -40,34 +40,15 @@ test("release manifest rejects missing metadata", () => {
   );
 });
 
-test("a Windows release manifest requires the engine sidecar digest", async () => {
+test("a Windows release manifest bundles no engine since 0.5.0", async () => {
   const root = await mkdtemp(join(tmpdir(), "muse-release-win-"));
-  const installer = join(root, "Muse-Desktop_0.1.0_x64-setup.exe");
+  const installer = join(root, "Muse-Desktop_0.5.0_x64-setup.exe");
   await writeFile(installer, Buffer.from("installer-bytes"));
-  // A Windows target without sidecarPath would stage an engine-less install.
-  assert.throws(
-    () => buildReleaseManifest({
-      artifactPath: installer,
-      version: "0.1.0",
-      target: "x86_64-pc-windows-msvc",
-    }),
-    /sidecarPath is required for Windows target/,
-  );
-  assert.throws(
-    () => buildReleaseManifest({
-      artifactPath: installer,
-      version: "0.1.0",
-      target: "aarch64-pc-windows-msvc",
-    }),
-    /sidecarPath is required for Windows target/,
-  );
-  // Non-Windows targets keep the engine-not-bundled behaviour.
-  const macOS = buildReleaseManifest({
-    artifactPath: installer,
-    version: "0.1.0",
-    target: "aarch64-apple-darwin",
-  });
-  assert.equal(macOS.sidecar, null);
+  // The app uses the engine of Meta's installer: no sidecar digest.
+  for (const target of ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]) {
+    const manifest = buildReleaseManifest({ artifactPath: installer, version: "0.5.0", target });
+    assert.equal(manifest.sidecar, null);
+  }
 });
 
 test("release manifest without a bundled engine carries a null sidecar (macOS)", async () => {

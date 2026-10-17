@@ -4,7 +4,7 @@
  * Package the release build as an MSIX for the Microsoft Store.
  *
  * Tauri bundles NSIS and MSI only. This takes what `tauri build` left in
- * src-tauri/target/release (the app and its `muse.exe` sidecar), adds the Store
+ * src-tauri/target/release (the app; the Muse engine is the user's own), adds the Store
  * tiles and a manifest carrying the identity Partner Center assigned to product
  * 9NBPFWQBGLZG, and packs them with the Windows SDK's makeappx. The package is
  * unsigned on purpose: the Store signs what it publishes.
@@ -99,11 +99,9 @@ function main() {
 
   rmSync(out, { recursive: true, force: true });
   mkdirSync(join(layout, "Assets"), { recursive: true });
-  for (const file of ["muse-desktop.exe", "muse.exe"]) {
-    const from = join(release, file);
-    if (!existsSync(from)) throw new Error(`${from} is missing: run \`npx tauri build --no-bundle\` first`);
-    copyFileSync(from, join(layout, file));
-  }
+  const app = join(release, "muse-desktop.exe");
+  if (!existsSync(app)) throw new Error(`${app} is missing: run \`npx tauri build --no-bundle\` first`);
+  copyFileSync(app, join(layout, "muse-desktop.exe"));
 
   const icons = join(out, "icons");
   const master = join(root, "src-tauri", "icons", "macos-icon-1024.png");

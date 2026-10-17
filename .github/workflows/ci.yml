@@ -99,15 +99,6 @@ jobs:
           # Tauri context macro still validates that frontendDist exists.
           mkdir -p dist
           printf '<!doctype html><title>CI</title>\n' > dist/index.html
-      - name: Provide CI sidecar placeholder
-        shell: bash
-        run: |
-          # Tauri validates every configured externalBin during compilation.
-          # The real Muse sidecar is target-specific and is intentionally not
-          # committed for Linux CI, so provide an executable placeholder for
-          # supervisor unit tests (no test launches it).
-          printf '#!/bin/sh\nexit 0\n' > src-tauri/binaries/muse-x86_64-unknown-linux-gnu
-          chmod +x src-tauri/binaries/muse-x86_64-unknown-linux-gnu
       - name: Run supervisor tests
         shell: bash
         run: |
@@ -184,12 +175,6 @@ jobs:
         run: |
           mkdir -p dist
           printf '<!doctype html><title>CI</title>\n' > dist/index.html
-      - name: Provide CI sidecar placeholder
-        shell: bash
-        run: |
-          # tauri-build only checks that each externalBin file exists and
-          # copies it to the target dir, so any file will do (no test runs it).
-          printf 'CI placeholder\n' > src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe
       - name: Run supervisor tests
         shell: bash
         run: |
@@ -231,13 +216,6 @@ jobs:
         run: npm run build
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: Provide CI sidecar placeholder
-        shell: bash
-        run: |
-          # tauri-build only checks that each externalBin file exists. In test
-          # mode every local engine is the fixture and a configured ssh://
-          # target goes over the system ssh, so this file never runs.
-          printf 'CI placeholder\n' > src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe
       - name: Build the debug app
         shell: bash
         run: |

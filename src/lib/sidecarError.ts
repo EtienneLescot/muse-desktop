@@ -72,11 +72,14 @@ export function extractTriedPaths(message: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** Meta's official Windows installer, run in PowerShell. */
+export const WINDOWS_INSTALL_COMMAND = "irm https://dev.meta.ai/install.ps1 | iex";
+
 /**
  * Turn the bounded startup error into a short, platform-aware recovery path.
- * On Windows the bridge remains responsible for probing WSL/Muse; this helper only
- * explains the evidence already returned by that probe and never claims that
- * a dependency was installed or authenticated.
+ * Windows runs the Muse Code engine the user installed with Meta's installer;
+ * this helper only explains the evidence already returned and never claims
+ * that a dependency was installed or authenticated.
  */
 export function startupRecoverySteps(
   kind: SidecarErrorKind,
@@ -92,28 +95,14 @@ export function startupRecoverySteps(
 
   if (kind === "missing") {
     add(
-      "Provide the matching sidecar",
-      "For a packaged build, reinstall the Windows bundle. For development, place the triple-suffixed binary in src-tauri/binaries/.",
+      "Install Muse Code",
+      `In PowerShell, run \`${WINDOWS_INSTALL_COMMAND}\` (Meta's official installer). MuDesktop does not include the engine.`,
     );
   }
-  if (
-    lower.includes("wsl") ||
-    lower.includes("cannot open this workspace") ||
-    lower.includes("distribution")
-  ) {
+  if (lower.includes("install muse") || lower.includes("muse command")) {
     add(
-      "Check WSL",
-      "Open PowerShell and run `wsl --status`. Start a default distribution and make sure the selected folder is reachable from it.",
-    );
-  }
-  if (
-    lower.includes("install muse") ||
-    lower.includes(".local/bin/muse") ||
-    lower.includes("muse command")
-  ) {
-    add(
-      "Check Muse in WSL",
-      "Inside the default WSL distribution, verify `~/.local/bin/muse --version` and install the Muse CLI if it is missing.",
+      "Check Muse Code",
+      "In a new terminal, run `muse --version` and install Muse Code if it is missing.",
     );
   }
   if (
@@ -124,14 +113,11 @@ export function startupRecoverySteps(
   ) {
     add(
       "Sign in to Muse",
-      "Authenticate the Muse CLI inside WSL, then return here and retry. Credentials stay in WSL and are never bundled by the app.",
+      "Run `muse login` in a new terminal, then return here and retry. Credentials stay with Muse Code and are never bundled by the app.",
     );
   }
   if (lower.includes("workspace") || lower.includes("path")) {
-    add(
-      "Choose an accessible folder",
-      "Pick a local project folder with a stable Windows path. The folder must be visible to the WSL distribution used by the bridge.",
-    );
+    add("Choose an accessible folder", "Pick a local project folder with a stable Windows path.");
   }
   if (steps.length === 0) {
     add(
