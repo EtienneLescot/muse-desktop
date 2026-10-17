@@ -4317,6 +4317,18 @@ async fn file_open(
         .map_err(|e| format!("could not open workspace path: {e}"))
 }
 
+/// A web link clicked in a message, handed to the user's browser. Only
+/// http(s) and mailto: anything else could launch a local handler.
+#[tauri::command]
+fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    let url = url.trim();
+    let scheme = url.split(':').next().unwrap_or_default().to_ascii_lowercase();
+    if !matches!(scheme.as_str(), "http" | "https" | "mailto") || url.chars().any(char::is_control) {
+        return Err(format!("not a web link: {url}"));
+    }
+    app.shell().open(url.to_string(), None).map_err(|e| format!("could not open {url}: {e}"))
+}
+
 
 /// Write an explicitly selected same-origin browser download after the
 /// renderer has shown a native save dialog. The payload is bounded and
@@ -10266,6 +10278,7 @@ fn main() {
             files_watch,
             files_unwatch,
             file_open,
+            open_external_url,
             output_export,
             browser_download_write,
             browser_download_fetch,
