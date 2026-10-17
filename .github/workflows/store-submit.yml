@@ -1,0 +1,51 @@
+name: Store submission (retry)
+
+# Submits the MSIX a release run already built for a stable tag, without
+# rebuilding anything. release.yml's `store` job is the normal path; re-running
+# that job replays the script frozen at the tag, so a fix landed since (v0.4.3:
+# the API's 411 on empty POSTs) is only picked up from here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Stable tag whose MSIX should be submitted (e.g. v0.4.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  submit:
+    name: Submit ${{ inputs.tag }} to the Microsoft Store
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Collect the Store package of the tag's release run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::expected a stable tag like v0.4.3, got '$TAG'"; exit 1; }
+          run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch "$TAG" --limit 1 --json databaseId --jq '.[0].databaseId')
+          [ -n "$run" ] && [ "$run" != null ] || { echo "::error::no release.yml run for $TAG"; exit 1; }
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" --name store-msix --dir store
+          ls -la store
+
+      - name: Submit
+        env:
+          STORE_APP_ID: 9NBPFWQBGLZG
+          STORE_TENANT_ID: ${{ secrets.MSSTORE_TENANT_ID }}
+          STORE_CLIENT_ID: ${{ secrets.MSSTORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.MSSTORE_CLIENT_SECRET }}
+        run: |
+          packages=(store/*.msix)
+          [ "${#packages[@]}" = 1 ] && [ -f "${packages[0]}" ] || { echo "::error::expected one MSIX, found: ${packages[*]}"; exit 1; }
+          bash scripts/store-submit.sh "${packages[0]}"
+          echo "Submitted $(basename "${packages[0]}") to the Store; it goes live once certification passes." >> "$GITHUB_STEP_SUMMARY"
