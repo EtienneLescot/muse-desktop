@@ -3,7 +3,9 @@
 Listing of Partner Center product `9NBPFWQBGLZG`, reserved on 14/10/2026 and submitted for
 certification on 15/10/2026 (0.4.0, manual publishing after certification). Rejected on 16/10/2026
 under 10.1.1.1 ("Desktop for Muse Code" names another product); renamed **MuDesktop**, reserved
-on the same product, package identity unchanged.
+on the same product, package identity unchanged. In the Store from 17/10/2026; made unavailable the
+same day because 0.4.x bundled Meta's engine; 0.5.0 (no engine, 18/10/2026) and this listing, with
+its installation requirement, restore it.
 
 ## Product identity (MSIX manifest)
 
@@ -42,7 +44,9 @@ of authentication, models and tools. Your conversations stay on your machine.
 - MCP servers, skills and extensions, scheduled runs with notifications.
 - A built-in browser the agent can drive, and computer use with your consent.
 
-Requires a Muse Code account.
+Requirements: a Muse Code account, and Muse Code installed with Meta's official installer (in
+PowerShell: irm https://dev.meta.ai/install.ps1 | iex, then muse login). MuDesktop does not include
+the engine; on first launch it shows these steps if Muse Code is missing.
 
 **Product features** (one per line, 200 characters max)
 
@@ -61,7 +65,14 @@ Requires a Muse Code account.
 
 **What's new in this version**
 
-First Store release: 0.4.0, qualified on Windows with the Muse Code 1.4.2 engine.
+MuDesktop no longer includes the Muse Code engine: it uses the Muse Code you install with Meta's
+official installer, and guides you on first launch. Also: links in answers open, the model picker
+works in new conversations, and the file preview stays open.
+
+*(fr-fr)* MuDesktop n'inclut plus le moteur Muse Code : l'app utilise le Muse Code installé avec
+l'installeur officiel de Meta et vous guide au premier lancement. Aussi : les liens des réponses
+s'ouvrent, le choix du modèle fonctionne dès une nouvelle conversation, et l'aperçu des fichiers
+reste ouvert.
 
 ## Listing — Français (fr-fr)
 
@@ -84,7 +95,9 @@ d'authentification, de modèles et d'outils. Vos conversations restent sur votre
 - Serveurs MCP, skills et extensions, exécutions planifiées avec notifications.
 - Un navigateur intégré pilotable par l'agent, et le computer use avec votre accord.
 
-Nécessite un compte Muse Code.
+Prérequis : un compte Muse Code, et Muse Code installé avec l'installeur officiel de Meta (dans
+PowerShell : irm https://dev.meta.ai/install.ps1 | iex, puis muse login). MuDesktop n'inclut pas le
+moteur ; au premier lancement, l'app affiche ces étapes si Muse Code manque.
 
 **Search terms**
 
